@@ -22,7 +22,7 @@ public class TopListSerializationTests extends AbstractExpressionSerializationTe
         Expression field = randomChild();
         Expression limit = randomChild();
         Expression order = randomChild();
-        return new TopList(source, field, limit, order);
+        return new TopList(source, field, limit, order, configuration());
     }
 
     @Override
@@ -36,7 +36,7 @@ public class TopListSerializationTests extends AbstractExpressionSerializationTe
             case 1 -> limit = randomValueOtherThan(limit, AbstractExpressionSerializationTests::randomChild);
             case 2 -> order = randomValueOtherThan(order, AbstractExpressionSerializationTests::randomChild);
         }
-        return new TopList(source, field, limit, order);
+        return new TopList(source, field, limit, order, configuration());
     }
 
     @Override

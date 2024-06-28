@@ -17,6 +17,8 @@ import org.elasticsearch.compute.aggregation.TopListIntAggregatorFunctionSupplie
 import org.elasticsearch.compute.aggregation.TopListLongAggregatorFunctionSupplier;
 import org.elasticsearch.xpack.esql.EsqlIllegalArgumentException;
 import org.elasticsearch.xpack.esql.core.expression.Expression;
+import org.elasticsearch.xpack.esql.core.expression.Literal;
+import org.elasticsearch.xpack.esql.core.session.Configuration;
 import org.elasticsearch.xpack.esql.core.tree.NodeInfo;
 import org.elasticsearch.xpack.esql.core.tree.Source;
 import org.elasticsearch.xpack.esql.core.type.DataType;
@@ -24,6 +26,9 @@ import org.elasticsearch.xpack.esql.expression.SurrogateExpression;
 import org.elasticsearch.xpack.esql.expression.function.Example;
 import org.elasticsearch.xpack.esql.expression.function.FunctionInfo;
 import org.elasticsearch.xpack.esql.expression.function.Param;
+import org.elasticsearch.xpack.esql.expression.function.scalar.conditional.Case;
+import org.elasticsearch.xpack.esql.expression.function.scalar.string.ToUpper;
+import org.elasticsearch.xpack.esql.expression.predicate.operator.comparison.Equals;
 import org.elasticsearch.xpack.esql.io.stream.PlanStreamInput;
 import org.elasticsearch.xpack.esql.io.stream.PlanStreamOutput;
 import org.elasticsearch.xpack.esql.planner.ToAggregator;
@@ -39,8 +44,9 @@ import static org.elasticsearch.xpack.esql.core.expression.TypeResolutions.Param
 import static org.elasticsearch.xpack.esql.core.expression.TypeResolutions.isNotNullAndFoldable;
 import static org.elasticsearch.xpack.esql.core.expression.TypeResolutions.isString;
 import static org.elasticsearch.xpack.esql.core.expression.TypeResolutions.isType;
+import static org.elasticsearch.xpack.esql.core.tree.Source.EMPTY;
 
-public class TopList extends AggregateFunction implements ToAggregator, SurrogateExpression {
+public class TopList extends ConfigurationAggregateFunction implements ToAggregator, SurrogateExpression {
     public static final NamedWriteableRegistry.Entry ENTRY = new NamedWriteableRegistry.Entry(Expression.class, "TopList", TopList::new);
 
     private static final String ORDER_ASC = "ASC";
@@ -64,9 +70,10 @@ public class TopList extends AggregateFunction implements ToAggregator, Surrogat
             name = "order",
             type = { "keyword" },
             description = "The order to calculate the top values. Either `asc` or `desc`."
-        ) Expression order
+        ) Expression order,
+        Configuration configuration
     ) {
-        super(source, field, Arrays.asList(limit, order));
+        super(source, field, Arrays.asList(limit, order), configuration);
     }
 
     private TopList(StreamInput in) throws IOException {
@@ -74,7 +81,8 @@ public class TopList extends AggregateFunction implements ToAggregator, Surrogat
             Source.readFrom((PlanStreamInput) in),
             ((PlanStreamInput) in).readExpression(),
             ((PlanStreamInput) in).readExpression(),
-            ((PlanStreamInput) in).readExpression()
+            ((PlanStreamInput) in).readExpression(),
+            ((PlanStreamInput) in).configuration()
         );
     }
 
@@ -157,12 +165,12 @@ public class TopList extends AggregateFunction implements ToAggregator, Surrogat
 
     @Override
     protected NodeInfo<TopList> info() {
-        return NodeInfo.create(this, TopList::new, children().get(0), children().get(1), children().get(2));
+        return NodeInfo.create(this, TopList::new, children().get(0), children().get(1), children().get(2), configuration());
     }
 
     @Override
     public TopList replaceChildren(List<Expression> newChildren) {
-        return new TopList(source(), newChildren.get(0), newChildren.get(1), newChildren.get(2));
+        return new TopList(source(), newChildren.get(0), newChildren.get(1), newChildren.get(2), configuration());
     }
 
     @Override
@@ -184,12 +192,24 @@ public class TopList extends AggregateFunction implements ToAggregator, Surrogat
     public Expression surrogate() {
         var s = source();
 
-        if (limitValue() == 1) {
-            if (orderValue()) {
-                return new Min(s, field());
-            } else {
-                return new Max(s, field());
-            }
+        if (limitField().foldable() && orderField().foldable()) {
+            // If foldable, turns it into a CASE expression like:
+            // CASE(limit = 1, CASE(TO_UPPER(order) = "ASC", MIN(field), TO_UPPER(order) = "DESC", MAX(field)<this>), <this>)
+            // So we can use MAX/MIN instead, to save some time and memory
+            Equals limitEqualsOne = new Equals(s, limitField(), new Literal(EMPTY, 1, DataType.INTEGER));
+            Equals orderEqualsAsc = new Equals(
+                s,
+                new Literal(EMPTY, ORDER_ASC, DataType.KEYWORD),
+                new ToUpper(EMPTY, orderField(), configuration())
+            );
+            Equals orderEqualsDesc = new Equals(
+                s,
+                new Literal(EMPTY, ORDER_DESC, DataType.KEYWORD),
+                new ToUpper(EMPTY, orderField(), configuration())
+            );
+            Case orderMaxCase = new Case(s, orderEqualsAsc, List.of(new Min(s, field()), orderEqualsDesc, new Max(s, field()), this));
+
+            return new Case(source(), limitEqualsOne, List.of(orderMaxCase, this));
         }
 
         return null;
