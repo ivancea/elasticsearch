@@ -11,6 +11,7 @@ import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.common.util.BitArray;
 import org.elasticsearch.core.ReleasableIterator;
 
 import java.io.IOException;
@@ -29,9 +30,9 @@ final class BooleanArrayVector extends AbstractVector implements BooleanVector {
         // TODO: remove this if/when we account for memory used by Pages
         + Block.PAGE_MEM_OVERHEAD_PER_BLOCK;
 
-    private final boolean[] values;
+    private final BitArray values;
 
-    BooleanArrayVector(boolean[] values, int positionCount, BlockFactory blockFactory) {
+    BooleanArrayVector(BitArray values, int positionCount, BlockFactory blockFactory) {
         super(positionCount, blockFactory);
         this.values = values;
     }
@@ -41,9 +42,11 @@ final class BooleanArrayVector extends AbstractVector implements BooleanVector {
         blockFactory.adjustBreaker(preAdjustedBytes);
         boolean success = false;
         try {
-            boolean[] values = new boolean[positions];
+            BitArray values = new BitArray(positions, blockFactory.bigArrays());
             for (int i = 0; i < positions; i++) {
-                values[i] = in.readBoolean();
+                if (in.readBoolean()) {
+                    values.set(i);
+                }
             }
             final var block = new BooleanArrayVector(values, positions, blockFactory);
             blockFactory.adjustBreaker(block.ramBytesUsed() - preAdjustedBytes);
@@ -57,9 +60,8 @@ final class BooleanArrayVector extends AbstractVector implements BooleanVector {
     }
 
     void writeArrayVector(int positions, StreamOutput out) throws IOException {
-        // TODO: One bit for each boolean
         for (int i = 0; i < positions; i++) {
-            out.writeBoolean(values[i]);
+            out.writeBoolean(values.get(i));
         }
     }
 
@@ -70,7 +72,7 @@ final class BooleanArrayVector extends AbstractVector implements BooleanVector {
 
     @Override
     public boolean getBoolean(int position) {
-        return values[position];
+        return values.get(position);
     }
 
     @Override
@@ -87,7 +89,7 @@ final class BooleanArrayVector extends AbstractVector implements BooleanVector {
     public BooleanVector filter(int... positions) {
         try (BooleanVector.Builder builder = blockFactory().newBooleanVectorBuilder(positions.length)) {
             for (int pos : positions) {
-                builder.appendBoolean(values[pos]);
+                builder.appendBoolean(values.get(pos));
             }
             return builder.build();
         }
@@ -98,7 +100,7 @@ final class BooleanArrayVector extends AbstractVector implements BooleanVector {
         return new BooleanLookup(asBlock(), positions, targetBlockSize);
     }
 
-    public static long ramBytesEstimated(boolean[] values) {
+    public static long ramBytesEstimated(BitArray values) {
         return BASE_RAM_BYTES_USED + RamUsageEstimator.sizeOf(values);
     }
 
@@ -124,7 +126,7 @@ final class BooleanArrayVector extends AbstractVector implements BooleanVector {
     public String toString() {
         String valuesString = IntStream.range(0, getPositionCount())
             .limit(10)
-            .mapToObj(n -> String.valueOf(values[n]))
+            .mapToObj(n -> String.valueOf(values.get(n)))
             .collect(Collectors.joining(", ", "[", getPositionCount() > 10 ? ", ...]" : "]"));
         return getClass().getSimpleName() + "[positions=" + getPositionCount() + ", values=" + valuesString + ']';
     }

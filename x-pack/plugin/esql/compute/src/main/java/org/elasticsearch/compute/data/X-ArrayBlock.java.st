@@ -17,6 +17,7 @@ $else$
 import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.common.util.$Array$;
 $endif$
 import org.elasticsearch.core.ReleasableIterator;
 import org.elasticsearch.core.Releasables;
@@ -38,7 +39,7 @@ final class $Type$ArrayBlock extends AbstractArrayBlock implements $Type$Block {
     private final $Type$ArrayVector vector;
 
     $Type$ArrayBlock(
-        $if(BytesRef)$BytesRefArray$else$$type$[]$endif$ values,
+        $if(BytesRef)$BytesRefArray$else$$Array$$endif$ values,
         int positionCount,
         int[] firstValueIndexes,
         BitSet nulls,

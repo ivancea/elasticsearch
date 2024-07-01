@@ -19,19 +19,19 @@ import java.util.Arrays;
  */
 final class FloatBlockBuilder extends AbstractBlockBuilder implements FloatBlock.Builder {
 
-    private float[] values;
+    private FloatArray values;
 
     FloatBlockBuilder(int estimatedSize, BlockFactory blockFactory) {
         super(blockFactory);
         int initialSize = Math.max(estimatedSize, 2);
         adjustBreaker(RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + initialSize * elementSize());
-        values = new float[initialSize];
+        values = blockFactory.bigArrays().newFloatArray(initialSize);
     }
 
     @Override
     public FloatBlockBuilder appendFloat(float value) {
         ensureCapacity();
-        values[valueCount] = value;
+        values.set(valueCount, value);
         hasNonNullValue = true;
         valueCount++;
         updatePosition();
@@ -45,7 +45,7 @@ final class FloatBlockBuilder extends AbstractBlockBuilder implements FloatBlock
 
     @Override
     protected int valuesLength() {
-        return values.length;
+        return values.size();
     }
 
     @Override

@@ -11,6 +11,7 @@ import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.common.util.FloatArray;
 import org.elasticsearch.core.ReleasableIterator;
 
 import java.io.IOException;
@@ -29,9 +30,9 @@ final class FloatArrayVector extends AbstractVector implements FloatVector {
         // TODO: remove this if/when we account for memory used by Pages
         + Block.PAGE_MEM_OVERHEAD_PER_BLOCK;
 
-    private final float[] values;
+    private final FloatArray values;
 
-    FloatArrayVector(float[] values, int positionCount, BlockFactory blockFactory) {
+    FloatArrayVector(FloatArray values, int positionCount, BlockFactory blockFactory) {
         super(positionCount, blockFactory);
         this.values = values;
     }
@@ -41,10 +42,11 @@ final class FloatArrayVector extends AbstractVector implements FloatVector {
         blockFactory.adjustBreaker(preAdjustedBytes);
         boolean success = false;
         try {
-            float[] values = new float[positions];
+            FloatArray values = blockFactory.bigArrays().newFloatArray(positions, false);
             for (int i = 0; i < positions; i++) {
-                values[i] = in.readFloat();
+                values.set(i, in.readFloat());
             }
+
             final var block = new FloatArrayVector(values, positions, blockFactory);
             blockFactory.adjustBreaker(block.ramBytesUsed() - preAdjustedBytes);
             success = true;
@@ -58,7 +60,7 @@ final class FloatArrayVector extends AbstractVector implements FloatVector {
 
     void writeArrayVector(int positions, StreamOutput out) throws IOException {
         for (int i = 0; i < positions; i++) {
-            out.writeFloat(values[i]);
+            out.writeFloat(values.get(i));
         }
     }
 
@@ -69,7 +71,7 @@ final class FloatArrayVector extends AbstractVector implements FloatVector {
 
     @Override
     public float getFloat(int position) {
-        return values[position];
+        return values.get(position);
     }
 
     @Override
@@ -86,7 +88,7 @@ final class FloatArrayVector extends AbstractVector implements FloatVector {
     public FloatVector filter(int... positions) {
         try (FloatVector.Builder builder = blockFactory().newFloatVectorBuilder(positions.length)) {
             for (int pos : positions) {
-                builder.appendFloat(values[pos]);
+                builder.appendFloat(values.get(pos));
             }
             return builder.build();
         }
@@ -97,7 +99,7 @@ final class FloatArrayVector extends AbstractVector implements FloatVector {
         return new FloatLookup(asBlock(), positions, targetBlockSize);
     }
 
-    public static long ramBytesEstimated(float[] values) {
+    public static long ramBytesEstimated(FloatArray values) {
         return BASE_RAM_BYTES_USED + RamUsageEstimator.sizeOf(values);
     }
 
@@ -123,7 +125,7 @@ final class FloatArrayVector extends AbstractVector implements FloatVector {
     public String toString() {
         String valuesString = IntStream.range(0, getPositionCount())
             .limit(10)
-            .mapToObj(n -> String.valueOf(values[n]))
+            .mapToObj(n -> String.valueOf(values.get(n)))
             .collect(Collectors.joining(", ", "[", getPositionCount() > 10 ? ", ...]" : "]"));
         return getClass().getSimpleName() + "[positions=" + getPositionCount() + ", values=" + valuesString + ']';
     }

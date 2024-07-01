@@ -10,6 +10,7 @@ package org.elasticsearch.compute.data;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.common.util.DoubleArray;
 import org.elasticsearch.core.ReleasableIterator;
 import org.elasticsearch.core.Releasables;
 
@@ -27,7 +28,7 @@ final class DoubleArrayBlock extends AbstractArrayBlock implements DoubleBlock {
     private final DoubleArrayVector vector;
 
     DoubleArrayBlock(
-        double[] values,
+        DoubleArray values,
         int positionCount,
         int[] firstValueIndexes,
         BitSet nulls,

@@ -11,6 +11,7 @@ import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.common.util.LongArray;
 import org.elasticsearch.core.ReleasableIterator;
 
 import java.io.IOException;
@@ -29,9 +30,9 @@ final class LongArrayVector extends AbstractVector implements LongVector {
         // TODO: remove this if/when we account for memory used by Pages
         + Block.PAGE_MEM_OVERHEAD_PER_BLOCK;
 
-    private final long[] values;
+    private final LongArray values;
 
-    LongArrayVector(long[] values, int positionCount, BlockFactory blockFactory) {
+    LongArrayVector(LongArray values, int positionCount, BlockFactory blockFactory) {
         super(positionCount, blockFactory);
         this.values = values;
     }
@@ -41,10 +42,11 @@ final class LongArrayVector extends AbstractVector implements LongVector {
         blockFactory.adjustBreaker(preAdjustedBytes);
         boolean success = false;
         try {
-            long[] values = new long[positions];
+            LongArray values = blockFactory.bigArrays().newLongArray(positions, false);
             for (int i = 0; i < positions; i++) {
-                values[i] = in.readLong();
+                values.set(i, in.readLong());
             }
+
             final var block = new LongArrayVector(values, positions, blockFactory);
             blockFactory.adjustBreaker(block.ramBytesUsed() - preAdjustedBytes);
             success = true;
@@ -58,7 +60,7 @@ final class LongArrayVector extends AbstractVector implements LongVector {
 
     void writeArrayVector(int positions, StreamOutput out) throws IOException {
         for (int i = 0; i < positions; i++) {
-            out.writeLong(values[i]);
+            out.writeLong(values.get(i));
         }
     }
 
@@ -69,7 +71,7 @@ final class LongArrayVector extends AbstractVector implements LongVector {
 
     @Override
     public long getLong(int position) {
-        return values[position];
+        return values.get(position);
     }
 
     @Override
@@ -86,7 +88,7 @@ final class LongArrayVector extends AbstractVector implements LongVector {
     public LongVector filter(int... positions) {
         try (LongVector.Builder builder = blockFactory().newLongVectorBuilder(positions.length)) {
             for (int pos : positions) {
-                builder.appendLong(values[pos]);
+                builder.appendLong(values.get(pos));
             }
             return builder.build();
         }
@@ -97,7 +99,7 @@ final class LongArrayVector extends AbstractVector implements LongVector {
         return new LongLookup(asBlock(), positions, targetBlockSize);
     }
 
-    public static long ramBytesEstimated(long[] values) {
+    public static long ramBytesEstimated(LongArray values) {
         return BASE_RAM_BYTES_USED + RamUsageEstimator.sizeOf(values);
     }
 
@@ -123,7 +125,7 @@ final class LongArrayVector extends AbstractVector implements LongVector {
     public String toString() {
         String valuesString = IntStream.range(0, getPositionCount())
             .limit(10)
-            .mapToObj(n -> String.valueOf(values[n]))
+            .mapToObj(n -> String.valueOf(values.get(n)))
             .collect(Collectors.joining(", ", "[", getPositionCount() > 10 ? ", ...]" : "]"));
         return getClass().getSimpleName() + "[positions=" + getPositionCount() + ", values=" + valuesString + ']';
     }

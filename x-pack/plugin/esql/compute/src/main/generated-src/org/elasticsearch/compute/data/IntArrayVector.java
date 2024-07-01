@@ -11,6 +11,7 @@ import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.common.util.IntArray;
 import org.elasticsearch.core.ReleasableIterator;
 
 import java.io.IOException;
@@ -29,7 +30,7 @@ final class IntArrayVector extends AbstractVector implements IntVector {
         // TODO: remove this if/when we account for memory used by Pages
         + Block.PAGE_MEM_OVERHEAD_PER_BLOCK;
 
-    private final int[] values;
+    private final IntArray values;
 
     /**
      * The minimum value in the block.
@@ -41,7 +42,7 @@ final class IntArrayVector extends AbstractVector implements IntVector {
      */
     private Integer max;
 
-    IntArrayVector(int[] values, int positionCount, BlockFactory blockFactory) {
+    IntArrayVector(IntArray values, int positionCount, BlockFactory blockFactory) {
         super(positionCount, blockFactory);
         this.values = values;
     }
@@ -51,10 +52,11 @@ final class IntArrayVector extends AbstractVector implements IntVector {
         blockFactory.adjustBreaker(preAdjustedBytes);
         boolean success = false;
         try {
-            int[] values = new int[positions];
+            IntArray values = blockFactory.bigArrays().newIntArray(positions, false);
             for (int i = 0; i < positions; i++) {
-                values[i] = in.readInt();
+                values.set(i, in.readInt());
             }
+
             final var block = new IntArrayVector(values, positions, blockFactory);
             blockFactory.adjustBreaker(block.ramBytesUsed() - preAdjustedBytes);
             success = true;
@@ -68,7 +70,7 @@ final class IntArrayVector extends AbstractVector implements IntVector {
 
     void writeArrayVector(int positions, StreamOutput out) throws IOException {
         for (int i = 0; i < positions; i++) {
-            out.writeInt(values[i]);
+            out.writeInt(values.get(i));
         }
     }
 
@@ -79,7 +81,7 @@ final class IntArrayVector extends AbstractVector implements IntVector {
 
     @Override
     public int getInt(int position) {
-        return values[position];
+        return values.get(position);
     }
 
     @Override
@@ -96,7 +98,7 @@ final class IntArrayVector extends AbstractVector implements IntVector {
     public IntVector filter(int... positions) {
         try (IntVector.Builder builder = blockFactory().newIntVectorBuilder(positions.length)) {
             for (int pos : positions) {
-                builder.appendInt(values[pos]);
+                builder.appendInt(values.get(pos));
             }
             return builder.build();
         }
@@ -107,7 +109,7 @@ final class IntArrayVector extends AbstractVector implements IntVector {
         return new IntLookup(asBlock(), positions, targetBlockSize);
     }
 
-    public static long ramBytesEstimated(int[] values) {
+    public static long ramBytesEstimated(IntArray values) {
         return BASE_RAM_BYTES_USED + RamUsageEstimator.sizeOf(values);
     }
 
@@ -119,7 +121,7 @@ final class IntArrayVector extends AbstractVector implements IntVector {
         if (min == null) {
             int v = Integer.MAX_VALUE;
             for (int i = 0; i < getPositionCount(); i++) {
-                v = Math.min(v, values[i]);
+                v = Math.min(v, values.get(i));
             }
             min = v;
         }
@@ -134,7 +136,7 @@ final class IntArrayVector extends AbstractVector implements IntVector {
         if (max == null) {
             int v = Integer.MIN_VALUE;
             for (int i = 0; i < getPositionCount(); i++) {
-                v = Math.max(v, values[i]);
+                v = Math.max(v, values.get(i));
             }
             max = v;
         }
@@ -163,7 +165,7 @@ final class IntArrayVector extends AbstractVector implements IntVector {
     public String toString() {
         String valuesString = IntStream.range(0, getPositionCount())
             .limit(10)
-            .mapToObj(n -> String.valueOf(values[n]))
+            .mapToObj(n -> String.valueOf(values.get(n)))
             .collect(Collectors.joining(", ", "[", getPositionCount() > 10 ? ", ...]" : "]"));
         return getClass().getSimpleName() + "[positions=" + getPositionCount() + ", values=" + valuesString + ']';
     }

@@ -11,6 +11,7 @@ import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.common.util.DoubleArray;
 import org.elasticsearch.core.ReleasableIterator;
 
 import java.io.IOException;
@@ -29,9 +30,9 @@ final class DoubleArrayVector extends AbstractVector implements DoubleVector {
         // TODO: remove this if/when we account for memory used by Pages
         + Block.PAGE_MEM_OVERHEAD_PER_BLOCK;
 
-    private final double[] values;
+    private final DoubleArray values;
 
-    DoubleArrayVector(double[] values, int positionCount, BlockFactory blockFactory) {
+    DoubleArrayVector(DoubleArray values, int positionCount, BlockFactory blockFactory) {
         super(positionCount, blockFactory);
         this.values = values;
     }
@@ -41,10 +42,11 @@ final class DoubleArrayVector extends AbstractVector implements DoubleVector {
         blockFactory.adjustBreaker(preAdjustedBytes);
         boolean success = false;
         try {
-            double[] values = new double[positions];
+            DoubleArray values = blockFactory.bigArrays().newDoubleArray(positions, false);
             for (int i = 0; i < positions; i++) {
-                values[i] = in.readDouble();
+                values.set(i, in.readDouble());
             }
+
             final var block = new DoubleArrayVector(values, positions, blockFactory);
             blockFactory.adjustBreaker(block.ramBytesUsed() - preAdjustedBytes);
             success = true;
@@ -58,7 +60,7 @@ final class DoubleArrayVector extends AbstractVector implements DoubleVector {
 
     void writeArrayVector(int positions, StreamOutput out) throws IOException {
         for (int i = 0; i < positions; i++) {
-            out.writeDouble(values[i]);
+            out.writeDouble(values.get(i));
         }
     }
 
@@ -69,7 +71,7 @@ final class DoubleArrayVector extends AbstractVector implements DoubleVector {
 
     @Override
     public double getDouble(int position) {
-        return values[position];
+        return values.get(position);
     }
 
     @Override
@@ -86,7 +88,7 @@ final class DoubleArrayVector extends AbstractVector implements DoubleVector {
     public DoubleVector filter(int... positions) {
         try (DoubleVector.Builder builder = blockFactory().newDoubleVectorBuilder(positions.length)) {
             for (int pos : positions) {
-                builder.appendDouble(values[pos]);
+                builder.appendDouble(values.get(pos));
             }
             return builder.build();
         }
@@ -97,7 +99,7 @@ final class DoubleArrayVector extends AbstractVector implements DoubleVector {
         return new DoubleLookup(asBlock(), positions, targetBlockSize);
     }
 
-    public static long ramBytesEstimated(double[] values) {
+    public static long ramBytesEstimated(DoubleArray values) {
         return BASE_RAM_BYTES_USED + RamUsageEstimator.sizeOf(values);
     }
 
@@ -123,7 +125,7 @@ final class DoubleArrayVector extends AbstractVector implements DoubleVector {
     public String toString() {
         String valuesString = IntStream.range(0, getPositionCount())
             .limit(10)
-            .mapToObj(n -> String.valueOf(values[n]))
+            .mapToObj(n -> String.valueOf(values.get(n)))
             .collect(Collectors.joining(", ", "[", getPositionCount() > 10 ? ", ...]" : "]"));
         return getClass().getSimpleName() + "[positions=" + getPositionCount() + ", values=" + valuesString + ']';
     }

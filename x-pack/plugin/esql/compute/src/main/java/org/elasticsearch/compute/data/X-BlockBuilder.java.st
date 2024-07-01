@@ -37,13 +37,13 @@ $if(BytesRef)$
     }
 
 $else$
-    private $type$[] values;
+    private $Array$ values;
 
     $Type$BlockBuilder(int estimatedSize, BlockFactory blockFactory) {
         super(blockFactory);
         int initialSize = Math.max(estimatedSize, 2);
         adjustBreaker(RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + initialSize * elementSize());
-        values = new $type$[initialSize];
+        values = $if(boolean)$new BitArray(initialSize, blockFactory.bigArrays())$else$blockFactory.bigArrays().new$Array$(initialSize)$endif$;
     }
 $endif$
 
@@ -52,8 +52,12 @@ $endif$
         ensureCapacity();
 $if(BytesRef)$
         values.append(value);
+$elseif(boolean)$
+        if (value) {
+            values.set(valueCount);
+        }
 $else$
-        values[valueCount] = value;
+        values.set(valueCount, value);
 $endif$
         hasNonNullValue = true;
         valueCount++;

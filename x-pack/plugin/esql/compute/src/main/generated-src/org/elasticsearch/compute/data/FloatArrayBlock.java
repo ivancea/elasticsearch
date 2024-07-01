@@ -10,6 +10,7 @@ package org.elasticsearch.compute.data;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.common.util.FloatArray;
 import org.elasticsearch.core.ReleasableIterator;
 import org.elasticsearch.core.Releasables;
 
@@ -27,7 +28,7 @@ final class FloatArrayBlock extends AbstractArrayBlock implements FloatBlock {
     private final FloatArrayVector vector;
 
     FloatArrayBlock(
-        float[] values,
+        FloatArray values,
         int positionCount,
         int[] firstValueIndexes,
         BitSet nulls,

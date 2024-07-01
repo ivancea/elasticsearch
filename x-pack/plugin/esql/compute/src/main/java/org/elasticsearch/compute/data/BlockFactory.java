@@ -12,6 +12,7 @@ import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.common.breaker.CircuitBreakingException;
 import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.util.BigArrays;
+import org.elasticsearch.common.util.BitArray;
 import org.elasticsearch.common.util.BytesRefArray;
 import org.elasticsearch.compute.data.Block.MvOrdering;
 
@@ -127,11 +128,11 @@ public class BlockFactory {
         return new BooleanVectorFixedBuilder(size, this);
     }
 
-    public final BooleanBlock newBooleanArrayBlock(boolean[] values, int pc, int[] firstValueIndexes, BitSet nulls, MvOrdering mvOrdering) {
+    public final BooleanBlock newBooleanArrayBlock(BitArray values, int pc, int[] firstValueIndexes, BitSet nulls, MvOrdering mvOrdering) {
         return newBooleanArrayBlock(values, pc, firstValueIndexes, nulls, mvOrdering, 0L);
     }
 
-    public BooleanBlock newBooleanArrayBlock(boolean[] values, int pc, int[] fvi, BitSet nulls, MvOrdering mvOrder, long preAdjustedBytes) {
+    public BooleanBlock newBooleanArrayBlock(BitArray values, int pc, int[] fvi, BitSet nulls, MvOrdering mvOrder, long preAdjustedBytes) {
         var b = new BooleanArrayBlock(values, pc, fvi, nulls, mvOrder, this);
         adjustBreaker(b.ramBytesUsed() - preAdjustedBytes);
         return b;
@@ -141,11 +142,11 @@ public class BlockFactory {
         return new BooleanVectorBuilder(estimatedSize, this);
     }
 
-    public final BooleanVector newBooleanArrayVector(boolean[] values, int positionCount) {
+    public final BooleanVector newBooleanArrayVector(BitArray values, int positionCount) {
         return newBooleanArrayVector(values, positionCount, 0L);
     }
 
-    public BooleanVector newBooleanArrayVector(boolean[] values, int positionCount, long preAdjustedBytes) {
+    public BooleanVector newBooleanArrayVector(BitArray values, int positionCount, long preAdjustedBytes) {
         var b = new BooleanArrayVector(values, positionCount, this);
         adjustBreaker(b.ramBytesUsed() - preAdjustedBytes);
         return b;

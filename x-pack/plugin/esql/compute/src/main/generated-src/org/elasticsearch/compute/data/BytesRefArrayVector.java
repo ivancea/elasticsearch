@@ -32,7 +32,6 @@ final class BytesRefArrayVector extends AbstractVector implements BytesRefVector
         + Block.PAGE_MEM_OVERHEAD_PER_BLOCK;
 
     private final BytesRefArray values;
-
     BytesRefArrayVector(BytesRefArray values, int positionCount, BlockFactory blockFactory) {
         super(positionCount, blockFactory);
         this.values = values;

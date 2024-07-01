@@ -19,19 +19,21 @@ import java.util.Arrays;
  */
 final class BooleanBlockBuilder extends AbstractBlockBuilder implements BooleanBlock.Builder {
 
-    private boolean[] values;
+    private BitArray values;
 
     BooleanBlockBuilder(int estimatedSize, BlockFactory blockFactory) {
         super(blockFactory);
         int initialSize = Math.max(estimatedSize, 2);
         adjustBreaker(RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + initialSize * elementSize());
-        values = new boolean[initialSize];
+        values = new BitArray(initialSize, blockFactory.bigArrays());
     }
 
     @Override
     public BooleanBlockBuilder appendBoolean(boolean value) {
         ensureCapacity();
-        values[valueCount] = value;
+        if (value) {
+            values.set(valueCount);
+        }
         hasNonNullValue = true;
         valueCount++;
         updatePosition();
@@ -45,7 +47,7 @@ final class BooleanBlockBuilder extends AbstractBlockBuilder implements BooleanB
 
     @Override
     protected int valuesLength() {
-        return values.length;
+        return values.size();
     }
 
     @Override

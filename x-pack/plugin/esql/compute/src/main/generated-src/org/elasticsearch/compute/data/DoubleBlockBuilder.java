@@ -19,19 +19,19 @@ import java.util.Arrays;
  */
 final class DoubleBlockBuilder extends AbstractBlockBuilder implements DoubleBlock.Builder {
 
-    private double[] values;
+    private DoubleArray values;
 
     DoubleBlockBuilder(int estimatedSize, BlockFactory blockFactory) {
         super(blockFactory);
         int initialSize = Math.max(estimatedSize, 2);
         adjustBreaker(RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + initialSize * elementSize());
-        values = new double[initialSize];
+        values = blockFactory.bigArrays().newDoubleArray(initialSize);
     }
 
     @Override
     public DoubleBlockBuilder appendDouble(double value) {
         ensureCapacity();
-        values[valueCount] = value;
+        values.set(valueCount, value);
         hasNonNullValue = true;
         valueCount++;
         updatePosition();

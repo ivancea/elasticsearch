@@ -19,19 +19,19 @@ import java.util.Arrays;
  */
 final class LongBlockBuilder extends AbstractBlockBuilder implements LongBlock.Builder {
 
-    private long[] values;
+    private LongArray values;
 
     LongBlockBuilder(int estimatedSize, BlockFactory blockFactory) {
         super(blockFactory);
         int initialSize = Math.max(estimatedSize, 2);
         adjustBreaker(RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + initialSize * elementSize());
-        values = new long[initialSize];
+        values = blockFactory.bigArrays().newLongArray(initialSize);
     }
 
     @Override
     public LongBlockBuilder appendLong(long value) {
         ensureCapacity();
-        values[valueCount] = value;
+        values.set(valueCount, value);
         hasNonNullValue = true;
         valueCount++;
         updatePosition();

@@ -24,6 +24,7 @@ import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.common.util.$Array$;
 import org.elasticsearch.core.ReleasableIterator;
 
 import java.io.IOException;
@@ -48,9 +49,8 @@ final class $Type$ArrayVector extends AbstractVector implements $Type$Vector {
 
 $if(BytesRef)$
     private final BytesRefArray values;
-
 $else$
-    private final $type$[] values;
+    private final $Array$ values;
 $endif$
 
 $if(int)$
@@ -65,7 +65,7 @@ $if(int)$
     private Integer max;
 $endif$
 
-    $Type$ArrayVector($if(BytesRef)$BytesRefArray$else$$type$[]$endif$ values, int positionCount, BlockFactory blockFactory) {
+    $Type$ArrayVector($if(BytesRef)$BytesRefArray$else$$Array$$endif$ values, int positionCount, BlockFactory blockFactory) {
         super(positionCount, blockFactory);
         this.values = values;
     }
@@ -89,10 +89,20 @@ $else$
         blockFactory.adjustBreaker(preAdjustedBytes);
         boolean success = false;
         try {
-            $type$[] values = new $type$[positions];
+$if(boolean)$
+            $Array$ values = new $Array$(positions, blockFactory.bigArrays());
             for (int i = 0; i < positions; i++) {
-                values[i] = in.read$Type$();
+                if (in.read$Type$()) {
+                    values.set(i);
+                }
             }
+$else$
+            $Array$ values = blockFactory.bigArrays().new$Array$(positions, false);
+            for (int i = 0; i < positions; i++) {
+                values.set(i, in.read$Type$());
+            }
+$endif$
+
             final var block = new $Type$ArrayVector(values, positions, blockFactory);
             blockFactory.adjustBreaker(block.ramBytesUsed() - preAdjustedBytes);
             success = true;
@@ -108,14 +118,9 @@ $endif$
     void writeArrayVector(int positions, StreamOutput out) throws IOException {
 $if(BytesRef)$
         values.writeTo(out);
-$elseif(boolean)$
-        // TODO: One bit for each boolean
-        for (int i = 0; i < positions; i++) {
-            out.writeBoolean(values[i]);
-        }
 $else$
         for (int i = 0; i < positions; i++) {
-            out.write$Type$(values[i]);
+            out.write$Type$(values.get(i));
         }
 $endif$
     }
@@ -141,7 +146,7 @@ $if(BytesRef)$
 $else$
     @Override
     public $type$ get$Type$(int position) {
-        return values[position];
+        return values.get(position);
     }
 $endif$
 
@@ -165,7 +170,7 @@ $endif$
             $if(BytesRef)$
                 builder.append$Type$(values.get(pos, scratch));
             $else$
-                builder.append$Type$(values[pos]);
+                builder.append$Type$(values.get(pos));
             $endif$
             }
             return builder.build();
@@ -177,7 +182,7 @@ $endif$
         return new $Type$Lookup(asBlock(), positions, targetBlockSize);
     }
 
-    public static long ramBytesEstimated($if(BytesRef)$BytesRefArray$else$$type$[]$endif$ values) {
+    public static long ramBytesEstimated($if(BytesRef)$BytesRefArray$else$$Array$$endif$ values) {
         return BASE_RAM_BYTES_USED + RamUsageEstimator.sizeOf(values);
     }
 
@@ -190,7 +195,7 @@ $if(int)$
         if (min == null) {
             int v = Integer.MAX_VALUE;
             for (int i = 0; i < getPositionCount(); i++) {
-                v = Math.min(v, values[i]);
+                v = Math.min(v, values.get(i));
             }
             min = v;
         }
@@ -205,7 +210,7 @@ $if(int)$
         if (max == null) {
             int v = Integer.MIN_VALUE;
             for (int i = 0; i < getPositionCount(); i++) {
-                v = Math.max(v, values[i]);
+                v = Math.max(v, values.get(i));
             }
             max = v;
         }
@@ -238,7 +243,7 @@ $if(BytesRef)$
 $else$
         String valuesString = IntStream.range(0, getPositionCount())
             .limit(10)
-            .mapToObj(n -> String.valueOf(values[n]))
+            .mapToObj(n -> String.valueOf(values.get(n)))
             .collect(Collectors.joining(", ", "[", getPositionCount() > 10 ? ", ...]" : "]"));
         return getClass().getSimpleName() + "[positions=" + getPositionCount() + ", values=" + valuesString + ']';
 $endif$

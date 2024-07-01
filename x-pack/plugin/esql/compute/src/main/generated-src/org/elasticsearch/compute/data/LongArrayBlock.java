@@ -10,6 +10,7 @@ package org.elasticsearch.compute.data;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.common.util.LongArray;
 import org.elasticsearch.core.ReleasableIterator;
 import org.elasticsearch.core.Releasables;
 
@@ -27,7 +28,7 @@ final class LongArrayBlock extends AbstractArrayBlock implements LongBlock {
     private final LongArrayVector vector;
 
     LongArrayBlock(
-        long[] values,
+        LongArray values,
         int positionCount,
         int[] firstValueIndexes,
         BitSet nulls,

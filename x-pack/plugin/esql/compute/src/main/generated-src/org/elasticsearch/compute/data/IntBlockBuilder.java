@@ -19,19 +19,19 @@ import java.util.Arrays;
  */
 final class IntBlockBuilder extends AbstractBlockBuilder implements IntBlock.Builder {
 
-    private int[] values;
+    private IntArray values;
 
     IntBlockBuilder(int estimatedSize, BlockFactory blockFactory) {
         super(blockFactory);
         int initialSize = Math.max(estimatedSize, 2);
         adjustBreaker(RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + initialSize * elementSize());
-        values = new int[initialSize];
+        values = blockFactory.bigArrays().newIntArray(initialSize);
     }
 
     @Override
     public IntBlockBuilder appendInt(int value) {
         ensureCapacity();
-        values[valueCount] = value;
+        values.set(valueCount, value);
         hasNonNullValue = true;
         valueCount++;
         updatePosition();
