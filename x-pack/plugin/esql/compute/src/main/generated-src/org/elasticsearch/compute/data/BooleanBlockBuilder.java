@@ -11,8 +11,6 @@ import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.breaker.CircuitBreakingException;
 import org.elasticsearch.common.util.BitArray;
 
-import java.util.Arrays;
-
 /**
  * Block build of BooleanBlocks.
  * This class is generated. Do not edit it.

@@ -8,6 +8,7 @@
 package org.elasticsearch.compute.data;
 
 import org.apache.lucene.util.RamUsageEstimator;
+
 /**
  * Builder for {@link DoubleVector}s that never grows. Prefer this to
  * {@link DoubleVectorBuilder} if you know the precise size up front because

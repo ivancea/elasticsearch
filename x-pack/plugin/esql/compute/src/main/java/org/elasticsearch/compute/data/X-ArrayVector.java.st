@@ -51,8 +51,10 @@ final class $Type$ArrayVector extends AbstractVector implements $Type$Vector {
 
 $if(BytesRef)$
     private final BytesRefArray values;
+
 $elseif(boolean)$
     private final $Array$ values;
+
 $else$
     private final $type$[] values;
 $endif$

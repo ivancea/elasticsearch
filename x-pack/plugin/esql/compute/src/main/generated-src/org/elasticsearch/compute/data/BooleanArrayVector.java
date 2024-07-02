@@ -31,6 +31,7 @@ final class BooleanArrayVector extends AbstractVector implements BooleanVector {
         + Block.PAGE_MEM_OVERHEAD_PER_BLOCK;
 
     private final BitArray values;
+
     BooleanArrayVector(BitArray values, int positionCount, BlockFactory blockFactory) {
         super(positionCount, blockFactory);
         this.values = values;

@@ -8,6 +8,7 @@
 package org.elasticsearch.compute.data;
 
 import org.apache.lucene.util.RamUsageEstimator;
+
 /**
  * Builder for {@link LongVector}s that never grows. Prefer this to
  * {@link LongVectorBuilder} if you know the precise size up front because

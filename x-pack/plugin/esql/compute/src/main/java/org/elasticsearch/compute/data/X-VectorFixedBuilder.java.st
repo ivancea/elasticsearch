@@ -7,9 +7,12 @@
 
 package org.elasticsearch.compute.data;
 
-import org.apache.lucene.util.RamUsageEstimator;
 $if(boolean)$
+import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.util.$Array$;
+
+$else$
+import org.apache.lucene.util.RamUsageEstimator;
 $endif$
 
 /**

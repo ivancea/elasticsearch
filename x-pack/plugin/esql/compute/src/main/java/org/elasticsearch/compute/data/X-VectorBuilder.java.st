@@ -13,11 +13,10 @@ import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.common.util.BytesRefArray;
 import org.elasticsearch.core.Releasables;
 
-$else$
-$if(boolean)$
+$elseif(boolean)$
 import org.elasticsearch.common.util.$Array$;
 
-$endif$
+$else$
 import java.util.Arrays;
 $endif$
 
