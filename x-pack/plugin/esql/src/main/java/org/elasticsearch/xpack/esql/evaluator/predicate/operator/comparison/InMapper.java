@@ -7,6 +7,7 @@
 
 package org.elasticsearch.xpack.esql.evaluator.predicate.operator.comparison;
 
+import org.elasticsearch.common.util.BitArray;
 import org.elasticsearch.compute.data.Block;
 import org.elasticsearch.compute.data.BlockFactory;
 import org.elasticsearch.compute.data.BooleanBlock;
@@ -50,7 +51,7 @@ public class InMapper extends ExpressionMapper<In> {
         @Override
         public Block eval(Page page) {
             int positionCount = page.getPositionCount();
-            boolean[] values = new boolean[positionCount];
+            BitArray values = new BitArray(positionCount, driverContext.bigArrays());
             BitSet nulls = new BitSet(positionCount); // at least one evaluation resulted in NULL on a row
             boolean nullInValues = false; // set when NULL's added in the values list: `field IN (valueA, null, valueB)`
 
@@ -59,28 +60,30 @@ public class InMapper extends ExpressionMapper<In> {
                 try (BooleanBlock block = (BooleanBlock) evaluator.eval(page)) {
                     BooleanVector vector = block.asVector();
                     if (vector != null) {
-                        updateValues(vector, values);
+                        updateValues(vector, values, positionCount);
                     } else {
                         if (block.areAllValuesNull()) {
                             nullInValues = true;
                         } else {
-                            updateValues(block, values, nulls);
+                            updateValues(block, values, nulls, positionCount);
                         }
                     }
                 }
             }
 
-            return evalWithNulls(driverContext.blockFactory(), values, nulls, nullInValues);
+            return evalWithNulls(driverContext.blockFactory(), values, nulls, nullInValues, positionCount);
         }
 
-        private static void updateValues(BooleanVector vector, boolean[] values) {
-            for (int p = 0; p < values.length; p++) {
-                values[p] |= vector.getBoolean(p);
+        private static void updateValues(BooleanVector vector, BitArray values, int positionCount) {
+            for (int p = 0; p < positionCount; p++) {
+                if (vector.getBoolean(p)) {
+                    values.set(p);
+                }
             }
         }
 
-        private static void updateValues(BooleanBlock block, boolean[] values, BitSet nulls) {
-            for (int p = 0; p < values.length; p++) {
+        private static void updateValues(BooleanBlock block, BitArray values, BitSet nulls, int positionCount) {
+            for (int p = 0; p < positionCount; p++) {
                 if (block.isNull(p)) {
                     nulls.set(p);
                 } else {
@@ -88,7 +91,7 @@ public class InMapper extends ExpressionMapper<In> {
                     int end = start + block.getValueCount(p);
                     for (int i = start; i < end; i++) { // if MV_ANY is true, evaluation is true
                         if (block.getBoolean(i)) {
-                            values[p] = true;
+                            values.set(p);
                             break;
                         }
                     }
@@ -96,13 +99,19 @@ public class InMapper extends ExpressionMapper<In> {
             }
         }
 
-        private static Block evalWithNulls(BlockFactory blockFactory, boolean[] values, BitSet nulls, boolean nullInValues) {
+        private static Block evalWithNulls(
+            BlockFactory blockFactory,
+            BitArray values,
+            BitSet nulls,
+            boolean nullInValues,
+            int positionCount
+        ) {
             if (nulls.isEmpty() && nullInValues == false) {
-                return blockFactory.newBooleanArrayVector(values, values.length).asBlock();
+                return blockFactory.newBooleanArrayVector(values, positionCount).asBlock();
             } else {
                 // 3VL: true trumps null; null trumps false.
-                for (int i = 0; i < values.length; i++) {
-                    if (values[i]) {
+                for (int i = 0; i < positionCount; i++) {
+                    if (values.get(i)) {
                         nulls.clear(i);
                     } else if (nullInValues) {
                         nulls.set(i);
@@ -110,9 +119,9 @@ public class InMapper extends ExpressionMapper<In> {
                 }
                 if (nulls.isEmpty()) {
                     // no nulls and no multi-values means we must use a Vector
-                    return blockFactory.newBooleanArrayVector(values, values.length).asBlock();
+                    return blockFactory.newBooleanArrayVector(values, positionCount).asBlock();
                 } else {
-                    return blockFactory.newBooleanArrayBlock(values, values.length, null, nulls, Block.MvOrdering.UNORDERED);
+                    return blockFactory.newBooleanArrayBlock(values, positionCount, null, nulls, Block.MvOrdering.UNORDERED);
                 }
             }
         }
