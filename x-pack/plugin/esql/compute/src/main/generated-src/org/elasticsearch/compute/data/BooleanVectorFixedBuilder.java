@@ -7,7 +7,6 @@
 
 package org.elasticsearch.compute.data;
 
-import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.util.BitArray;
 
 /**
@@ -30,11 +29,11 @@ final class BooleanVectorFixedBuilder implements BooleanVector.FixedBuilder {
     private boolean closed;
 
     BooleanVectorFixedBuilder(int size, BlockFactory blockFactory) {
-        preAdjustedBytes = ramBytesUsed(size);
-        blockFactory.adjustBreaker(preAdjustedBytes);
         this.blockFactory = blockFactory;
         this.values = new BitArray(size, blockFactory.bigArrays());
         this.size = size;
+        preAdjustedBytes = ramBytesUsed(size, this.values);
+        blockFactory.adjustBreaker(preAdjustedBytes);
     }
 
     @Override
@@ -56,17 +55,13 @@ final class BooleanVectorFixedBuilder implements BooleanVector.FixedBuilder {
         return this;
     }
 
-    private static long ramBytesUsed(int size) {
-        return size == 1
-            ? ConstantBooleanVector.RAM_BYTES_USED
-            : BooleanArrayVector.BASE_RAM_BYTES_USED + RamUsageEstimator.alignObjectSize(
-                (long) RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + size * Byte.BYTES
-            );
+    private static long ramBytesUsed(int size, BitArray values) {
+        return size == 1 ? ConstantBooleanVector.RAM_BYTES_USED : BooleanArrayVector.ramBytesEstimated(values);
     }
 
     @Override
     public long estimatedBytes() {
-        return ramBytesUsed(size);
+        return ramBytesUsed(size, values);
     }
 
     @Override

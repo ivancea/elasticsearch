@@ -28,10 +28,10 @@ final class IntVectorFixedBuilder implements IntVector.FixedBuilder {
     private boolean closed;
 
     IntVectorFixedBuilder(int size, BlockFactory blockFactory) {
-        preAdjustedBytes = ramBytesUsed(size);
-        blockFactory.adjustBreaker(preAdjustedBytes);
         this.blockFactory = blockFactory;
         this.values = new int[size];
+        preAdjustedBytes = ramBytesUsed(size);
+        blockFactory.adjustBreaker(preAdjustedBytes);
     }
 
     @Override

@@ -28,10 +28,10 @@ final class FloatVectorFixedBuilder implements FloatVector.FixedBuilder {
     private boolean closed;
 
     FloatVectorFixedBuilder(int size, BlockFactory blockFactory) {
-        preAdjustedBytes = ramBytesUsed(size);
-        blockFactory.adjustBreaker(preAdjustedBytes);
         this.blockFactory = blockFactory;
         this.values = new float[size];
+        preAdjustedBytes = ramBytesUsed(size);
+        blockFactory.adjustBreaker(preAdjustedBytes);
     }
 
     @Override

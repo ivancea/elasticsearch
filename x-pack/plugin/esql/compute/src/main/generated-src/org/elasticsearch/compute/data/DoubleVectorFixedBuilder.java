@@ -28,10 +28,10 @@ final class DoubleVectorFixedBuilder implements DoubleVector.FixedBuilder {
     private boolean closed;
 
     DoubleVectorFixedBuilder(int size, BlockFactory blockFactory) {
-        preAdjustedBytes = ramBytesUsed(size);
-        blockFactory.adjustBreaker(preAdjustedBytes);
         this.blockFactory = blockFactory;
         this.values = new double[size];
+        preAdjustedBytes = ramBytesUsed(size);
+        blockFactory.adjustBreaker(preAdjustedBytes);
     }
 
     @Override

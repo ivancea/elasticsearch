@@ -8,7 +8,6 @@
 package org.elasticsearch.compute.data;
 
 $if(boolean)$
-import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.util.$Array$;
 
 $else$
@@ -39,15 +38,16 @@ $endif$
     private boolean closed;
 
     $Type$VectorFixedBuilder(int size, BlockFactory blockFactory) {
-        preAdjustedBytes = ramBytesUsed(size);
-        blockFactory.adjustBreaker(preAdjustedBytes);
         this.blockFactory = blockFactory;
 $if(boolean)$
         this.values = new $Array$(size, blockFactory.bigArrays());
         this.size = size;
+        preAdjustedBytes = ramBytesUsed(size, this.values);
 $else$
         this.values = new $type$[size];
+        preAdjustedBytes = ramBytesUsed(size);
 $endif$
+        blockFactory.adjustBreaker(preAdjustedBytes);
     }
 
     @Override
@@ -77,6 +77,17 @@ $endif$
         return this;
     }
 
+$if(boolean)$
+    private static long ramBytesUsed(int size, $Array$ values) {
+        return size == 1 ? Constant$Type$Vector.RAM_BYTES_USED : $Type$ArrayVector.ramBytesEstimated(values);
+    }
+
+    @Override
+    public long estimatedBytes() {
+        return ramBytesUsed(size, values);
+    }
+
+$else$
     private static long ramBytesUsed(int size) {
         return size == 1
             ? Constant$Type$Vector.RAM_BYTES_USED
@@ -87,8 +98,9 @@ $endif$
 
     @Override
     public long estimatedBytes() {
-        return ramBytesUsed($if(boolean)$size$else$values.length$endif$);
+        return ramBytesUsed(values.length);
     }
+$endif$
 
     @Override
     public $Type$Vector build() {

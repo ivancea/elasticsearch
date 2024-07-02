@@ -28,10 +28,10 @@ final class LongVectorFixedBuilder implements LongVector.FixedBuilder {
     private boolean closed;
 
     LongVectorFixedBuilder(int size, BlockFactory blockFactory) {
-        preAdjustedBytes = ramBytesUsed(size);
-        blockFactory.adjustBreaker(preAdjustedBytes);
         this.blockFactory = blockFactory;
         this.values = new long[size];
+        preAdjustedBytes = ramBytesUsed(size);
+        blockFactory.adjustBreaker(preAdjustedBytes);
     }
 
     @Override
