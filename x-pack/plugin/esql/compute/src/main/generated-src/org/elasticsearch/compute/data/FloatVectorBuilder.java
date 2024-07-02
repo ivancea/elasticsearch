@@ -21,7 +21,7 @@ final class FloatVectorBuilder extends AbstractVectorBuilder implements FloatVec
         super(blockFactory);
         int initialSize = Math.max(estimatedSize, 2);
         adjustBreaker(initialSize);
-        values = new float[Math.max(estimatedSize, 2)];
+        values = new float[initialSize];
     }
 
     @Override

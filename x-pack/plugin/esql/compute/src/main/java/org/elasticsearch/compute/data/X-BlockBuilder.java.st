@@ -37,13 +37,13 @@ $if(BytesRef)$
     }
 
 $else$
-    private $type$[] values;
+    private $if(boolean)$$Array$$else$$type$[]$endif$ values;
 
     $Type$BlockBuilder(int estimatedSize, BlockFactory blockFactory) {
         super(blockFactory);
         int initialSize = Math.max(estimatedSize, 2);
         adjustBreaker(RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + initialSize * elementSize());
-        values = new $type$[initialSize];
+        values = $if(boolean)$new $Array$(initialSize, blockFactory.bigArrays())$else$new $type$[initialSize]$endif$;
     }
 $endif$
 
@@ -52,6 +52,10 @@ $endif$
         ensureCapacity();
 $if(BytesRef)$
         values.append(value);
+$elseif(boolean)$
+        if (value) {
+            values.set(valueCount);
+        }
 $else$
         values[valueCount] = value;
 $endif$
@@ -68,8 +72,8 @@ $endif$
 
     @Override
     protected int valuesLength() {
-$if(BytesRef)$
-        return Integer.MAX_VALUE; // allow the BytesRefArray through its own append
+$if(BytesRef||boolean)$
+        return Integer.MAX_VALUE; // allow the $if(BytesRef)$BytesRefArray$else$$Array$$endif$ through its own append
 $else$
         return values.length;
 $endif$
@@ -77,7 +81,7 @@ $endif$
 
     @Override
     protected void growValuesArray(int newSize) {
-$if(BytesRef)$
+$if(BytesRef||boolean)$
         throw new AssertionError("should not reach here");
 $else$
         values = Arrays.copyOf(values, newSize);
@@ -229,7 +233,7 @@ $else$
     $if(boolean)$
         final BitArray array = new BitArray(valueCount, blockFactory.bigArrays());
         for (int i = 0; i < valueCount; i++) {
-            if (values[i]) {
+            if (values.get(i)) {
                 array.set(i);
             }
         }
@@ -267,7 +271,7 @@ $endif$
             values = null;
     $else$
             if (hasNonNullValue && positionCount == 1 && valueCount == 1) {
-                theBlock = blockFactory.newConstant$Type$BlockWith(values[0], 1, estimatedBytes);
+                theBlock = blockFactory.newConstant$Type$BlockWith($if(boolean)$values.get(0)$else$values[0]$endif$, 1, estimatedBytes);
             } else if (estimatedBytes > blockFactory.maxPrimitiveArrayBytes()) {
                 theBlock = buildBigArraysBlock();
             } else if (isDense() && singleValued()) {

@@ -21,7 +21,7 @@ final class IntVectorBuilder extends AbstractVectorBuilder implements IntVector.
         super(blockFactory);
         int initialSize = Math.max(estimatedSize, 2);
         adjustBreaker(initialSize);
-        values = new int[Math.max(estimatedSize, 2)];
+        values = new int[initialSize];
     }
 
     @Override

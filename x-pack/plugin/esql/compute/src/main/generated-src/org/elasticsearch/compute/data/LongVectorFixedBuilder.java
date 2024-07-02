@@ -8,7 +8,6 @@
 package org.elasticsearch.compute.data;
 
 import org.apache.lucene.util.RamUsageEstimator;
-
 /**
  * Builder for {@link LongVector}s that never grows. Prefer this to
  * {@link LongVectorBuilder} if you know the precise size up front because
@@ -17,7 +16,7 @@ import org.apache.lucene.util.RamUsageEstimator;
  */
 final class LongVectorFixedBuilder implements LongVector.FixedBuilder {
     private final BlockFactory blockFactory;
-    private final long[] values;
+    private long[] values;
     private final long preAdjustedBytes;
     /**
      * The next value to write into. {@code -1} means the vector has already
@@ -36,7 +35,8 @@ final class LongVectorFixedBuilder implements LongVector.FixedBuilder {
 
     @Override
     public LongVectorFixedBuilder appendLong(long value) {
-        values[nextIndex++] = value;
+        values[nextIndex] = value;
+        nextIndex++;
         return this;
     }
 

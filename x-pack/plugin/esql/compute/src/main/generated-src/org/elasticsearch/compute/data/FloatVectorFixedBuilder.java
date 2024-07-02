@@ -8,7 +8,6 @@
 package org.elasticsearch.compute.data;
 
 import org.apache.lucene.util.RamUsageEstimator;
-
 /**
  * Builder for {@link FloatVector}s that never grows. Prefer this to
  * {@link FloatVectorBuilder} if you know the precise size up front because
@@ -17,7 +16,7 @@ import org.apache.lucene.util.RamUsageEstimator;
  */
 final class FloatVectorFixedBuilder implements FloatVector.FixedBuilder {
     private final BlockFactory blockFactory;
-    private final float[] values;
+    private float[] values;
     private final long preAdjustedBytes;
     /**
      * The next value to write into. {@code -1} means the vector has already
@@ -36,7 +35,8 @@ final class FloatVectorFixedBuilder implements FloatVector.FixedBuilder {
 
     @Override
     public FloatVectorFixedBuilder appendFloat(float value) {
-        values[nextIndex++] = value;
+        values[nextIndex] = value;
+        nextIndex++;
         return this;
     }
 

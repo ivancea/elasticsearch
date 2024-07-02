@@ -8,6 +8,7 @@
 package org.elasticsearch.compute.data;
 
 import org.apache.lucene.util.RamUsageEstimator;
+import org.elasticsearch.common.util.BitArray;
 
 /**
  * Builder for {@link BooleanVector}s that never grows. Prefer this to
@@ -17,7 +18,8 @@ import org.apache.lucene.util.RamUsageEstimator;
  */
 final class BooleanVectorFixedBuilder implements BooleanVector.FixedBuilder {
     private final BlockFactory blockFactory;
-    private final boolean[] values;
+    private BitArray values;
+    private int size;
     private final long preAdjustedBytes;
     /**
      * The next value to write into. {@code -1} means the vector has already
@@ -31,18 +33,26 @@ final class BooleanVectorFixedBuilder implements BooleanVector.FixedBuilder {
         preAdjustedBytes = ramBytesUsed(size);
         blockFactory.adjustBreaker(preAdjustedBytes);
         this.blockFactory = blockFactory;
-        this.values = new boolean[size];
+        this.values = new BitArray(size, blockFactory.bigArrays());
+        this.size = size;
     }
 
     @Override
     public BooleanVectorFixedBuilder appendBoolean(boolean value) {
-        values[nextIndex++] = value;
+        if (value) {
+            values.set(nextIndex);
+        }
+        nextIndex++;
         return this;
     }
 
     @Override
     public BooleanVectorFixedBuilder appendBoolean(int idx, boolean value) {
-        values[idx] = value;
+        if (value) {
+            values.set(idx);
+        } else {
+            values.clear(idx);
+        }
         return this;
     }
 
@@ -56,7 +66,7 @@ final class BooleanVectorFixedBuilder implements BooleanVector.FixedBuilder {
 
     @Override
     public long estimatedBytes() {
-        return ramBytesUsed(values.length);
+        return ramBytesUsed(size);
     }
 
     @Override
@@ -66,10 +76,10 @@ final class BooleanVectorFixedBuilder implements BooleanVector.FixedBuilder {
         }
         closed = true;
         BooleanVector vector;
-        if (values.length == 1) {
-            vector = blockFactory.newConstantBooleanBlockWith(values[0], 1, preAdjustedBytes).asVector();
+        if (size == 1) {
+            vector = blockFactory.newConstantBooleanBlockWith(values.get(0), 1, preAdjustedBytes).asVector();
         } else {
-            vector = blockFactory.newBooleanArrayVector(values, values.length, preAdjustedBytes);
+            vector = blockFactory.newBooleanArrayVector(values, size, preAdjustedBytes);
         }
         assert vector.ramBytesUsed() == preAdjustedBytes : "fixed Builders should estimate the exact ram bytes used";
         return vector;

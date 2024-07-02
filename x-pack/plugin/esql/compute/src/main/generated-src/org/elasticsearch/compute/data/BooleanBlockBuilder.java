@@ -19,19 +19,21 @@ import java.util.Arrays;
  */
 final class BooleanBlockBuilder extends AbstractBlockBuilder implements BooleanBlock.Builder {
 
-    private boolean[] values;
+    private BitArray values;
 
     BooleanBlockBuilder(int estimatedSize, BlockFactory blockFactory) {
         super(blockFactory);
         int initialSize = Math.max(estimatedSize, 2);
         adjustBreaker(RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + initialSize * elementSize());
-        values = new boolean[initialSize];
+        values = new BitArray(initialSize, blockFactory.bigArrays());
     }
 
     @Override
     public BooleanBlockBuilder appendBoolean(boolean value) {
         ensureCapacity();
-        values[valueCount] = value;
+        if (value) {
+            values.set(valueCount);
+        }
         hasNonNullValue = true;
         valueCount++;
         updatePosition();
@@ -45,12 +47,12 @@ final class BooleanBlockBuilder extends AbstractBlockBuilder implements BooleanB
 
     @Override
     protected int valuesLength() {
-        return values.length;
+        return Integer.MAX_VALUE; // allow the BitArray through its own append
     }
 
     @Override
     protected void growValuesArray(int newSize) {
-        values = Arrays.copyOf(values, newSize);
+        throw new AssertionError("should not reach here");
     }
 
     @Override
@@ -135,7 +137,7 @@ final class BooleanBlockBuilder extends AbstractBlockBuilder implements BooleanB
         final BooleanBlock theBlock;
         final BitArray array = new BitArray(valueCount, blockFactory.bigArrays());
         for (int i = 0; i < valueCount; i++) {
-            if (values[i]) {
+            if (values.get(i)) {
                 array.set(i);
             }
         }
@@ -162,7 +164,7 @@ final class BooleanBlockBuilder extends AbstractBlockBuilder implements BooleanB
             finish();
             BooleanBlock theBlock;
             if (hasNonNullValue && positionCount == 1 && valueCount == 1) {
-                theBlock = blockFactory.newConstantBooleanBlockWith(values[0], 1, estimatedBytes);
+                theBlock = blockFactory.newConstantBooleanBlockWith(values.get(0), 1, estimatedBytes);
             } else if (estimatedBytes > blockFactory.maxPrimitiveArrayBytes()) {
                 theBlock = buildBigArraysBlock();
             } else if (isDense() && singleValued()) {

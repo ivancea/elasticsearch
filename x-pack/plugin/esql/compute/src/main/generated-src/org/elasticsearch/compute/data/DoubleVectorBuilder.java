@@ -21,7 +21,7 @@ final class DoubleVectorBuilder extends AbstractVectorBuilder implements DoubleV
         super(blockFactory);
         int initialSize = Math.max(estimatedSize, 2);
         adjustBreaker(initialSize);
-        values = new double[Math.max(estimatedSize, 2)];
+        values = new double[initialSize];
     }
 
     @Override

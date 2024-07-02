@@ -8,6 +8,9 @@
 package org.elasticsearch.compute.data;
 
 import org.apache.lucene.util.RamUsageEstimator;
+$if(boolean)$
+import org.elasticsearch.common.util.$Array$;
+$endif$
 
 /**
  * Builder for {@link $Type$Vector}s that never grows. Prefer this to
@@ -17,7 +20,12 @@ import org.apache.lucene.util.RamUsageEstimator;
  */
 final class $Type$VectorFixedBuilder implements $Type$Vector.FixedBuilder {
     private final BlockFactory blockFactory;
-    private final $type$[] values;
+$if(boolean)$
+    private $Array$ values;
+    private int size;
+$else$
+    private $type$[] values;
+$endif$
     private final long preAdjustedBytes;
     /**
      * The next value to write into. {@code -1} means the vector has already
@@ -31,18 +39,38 @@ final class $Type$VectorFixedBuilder implements $Type$Vector.FixedBuilder {
         preAdjustedBytes = ramBytesUsed(size);
         blockFactory.adjustBreaker(preAdjustedBytes);
         this.blockFactory = blockFactory;
+$if(boolean)$
+        this.values = new $Array$(size, blockFactory.bigArrays());
+        this.size = size;
+$else$
         this.values = new $type$[size];
+$endif$
     }
 
     @Override
     public $Type$VectorFixedBuilder append$Type$($type$ value) {
-        values[nextIndex++] = value;
+$if(boolean)$
+        if (value) {
+            values.set(nextIndex);
+        }
+$else$
+        values[nextIndex] = value;
+$endif$
+        nextIndex++;
         return this;
     }
 
     @Override
     public $Type$VectorFixedBuilder append$Type$(int idx, $type$ value) {
+$if(boolean)$
+        if (value) {
+            values.set(idx);
+        } else {
+            values.clear(idx);
+        }
+$else$
         values[idx] = value;
+$endif$
         return this;
     }
 
@@ -56,7 +84,7 @@ final class $Type$VectorFixedBuilder implements $Type$Vector.FixedBuilder {
 
     @Override
     public long estimatedBytes() {
-        return ramBytesUsed(values.length);
+        return ramBytesUsed($if(boolean)$size$else$values.length$endif$);
     }
 
     @Override
@@ -66,10 +94,10 @@ final class $Type$VectorFixedBuilder implements $Type$Vector.FixedBuilder {
         }
         closed = true;
         $Type$Vector vector;
-        if (values.length == 1) {
-            vector = blockFactory.newConstant$Type$BlockWith(values[0], 1, preAdjustedBytes).asVector();
+        if ($if(boolean)$size$else$values.length$endif$ == 1) {
+            vector = blockFactory.newConstant$Type$BlockWith($if(boolean)$values.get(0)$else$values[0]$endif$, 1, preAdjustedBytes).asVector();
         } else {
-            vector = blockFactory.new$Type$ArrayVector(values, values.length, preAdjustedBytes);
+            vector = blockFactory.new$Type$ArrayVector(values, $if(boolean)$size$else$values.length$endif$, preAdjustedBytes);
         }
         assert vector.ramBytesUsed() == preAdjustedBytes : "fixed Builders should estimate the exact ram bytes used";
         return vector;

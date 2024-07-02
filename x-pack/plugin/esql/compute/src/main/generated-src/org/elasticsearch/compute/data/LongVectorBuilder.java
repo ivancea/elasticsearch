@@ -21,7 +21,7 @@ final class LongVectorBuilder extends AbstractVectorBuilder implements LongVecto
         super(blockFactory);
         int initialSize = Math.max(estimatedSize, 2);
         adjustBreaker(initialSize);
-        values = new long[Math.max(estimatedSize, 2)];
+        values = new long[initialSize];
     }
 
     @Override

@@ -10,6 +10,7 @@ package org.elasticsearch.compute.data;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.common.util.BitArray;
 import org.elasticsearch.core.ReleasableIterator;
 import org.elasticsearch.core.Releasables;
 
@@ -27,7 +28,7 @@ final class BooleanArrayBlock extends AbstractArrayBlock implements BooleanBlock
     private final BooleanArrayVector vector;
 
     BooleanArrayBlock(
-        boolean[] values,
+        BitArray values,
         int positionCount,
         int[] firstValueIndexes,
         BitSet nulls,

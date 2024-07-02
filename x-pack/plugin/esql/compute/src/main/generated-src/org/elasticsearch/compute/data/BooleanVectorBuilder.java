@@ -7,6 +7,8 @@
 
 package org.elasticsearch.compute.data;
 
+import org.elasticsearch.common.util.BitArray;
+
 import java.util.Arrays;
 
 /**
@@ -15,19 +17,21 @@ import java.util.Arrays;
  */
 final class BooleanVectorBuilder extends AbstractVectorBuilder implements BooleanVector.Builder {
 
-    private boolean[] values;
+    private BitArray values;
 
     BooleanVectorBuilder(int estimatedSize, BlockFactory blockFactory) {
         super(blockFactory);
         int initialSize = Math.max(estimatedSize, 2);
         adjustBreaker(initialSize);
-        values = new boolean[Math.max(estimatedSize, 2)];
+        values = new BitArray(initialSize, blockFactory.bigArrays());
     }
 
     @Override
     public BooleanVectorBuilder appendBoolean(boolean value) {
         ensureCapacity();
-        values[valueCount] = value;
+        if (value) {
+            values.set(valueCount);
+        }
         valueCount++;
         return this;
     }
@@ -39,12 +43,12 @@ final class BooleanVectorBuilder extends AbstractVectorBuilder implements Boolea
 
     @Override
     protected int valuesLength() {
-        return values.length;
+        return Integer.MAX_VALUE; // allow the BitArray through its own append
     }
 
     @Override
     protected void growValuesArray(int newSize) {
-        values = Arrays.copyOf(values, newSize);
+        throw new AssertionError("should not reach here");
     }
 
     @Override
@@ -52,11 +56,8 @@ final class BooleanVectorBuilder extends AbstractVectorBuilder implements Boolea
         finish();
         BooleanVector vector;
         if (valueCount == 1) {
-            vector = blockFactory.newConstantBooleanBlockWith(values[0], 1, estimatedBytes).asVector();
+            vector = blockFactory.newConstantBooleanBlockWith(values.get(0), 1, estimatedBytes).asVector();
         } else {
-            if (values.length - valueCount > 1024 || valueCount < (values.length / 2)) {
-                values = Arrays.copyOf(values, valueCount);
-            }
             vector = blockFactory.newBooleanArrayVector(values, valueCount, estimatedBytes);
         }
         built();

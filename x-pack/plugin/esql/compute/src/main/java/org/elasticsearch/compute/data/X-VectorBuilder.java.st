@@ -14,6 +14,10 @@ import org.elasticsearch.common.util.BytesRefArray;
 import org.elasticsearch.core.Releasables;
 
 $else$
+$if(boolean)$
+import org.elasticsearch.common.util.$Array$;
+
+$endif$
 import java.util.Arrays;
 $endif$
 
@@ -36,13 +40,13 @@ $if(BytesRef)$
     }
 
 $else$
-    private $type$[] values;
+    private $if(boolean)$$Array$$else$$type$[]$endif$ values;
 
     $Type$VectorBuilder(int estimatedSize, BlockFactory blockFactory) {
         super(blockFactory);
         int initialSize = Math.max(estimatedSize, 2);
         adjustBreaker(initialSize);
-        values = new $type$[Math.max(estimatedSize, 2)];
+        values = $if(boolean)$new $Array$(initialSize, blockFactory.bigArrays())$else$new $type$[initialSize]$endif$;
     }
 $endif$
 
@@ -51,6 +55,10 @@ $endif$
         ensureCapacity();
 $if(BytesRef)$
         values.append(value);
+$elseif(boolean)$
+        if (value) {
+            values.set(valueCount);
+        }
 $else$
         values[valueCount] = value;
 $endif$
@@ -65,8 +73,8 @@ $endif$
 
     @Override
     protected int valuesLength() {
-$if(BytesRef)$
-        return Integer.MAX_VALUE; // allow the BytesRefArray through its own append
+$if(BytesRef||boolean)$
+        return Integer.MAX_VALUE; // allow the $if(BytesRef)$BytesRefArray$else$$Array$$endif$ through its own append
 $else$
         return values.length;
 $endif$
@@ -74,7 +82,7 @@ $endif$
 
     @Override
     protected void growValuesArray(int newSize) {
-$if(BytesRef)$
+$if(BytesRef||boolean)$
         throw new AssertionError("should not reach here");
 $else$
         values = Arrays.copyOf(values, newSize);
@@ -112,6 +120,12 @@ $if(BytesRef)$
             blockFactory.adjustBreaker(vector.ramBytesUsed() - values.bigArraysRamBytesUsed());
         }
         values = null;
+$elseif(boolean)$
+        if (valueCount == 1) {
+            vector = blockFactory.newConstant$Type$BlockWith(values.get(0), 1, estimatedBytes).asVector();
+        } else {
+            vector = blockFactory.new$Type$ArrayVector(values, valueCount, estimatedBytes);
+        }
 $else$
         if (valueCount == 1) {
             vector = blockFactory.newConstant$Type$BlockWith(values[0], 1, estimatedBytes).asVector();
