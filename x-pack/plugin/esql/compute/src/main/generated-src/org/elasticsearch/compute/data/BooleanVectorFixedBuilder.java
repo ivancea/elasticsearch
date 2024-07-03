@@ -8,6 +8,7 @@
 package org.elasticsearch.compute.data;
 
 import org.elasticsearch.common.util.BitArray;
+import org.elasticsearch.core.Releasables;
 
 /**
  * Builder for {@link BooleanVector}s that never grows. Prefer this to
@@ -86,6 +87,7 @@ final class BooleanVectorFixedBuilder implements BooleanVector.FixedBuilder {
             // If nextIndex < 0 we've already built the vector
             closed = true;
             blockFactory.adjustBreaker(-preAdjustedBytes);
+            Releasables.closeExpectNoException(values);
         }
     }
 

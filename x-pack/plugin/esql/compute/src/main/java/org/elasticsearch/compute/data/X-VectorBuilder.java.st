@@ -15,6 +15,7 @@ import org.elasticsearch.core.Releasables;
 
 $elseif(boolean)$
 import org.elasticsearch.common.util.$Array$;
+import org.elasticsearch.core.Releasables;
 
 $else$
 import java.util.Arrays;
@@ -122,6 +123,8 @@ $if(BytesRef)$
 $elseif(boolean)$
         if (valueCount == 1) {
             vector = blockFactory.newConstant$Type$BlockWith(values.get(0), 1, estimatedBytes).asVector();
+
+            Releasables.closeExpectNoException(values);
         } else {
             vector = blockFactory.new$Type$ArrayVector(values, valueCount, estimatedBytes);
         }
@@ -138,7 +141,7 @@ $endif$
         built();
         return vector;
     }
-$if(BytesRef)$
+$if(BytesRef||boolean)$
 
     @Override
     public void extraClose() {

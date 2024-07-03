@@ -13,6 +13,7 @@ import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.util.BigArray;
 import org.elasticsearch.common.util.BigArrays;
+import org.elasticsearch.common.util.BitArray;
 import org.elasticsearch.common.util.BytesRefArray;
 import org.elasticsearch.compute.operator.ComputeTestCase;
 import org.elasticsearch.core.Releasables;
@@ -140,13 +141,13 @@ public class BlockAccountingTests extends ComputeTestCase {
     // Array Blocks
     public void testBooleanBlock() {
         BlockFactory blockFactory = blockFactory();
-        Block empty = new BooleanArrayBlock(new boolean[] {}, 0, new int[] { 0 }, null, Block.MvOrdering.UNORDERED, blockFactory);
+        Block empty = new BooleanArrayBlock(bitArray(blockFactory), 0, new int[] { 0 }, null, Block.MvOrdering.UNORDERED, blockFactory);
         long expectedEmptyUsed = Block.PAGE_MEM_OVERHEAD_PER_BLOCK + RamUsageTester.ramUsed(empty, RAM_USAGE_ACCUMULATOR)
             + RamUsageEstimator.shallowSizeOfInstance(BooleanVectorBlock.class);
         assertThat(empty.ramBytesUsed(), is(expectedEmptyUsed));
 
         Block emptyPlusOne = new BooleanArrayBlock(
-            new boolean[] { randomBoolean() },
+            bitArray(blockFactory, randomBoolean()),
             1,
             new int[] { 0, 1 },
             null,
@@ -161,7 +162,7 @@ public class BlockAccountingTests extends ComputeTestCase {
         boolean[] randomData = new boolean[randomIntBetween(2, 1024)];
         int[] valueIndices = IntStream.range(0, randomData.length + 1).toArray();
         Block emptyPlusSome = new BooleanArrayBlock(
-            randomData,
+            bitArray(blockFactory, randomData),
             randomData.length,
             valueIndices,
             null,
@@ -180,8 +181,9 @@ public class BlockAccountingTests extends ComputeTestCase {
     }
 
     public void testBooleanBlockWithNullFirstValues() {
+        BlockFactory blockFactory = blockFactory();
         Block empty = new BooleanArrayBlock(
-            new boolean[] {},
+            bitArray(blockFactory),
             0,
             null,
             BitSet.valueOf(new byte[] { 1 }),
@@ -409,5 +411,15 @@ public class BlockAccountingTests extends ComputeTestCase {
 
     static long ramBytesForDoubleArray(int length) {
         return alignObjectSize((long) Long.BYTES * length);
+    }
+
+    private static BitArray bitArray(BlockFactory blockFactory, boolean... values) {
+        BitArray bitArray = new BitArray(values.length, blockFactory.bigArrays());
+        for (int i = 0; i < values.length; i++) {
+            if (values[i]) {
+                bitArray.set(i);
+            }
+        }
+        return bitArray;
     }
 }

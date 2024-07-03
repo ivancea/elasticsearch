@@ -7,9 +7,9 @@
 
 package org.elasticsearch.compute.data;
 
-import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.breaker.CircuitBreakingException;
 import org.elasticsearch.common.util.BitArray;
+import org.elasticsearch.core.Releasables;
 
 /**
  * Block build of BooleanBlocks.
@@ -22,7 +22,6 @@ final class BooleanBlockBuilder extends AbstractBlockBuilder implements BooleanB
     BooleanBlockBuilder(int estimatedSize, BlockFactory blockFactory) {
         super(blockFactory);
         int initialSize = Math.max(estimatedSize, 2);
-        adjustBreaker(RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + initialSize * elementSize());
         values = new BitArray(initialSize, blockFactory.bigArrays());
     }
 
@@ -40,7 +39,7 @@ final class BooleanBlockBuilder extends AbstractBlockBuilder implements BooleanB
 
     @Override
     protected int elementSize() {
-        return Byte.BYTES;
+        return -1;
     }
 
     @Override
@@ -133,12 +132,7 @@ final class BooleanBlockBuilder extends AbstractBlockBuilder implements BooleanB
 
     private BooleanBlock buildBigArraysBlock() {
         final BooleanBlock theBlock;
-        final BitArray array = new BitArray(valueCount, blockFactory.bigArrays());
-        for (int i = 0; i < valueCount; i++) {
-            if (values.get(i)) {
-                array.set(i);
-            }
-        }
+        final BitArray array = values;
         if (isDense() && singleValued()) {
             theBlock = new BooleanBigArrayVector(array, positionCount, blockFactory).asBlock();
         } else {
@@ -163,6 +157,7 @@ final class BooleanBlockBuilder extends AbstractBlockBuilder implements BooleanB
             BooleanBlock theBlock;
             if (hasNonNullValue && positionCount == 1 && valueCount == 1) {
                 theBlock = blockFactory.newConstantBooleanBlockWith(values.get(0), 1, estimatedBytes);
+                Releasables.closeExpectNoException(values);
             } else if (estimatedBytes > blockFactory.maxPrimitiveArrayBytes()) {
                 theBlock = buildBigArraysBlock();
             } else if (isDense() && singleValued()) {
@@ -183,5 +178,10 @@ final class BooleanBlockBuilder extends AbstractBlockBuilder implements BooleanB
             close();
             throw e;
         }
+    }
+
+    @Override
+    public void extraClose() {
+        Releasables.closeExpectNoException(values);
     }
 }

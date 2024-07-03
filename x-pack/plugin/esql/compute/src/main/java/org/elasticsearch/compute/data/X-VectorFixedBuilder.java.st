@@ -9,6 +9,7 @@ package org.elasticsearch.compute.data;
 
 $if(boolean)$
 import org.elasticsearch.common.util.$Array$;
+import org.elasticsearch.core.Releasables;
 
 $else$
 import org.apache.lucene.util.RamUsageEstimator;
@@ -124,6 +125,9 @@ $endif$
             // If nextIndex < 0 we've already built the vector
             closed = true;
             blockFactory.adjustBreaker(-preAdjustedBytes);
+$if(boolean)$
+            Releasables.closeExpectNoException(values);
+$endif$
         }
     }
 

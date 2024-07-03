@@ -13,6 +13,7 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.util.BitArray;
 import org.elasticsearch.core.ReleasableIterator;
+import org.elasticsearch.core.Releasables;
 
 import java.io.IOException;
 import java.util.stream.Collectors;
@@ -131,4 +132,11 @@ final class BooleanArrayVector extends AbstractVector implements BooleanVector {
         return getClass().getSimpleName() + "[positions=" + getPositionCount() + ", values=" + valuesString + ']';
     }
 
+    @Override
+    public void closeInternal() {
+        // The circuit breaker that tracks the values {@link BitArray} is adjusted outside
+        // of this class.
+        blockFactory().adjustBreaker(-ramBytesUsed() + values.ramBytesUsed());
+        Releasables.closeExpectNoException(values);
+    }
 }

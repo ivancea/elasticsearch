@@ -8,6 +8,7 @@
 package org.elasticsearch.compute.data;
 
 import org.elasticsearch.common.util.BitArray;
+import org.elasticsearch.core.Releasables;
 
 /**
  * Builder for {@link BooleanVector}s that grows as needed.
@@ -55,10 +56,17 @@ final class BooleanVectorBuilder extends AbstractVectorBuilder implements Boolea
         BooleanVector vector;
         if (valueCount == 1) {
             vector = blockFactory.newConstantBooleanBlockWith(values.get(0), 1, estimatedBytes).asVector();
+
+            Releasables.closeExpectNoException(values);
         } else {
             vector = blockFactory.newBooleanArrayVector(values, valueCount, estimatedBytes);
         }
         built();
         return vector;
+    }
+
+    @Override
+    public void extraClose() {
+        Releasables.closeExpectNoException(values);
     }
 }

@@ -26,8 +26,12 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.unit.ByteSizeValue;
 $if(boolean)$
 import org.elasticsearch.common.util.$Array$;
-$endif$
 import org.elasticsearch.core.ReleasableIterator;
+import org.elasticsearch.core.Releasables;
+
+$else$
+import org.elasticsearch.core.ReleasableIterator;
+$endif$
 
 import java.io.IOException;
 import java.util.stream.Collectors;
@@ -260,6 +264,14 @@ $if(BytesRef)$
         // The circuit breaker that tracks the values {@link BytesRefArray} is adjusted outside
         // of this class.
         blockFactory().adjustBreaker(-ramBytesUsed() + values.bigArraysRamBytesUsed());
+        Releasables.closeExpectNoException(values);
+    }
+$elseif(boolean)$
+    @Override
+    public void closeInternal() {
+        // The circuit breaker that tracks the values {@link BitArray} is adjusted outside
+        // of this class.
+        blockFactory().adjustBreaker(-ramBytesUsed() + values.ramBytesUsed());
         Releasables.closeExpectNoException(values);
     }
 $endif$

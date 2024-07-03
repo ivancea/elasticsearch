@@ -7,6 +7,7 @@
 
 package org.elasticsearch.compute.data;
 
+import org.elasticsearch.common.util.BitArray;
 import org.elasticsearch.test.ESTestCase;
 
 import java.util.BitSet;
@@ -33,7 +34,7 @@ public class BooleanBlockEqualityTests extends ESTestCase {
         // all these "empty" vectors should be equivalent
         List<BooleanBlock> blocks = List.of(
             new BooleanArrayBlock(
-                new boolean[] {},
+                bitArray(blockFactory),
                 0,
                 new int[] { 0 },
                 BitSet.valueOf(new byte[] { 0b00 }),
@@ -41,7 +42,7 @@ public class BooleanBlockEqualityTests extends ESTestCase {
                 blockFactory
             ),
             new BooleanArrayBlock(
-                new boolean[] { randomBoolean() },
+                bitArray(blockFactory, randomBoolean()),
                 0,
                 new int[] { 0 },
                 BitSet.valueOf(new byte[] { 0b00 }),
@@ -130,7 +131,7 @@ public class BooleanBlockEqualityTests extends ESTestCase {
         List<BooleanBlock> blocks = List.of(
             blockFactory.newBooleanArrayVector(new boolean[] { true, false, true }, 3).asBlock(),
             new BooleanArrayBlock(
-                new boolean[] { true, false, true },
+                bitArray(blockFactory, true, false, true),
                 3,
                 new int[] { 0, 1, 2, 3 },
                 BitSet.valueOf(new byte[] { 0b000 }),
@@ -138,7 +139,7 @@ public class BooleanBlockEqualityTests extends ESTestCase {
                 blockFactory
             ),
             new BooleanArrayBlock(
-                new boolean[] { true, false, true, false },
+                bitArray(blockFactory, true, false, true, false ),
                 3,
                 new int[] { 0, 1, 2, 3 },
                 BitSet.valueOf(new byte[] { 0b1000 }),
@@ -172,7 +173,7 @@ public class BooleanBlockEqualityTests extends ESTestCase {
         List<BooleanBlock> moreBlocks = List.of(
             blockFactory.newBooleanArrayVector(new boolean[] { true, true }, 2).asBlock(),
             new BooleanArrayBlock(
-                new boolean[] { true, true },
+                bitArray(blockFactory, true, true),
                 2,
                 new int[] { 0, 1, 2 },
                 BitSet.valueOf(new byte[] { 0b000 }),
@@ -180,7 +181,7 @@ public class BooleanBlockEqualityTests extends ESTestCase {
                 blockFactory
             ),
             new BooleanArrayBlock(
-                new boolean[] { true, true, false },
+                bitArray(blockFactory, true, true, false),
                 2,
                 new int[] { 0, 1, 2 },
                 BitSet.valueOf(new byte[] { 0b100 }),
@@ -272,5 +273,15 @@ public class BooleanBlockEqualityTests extends ESTestCase {
                 assertNotEquals(obj1.hashCode(), obj2.hashCode());
             }
         }
+    }
+
+    private static BitArray bitArray(BlockFactory blockFactory, boolean... values) {
+        BitArray bitArray = new BitArray(values.length, blockFactory.bigArrays());
+        for (int i = 0; i < values.length; i++) {
+            if (values[i]) {
+                bitArray.set(i);
+            }
+        }
+        return bitArray;
     }
 }

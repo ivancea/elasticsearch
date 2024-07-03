@@ -15,9 +15,9 @@ import org.elasticsearch.common.util.BytesRefArray;
 import org.elasticsearch.core.Releasables;
 
 $elseif(boolean)$
-import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.breaker.CircuitBreakingException;
 import org.elasticsearch.common.util.$Array$;
+import org.elasticsearch.core.Releasables;
 
 $else$
 import org.apache.lucene.util.RamUsageEstimator;
@@ -47,7 +47,9 @@ $else$
     $Type$BlockBuilder(int estimatedSize, BlockFactory blockFactory) {
         super(blockFactory);
         int initialSize = Math.max(estimatedSize, 2);
+    $if(!boolean)$
         adjustBreaker(RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + initialSize * elementSize());
+    $endif$
         values = $if(boolean)$new $Array$(initialSize, blockFactory.bigArrays())$else$new $type$[initialSize]$endif$;
     }
 $endif$
@@ -72,7 +74,7 @@ $endif$
 
     @Override
     protected int elementSize() {
-        return $if(BytesRef)$-1$else$$BYTES$$endif$;
+        return $if(BytesRef||boolean)$-1$else$$BYTES$$endif$;
     }
 
     @Override
@@ -236,12 +238,7 @@ $else$
     private $Type$Block buildBigArraysBlock() {
         final $Type$Block theBlock;
     $if(boolean)$
-        final BitArray array = new BitArray(valueCount, blockFactory.bigArrays());
-        for (int i = 0; i < valueCount; i++) {
-            if (values.get(i)) {
-                array.set(i);
-            }
-        }
+        final BitArray array = values;
     $else$
         final $Array$ array = blockFactory.bigArrays().new$Array$(valueCount, false);
         for (int i = 0; i < valueCount; i++) {
@@ -299,7 +296,7 @@ $endif$
             throw e;
         }
     }
-$if(BytesRef)$
+$if(BytesRef||boolean)$
 
     @Override
     public void extraClose() {
