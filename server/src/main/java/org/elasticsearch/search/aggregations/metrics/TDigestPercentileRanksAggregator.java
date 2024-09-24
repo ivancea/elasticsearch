@@ -46,7 +46,7 @@ class TDigestPercentileRanksAggregator extends AbstractTDigestPercentilesAggrega
 
     @Override
     public InternalAggregation buildEmptyAggregation() {
-        return InternalTDigestPercentileRanks.empty(name, keys, compression, executionHint, keyed, formatter, metadata());
+        return InternalTDigestPercentileRanks.empty(name, keys, compression, executionHint, keyed, formatter, metadata(), bigArrays());
     }
 
     @Override

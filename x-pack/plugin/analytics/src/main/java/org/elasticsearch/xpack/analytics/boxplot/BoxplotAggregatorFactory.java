@@ -60,7 +60,14 @@ public class BoxplotAggregatorFactory extends ValuesSourceAggregatorFactory {
 
     @Override
     protected Aggregator createUnmapped(Aggregator parent, Map<String, Object> metadata) throws IOException {
-        final InternalBoxplot empty = InternalBoxplot.empty(name, compression, executionHint, config.format(), metadata);
+        final InternalBoxplot empty = InternalBoxplot.empty(
+            name,
+            compression,
+            executionHint,
+            config.format(),
+            metadata,
+            context.bigArrays()
+        );
         final Predicate<String> hasMetric = InternalBoxplot.Metrics::hasMetric;
         return new NonCollectingMultiMetricAggregator(name, context, parent, empty, hasMetric, metadata);
     }

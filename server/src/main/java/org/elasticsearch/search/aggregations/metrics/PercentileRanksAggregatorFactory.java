@@ -73,7 +73,8 @@ class PercentileRanksAggregatorFactory extends ValuesSourceAggregatorFactory {
             percents,
             keyed,
             config.format(),
-            metadata
+            metadata,
+            context.bigArrays()
         );
         final Predicate<String> hasMetric = s -> PercentilesConfig.indexOfKey(percents, Double.parseDouble(s)) >= 0;
         return new NonCollectingMultiMetricAggregator(name, context, parent, empty, hasMetric, metadata);

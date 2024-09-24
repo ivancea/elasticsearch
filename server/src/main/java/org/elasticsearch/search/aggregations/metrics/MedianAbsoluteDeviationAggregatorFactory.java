@@ -63,7 +63,8 @@ public class MedianAbsoluteDeviationAggregatorFactory extends ValuesSourceAggreg
             metadata,
             config.format(),
             compression,
-            executionHint
+            executionHint,
+            context.bigArrays()
         );
         return new NonCollectingSingleMetricAggregator(name, context, parent, empty, metadata);
     }

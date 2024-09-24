@@ -22,6 +22,8 @@ import org.elasticsearch.cluster.routing.RoutingNode;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.routing.allocation.DataTier;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.breaker.CircuitBreaker;
+import org.elasticsearch.core.Releasable;
 import org.elasticsearch.features.FeatureService;
 import org.elasticsearch.indices.NodeIndicesStats;
 import org.elasticsearch.injection.guice.Inject;
@@ -47,6 +49,7 @@ public class DataTiersUsageTransportAction extends XPackUsageFeatureTransportAct
 
     private final Client client;
     private final FeatureService featureService;
+    private final CircuitBreaker breaker;
 
     @Inject
     public DataTiersUsageTransportAction(
@@ -56,7 +59,8 @@ public class DataTiersUsageTransportAction extends XPackUsageFeatureTransportAct
         ActionFilters actionFilters,
         IndexNameExpressionResolver indexNameExpressionResolver,
         Client client,
-        FeatureService featureService
+        FeatureService featureService,
+        CircuitBreaker breaker
     ) {
         super(
             XPackUsageFeatureAction.DATA_TIERS.name(),
@@ -68,6 +72,7 @@ public class DataTiersUsageTransportAction extends XPackUsageFeatureTransportAct
         );
         this.client = client;
         this.featureService = featureService;
+        this.breaker = breaker;
     }
 
     @Override
@@ -88,7 +93,7 @@ public class DataTiersUsageTransportAction extends XPackUsageFeatureTransportAct
                         delegate.onResponse(
                             new XPackUsageFeatureResponse(
                                 new DataTiersFeatureSetUsage(
-                                    aggregateStats(response.getNodes(), getIndicesGroupedByTier(state, response.getNodes()))
+                                    aggregateStats(breaker, response.getNodes(), getIndicesGroupedByTier(state, response.getNodes()))
                                 )
                             )
                         );
@@ -108,7 +113,7 @@ public class DataTiersUsageTransportAction extends XPackUsageFeatureTransportAct
                         .toList();
                     delegate.onResponse(
                         new XPackUsageFeatureResponse(
-                            new DataTiersFeatureSetUsage(aggregateStats(response, getIndicesGroupedByTier(state, response)))
+                            new DataTiersFeatureSetUsage(aggregateStats(breaker, response, getIndicesGroupedByTier(state, response)))
                         )
                     );
                 }));
@@ -141,7 +146,7 @@ public class DataTiersUsageTransportAction extends XPackUsageFeatureTransportAct
     /**
      * Accumulator to hold intermediate data tier stats before final calculation.
      */
-    private static class TierStatsAccumulator {
+    private static class TierStatsAccumulator implements Releasable {
         int nodeCount = 0;
         Set<String> indexNames = new HashSet<>();
         int totalShardCount = 0;
@@ -149,26 +154,37 @@ public class DataTiersUsageTransportAction extends XPackUsageFeatureTransportAct
         long docCount = 0;
         int primaryShardCount = 0;
         long primaryByteCount = 0L;
-        final TDigestState valueSketch = TDigestState.create(1000);
+        final TDigestState valueSketch;
+
+        private TierStatsAccumulator(CircuitBreaker breaker) {
+            this.valueSketch = TDigestState.create(breaker, 1000);
+        }
+
+        @Override
+        public void close() {
+            valueSketch.close();
+        }
     }
 
     // Visible for testing
     static Map<String, DataTiersFeatureSetUsage.TierSpecificStats> aggregateStats(
+        CircuitBreaker breaker,
         List<NodeDataTiersUsage> nodeDataTiersUsages,
         Map<String, Set<String>> tierPreference
     ) {
         Map<String, TierStatsAccumulator> statsAccumulators = new HashMap<>();
         for (String tier : tierPreference.keySet()) {
-            statsAccumulators.put(tier, new TierStatsAccumulator());
+            statsAccumulators.put(tier, new TierStatsAccumulator(breaker));
             statsAccumulators.get(tier).indexNames.addAll(tierPreference.get(tier));
         }
         for (NodeDataTiersUsage nodeDataTiersUsage : nodeDataTiersUsages) {
-            aggregateDataTierNodeCounts(nodeDataTiersUsage, statsAccumulators);
-            aggregateDataTierIndexStats(nodeDataTiersUsage, statsAccumulators);
+            aggregateDataTierNodeCounts(breaker, nodeDataTiersUsage, statsAccumulators);
+            aggregateDataTierIndexStats(breaker, nodeDataTiersUsage, statsAccumulators);
         }
         Map<String, DataTiersFeatureSetUsage.TierSpecificStats> results = new HashMap<>();
         for (Map.Entry<String, TierStatsAccumulator> entry : statsAccumulators.entrySet()) {
             results.put(entry.getKey(), aggregateFinalTierStats(entry.getValue()));
+            entry.getValue().close();
         }
         return results;
     }
@@ -176,24 +192,32 @@ public class DataTiersUsageTransportAction extends XPackUsageFeatureTransportAct
     /**
      * Determine which data tiers each node belongs to (if any), and increment the node counts for those tiers.
      */
-    private static void aggregateDataTierNodeCounts(NodeDataTiersUsage nodeStats, Map<String, TierStatsAccumulator> tiersStats) {
+    private static void aggregateDataTierNodeCounts(
+        CircuitBreaker breaker,
+        NodeDataTiersUsage nodeStats,
+        Map<String, TierStatsAccumulator> tiersStats
+    ) {
         nodeStats.getNode()
             .getRoles()
             .stream()
             .map(DiscoveryNodeRole::roleName)
             .filter(DataTier::validTierName)
-            .forEach(tier -> tiersStats.computeIfAbsent(tier, k -> new TierStatsAccumulator()).nodeCount++);
+            .forEach(tier -> tiersStats.computeIfAbsent(tier, k -> new TierStatsAccumulator(breaker)).nodeCount++);
     }
 
     /**
      * Iterate the preferred tiers of the indices for a node and aggregate their stats.
      */
-    private static void aggregateDataTierIndexStats(NodeDataTiersUsage nodeDataTiersUsage, Map<String, TierStatsAccumulator> accumulators) {
+    private static void aggregateDataTierIndexStats(
+        CircuitBreaker breaker,
+        NodeDataTiersUsage nodeDataTiersUsage,
+        Map<String, TierStatsAccumulator> accumulators
+    ) {
         for (Map.Entry<String, NodeDataTiersUsage.UsageStats> entry : nodeDataTiersUsage.getUsageStatsByTier().entrySet()) {
             String tier = entry.getKey();
             NodeDataTiersUsage.UsageStats usage = entry.getValue();
             if (DataTier.validTierName(tier)) {
-                TierStatsAccumulator accumulator = accumulators.computeIfAbsent(tier, k -> new TierStatsAccumulator());
+                TierStatsAccumulator accumulator = accumulators.computeIfAbsent(tier, k -> new TierStatsAccumulator(breaker));
                 accumulator.docCount += usage.getDocCount();
                 accumulator.totalByteCount += usage.getTotalSize();
                 accumulator.totalShardCount += usage.getTotalShardCount();

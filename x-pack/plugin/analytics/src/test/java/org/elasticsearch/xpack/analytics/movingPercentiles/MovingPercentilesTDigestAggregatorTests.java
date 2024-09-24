@@ -15,6 +15,9 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.tests.index.RandomIndexWriter;
 import org.apache.lucene.util.NumericUtils;
+import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.core.Releasable;
+import org.elasticsearch.core.Releasables;
 import org.elasticsearch.index.mapper.DateFieldMapper;
 import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.mapper.NumberFieldMapper;
@@ -37,12 +40,12 @@ public class MovingPercentilesTDigestAggregatorTests extends MovingPercentilesAb
     protected void executeTestCase(int window, int shift, Query query, DateHistogramAggregationBuilder aggBuilder) throws IOException {
 
         TDigestState[] states = new TDigestState[datasetTimes.size()];
-        try (Directory directory = newDirectory()) {
+        try (Directory directory = newDirectory(); Releasable ignored = Releasables.wrap(states)) {
             try (RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory)) {
                 Document document = new Document();
                 int counter = 0;
                 for (String date : datasetTimes) {
-                    states[counter] = TDigestState.create(50);
+                    states[counter] = TDigestState.create(newLimitedBreaker(ByteSizeValue.ofMb(100)), 50);
                     final int numberDocs = randomIntBetween(5, 50);
                     long instant = asLong(date);
                     for (int i = 0; i < numberDocs; i++) {
@@ -73,14 +76,15 @@ public class MovingPercentilesTDigestAggregatorTests extends MovingPercentilesAb
                 for (int i = 0; i < histogram.getBuckets().size(); i++) {
                     InternalDateHistogram.Bucket bucket = histogram.getBuckets().get(i);
                     InternalTDigestPercentiles values = bucket.getAggregations().get("MovingPercentiles");
-                    TDigestState expected = reduce(i, window, shift, states);
-                    if (values == null) {
-                        assertNull(expected);
-                    } else {
-                        TDigestState agg = values.getState();
-                        assertEquals(expected.size(), agg.size());
-                        assertEquals(expected.getMax(), agg.getMax(), 0d);
-                        assertEquals(expected.getMin(), agg.getMin(), 0d);
+                    try (TDigestState expected = reduce(i, window, shift, states)) {
+                        if (values == null) {
+                            assertNull(expected);
+                        } else {
+                            TDigestState agg = values.getState();
+                            assertEquals(expected.size(), agg.size());
+                            assertEquals(expected.getMax(), agg.getMax(), 0d);
+                            assertEquals(expected.getMin(), agg.getMin(), 0d);
+                        }
                     }
                 }
             }
@@ -93,7 +97,7 @@ public class MovingPercentilesTDigestAggregatorTests extends MovingPercentilesAb
         if (fromIndex == toIndex) {
             return null;
         }
-        TDigestState result = TDigestState.create(buckets[0].compression());
+        TDigestState result = TDigestState.create(newLimitedBreaker(ByteSizeValue.ofMb(100)), buckets[0].compression());
         for (int i = fromIndex; i < toIndex; i++) {
             result.add(buckets[i]);
         }

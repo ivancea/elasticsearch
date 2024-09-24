@@ -7,8 +7,10 @@
 
 package org.elasticsearch.xpack.analytics.boxplot;
 
+import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.search.DocValueFormat;
 import org.elasticsearch.search.aggregations.AggregationReduceContext;
 import org.elasticsearch.search.aggregations.AggregatorReducer;
@@ -182,9 +184,15 @@ public class InternalBoxplot extends InternalNumericMetricsAggregation.MultiValu
         double compression,
         TDigestExecutionHint executionHint,
         DocValueFormat format,
-        Map<String, Object> metadata
+        Map<String, Object> metadata,
+        BigArrays bigArrays
     ) {
-        return new InternalBoxplot(name, TDigestState.create(compression, executionHint), format, metadata);
+        return new InternalBoxplot(
+            name,
+            TDigestState.create(bigArrays.breakerService().getBreaker(CircuitBreaker.REQUEST), compression, executionHint),
+            format,
+            metadata
+        );
     }
 
     static final Set<String> METRIC_NAMES = Collections.unmodifiableSet(

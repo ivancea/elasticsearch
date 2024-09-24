@@ -48,7 +48,7 @@ public class HistoBackedTDigestPercentileRanksAggregator extends AbstractHistoBa
 
     @Override
     public InternalAggregation buildEmptyAggregation() {
-        return InternalTDigestPercentileRanks.empty(name, keys, compression, executionHint, keyed, formatter, metadata());
+        return InternalTDigestPercentileRanks.empty(name, keys, compression, executionHint, keyed, formatter, metadata(), bigArrays());
     }
 
     @Override

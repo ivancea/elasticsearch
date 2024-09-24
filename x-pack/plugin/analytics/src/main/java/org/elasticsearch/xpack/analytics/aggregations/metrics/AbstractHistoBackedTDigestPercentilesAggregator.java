@@ -8,6 +8,7 @@
 package org.elasticsearch.xpack.analytics.aggregations.metrics;
 
 import org.apache.lucene.search.ScoreMode;
+import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.common.util.ObjectArray;
 import org.elasticsearch.core.Releasables;
@@ -90,7 +91,7 @@ abstract class AbstractHistoBackedTDigestPercentilesAggregator extends NumericMe
         states = bigArrays.grow(states, bucket + 1);
         TDigestState state = states.get(bucket);
         if (state == null) {
-            state = TDigestState.create(compression, executionHint);
+            state = TDigestState.create(bigArrays.breakerService().getBreaker(CircuitBreaker.REQUEST), compression, executionHint);
             states.set(bucket, state);
         }
         return state;

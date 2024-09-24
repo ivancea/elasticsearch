@@ -13,6 +13,7 @@ import org.elasticsearch.action.admin.indices.mapping.put.PutMappingRequest;
 import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.search.aggregations.AggregationBuilders;
 import org.elasticsearch.search.aggregations.metrics.InternalHDRPercentiles;
@@ -169,7 +170,7 @@ public class HistogramPercentileAggregationTests extends ESSingleNodeTestCase {
         PutMappingRequest request2 = new PutMappingRequest("pre_agg").source(xContentBuilder2);
         client().admin().indices().putMapping(request2).actionGet();
 
-        TDigestState histogram = TDigestState.create(compression);
+        TDigestState histogram = TDigestState.create(newLimitedBreaker(ByteSizeValue.ofMb(100)), compression);
         BulkRequest bulkRequest = new BulkRequest();
 
         int numDocs = 10000;
@@ -205,9 +206,11 @@ public class HistogramPercentileAggregationTests extends ESSingleNodeTestCase {
                     .endObject()
                     .endObject();
                 prepareIndex("pre_agg").setSource(preAggDoc).get();
-                histogram = TDigestState.create(compression);
+                histogram.close();
+                histogram = TDigestState.create(newLimitedBreaker(ByteSizeValue.ofMb(100)), compression);
             }
         }
+        histogram.close();
         client().admin().indices().refresh(new RefreshRequest("raw", "pre_agg")).get();
 
         assertHitCount(client().prepareSearch("raw").setTrackTotalHits(true), numDocs);

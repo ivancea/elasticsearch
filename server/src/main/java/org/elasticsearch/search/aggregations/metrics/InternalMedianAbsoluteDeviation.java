@@ -9,8 +9,10 @@
 
 package org.elasticsearch.search.aggregations.metrics;
 
+import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.search.DocValueFormat;
 import org.elasticsearch.search.aggregations.AggregationReduceContext;
 import org.elasticsearch.search.aggregations.AggregatorReducer;
@@ -67,9 +69,15 @@ public class InternalMedianAbsoluteDeviation extends InternalNumericMetricsAggre
         Map<String, Object> metadata,
         DocValueFormat format,
         double compression,
-        TDigestExecutionHint executionHint
+        TDigestExecutionHint executionHint,
+        BigArrays bigArrays
     ) {
-        return new InternalMedianAbsoluteDeviation(name, metadata, format, TDigestState.create(compression, executionHint));
+        return new InternalMedianAbsoluteDeviation(
+            name,
+            metadata,
+            format,
+            TDigestState.create(bigArrays.breakerService().getBreaker(CircuitBreaker.REQUEST), compression, executionHint)
+        );
     }
 
     @Override

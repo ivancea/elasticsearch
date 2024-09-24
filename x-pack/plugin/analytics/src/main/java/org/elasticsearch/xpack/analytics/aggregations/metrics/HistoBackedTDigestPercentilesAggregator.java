@@ -7,6 +7,7 @@
 
 package org.elasticsearch.xpack.analytics.aggregations.metrics;
 
+import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.search.DocValueFormat;
 import org.elasticsearch.search.aggregations.Aggregator;
 import org.elasticsearch.search.aggregations.InternalAggregation;
@@ -58,7 +59,11 @@ public class HistoBackedTDigestPercentilesAggregator extends AbstractHistoBacked
 
     @Override
     public InternalAggregation buildEmptyAggregation() {
-        TDigestState state = TDigestState.create(compression, executionHint);
+        TDigestState state = TDigestState.create(
+            bigArrays().breakerService().getBreaker(CircuitBreaker.REQUEST),
+            compression,
+            executionHint
+        );
         return new InternalTDigestPercentiles(name, keys, state, keyed, formatter, metadata());
     }
 }

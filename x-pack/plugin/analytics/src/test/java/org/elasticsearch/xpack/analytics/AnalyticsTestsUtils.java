@@ -10,6 +10,7 @@ package org.elasticsearch.xpack.analytics;
 import org.HdrHistogram.DoubleHistogram;
 import org.HdrHistogram.DoubleHistogramIterationValue;
 import org.apache.lucene.document.BinaryDocValuesField;
+import org.elasticsearch.common.breaker.NoopCircuitBreaker;
 import org.elasticsearch.common.io.stream.BytesStreamOutput;
 import org.elasticsearch.search.aggregations.metrics.TDigestState;
 import org.elasticsearch.tdigest.Centroid;
@@ -22,17 +23,18 @@ public final class AnalyticsTestsUtils {
      * Generates an index fields for histogram fields. Used in tests of aggregations that work on histogram fields.
      */
     public static BinaryDocValuesField histogramFieldDocValues(String fieldName, double[] values) throws IOException {
-        TDigestState histogram = TDigestState.create(100.0); // default
-        for (double value : values) {
-            histogram.add(value);
+        try (TDigestState histogram = TDigestState.create(new NoopCircuitBreaker("histogram-noop-breaker"), 100.0)) { // default
+            for (double value : values) {
+                histogram.add(value);
+            }
+            BytesStreamOutput streamOutput = new BytesStreamOutput();
+            histogram.compress();
+            for (Centroid centroid : histogram.centroids()) {
+                streamOutput.writeVLong(centroid.count());
+                streamOutput.writeDouble(centroid.mean());
+            }
+            return new BinaryDocValuesField(fieldName, streamOutput.bytes().toBytesRef());
         }
-        BytesStreamOutput streamOutput = new BytesStreamOutput();
-        histogram.compress();
-        for (Centroid centroid : histogram.centroids()) {
-            streamOutput.writeVLong(centroid.count());
-            streamOutput.writeDouble(centroid.mean());
-        }
-        return new BinaryDocValuesField(fieldName, streamOutput.bytes().toBytesRef());
     }
 
     public static BinaryDocValuesField hdrHistogramFieldDocValues(String fieldName, double[] values) throws IOException {

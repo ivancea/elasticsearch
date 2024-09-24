@@ -9,6 +9,7 @@
 
 package org.elasticsearch.search.aggregations.metrics;
 
+import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.util.Maps;
 import org.elasticsearch.search.DocValueFormat;
 import org.elasticsearch.search.aggregations.support.SamplingContext;
@@ -37,7 +38,7 @@ public class InternalTDigestPercentilesTests extends InternalPercentilesTestCase
         if (empty) {
             return new InternalTDigestPercentiles(name, percents, null, keyed, format, metadata);
         }
-        final TDigestState state = TDigestState.create(100);
+        final TDigestState state = TDigestState.create(newLimitedBreaker(ByteSizeValue.ofMb(100)), 100);
         Arrays.stream(values).forEach(state::add);
 
         return new InternalTDigestPercentiles(name, percents, state, keyed, format, metadata);

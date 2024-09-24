@@ -14,6 +14,7 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
 import org.elasticsearch.common.util.ArrayUtils;
+import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.search.DocValueFormat;
 import org.elasticsearch.search.aggregations.Aggregator;
 import org.elasticsearch.search.aggregations.support.AggregationContext;
@@ -86,7 +87,8 @@ public abstract class PercentilesConfig implements ToXContent, Writeable {
         double[] values,
         boolean keyed,
         DocValueFormat formatter,
-        Map<String, Object> metadata
+        Map<String, Object> metadata,
+        BigArrays bigArrays
     );
 
     @Override
@@ -226,10 +228,11 @@ public abstract class PercentilesConfig implements ToXContent, Writeable {
             double[] values,
             boolean keyed,
             DocValueFormat formatter,
-            Map<String, Object> metadata
+            Map<String, Object> metadata,
+            BigArrays bigArrays
         ) {
             TDigestExecutionHint hint = executionHint == null ? TDigestExecutionHint.DEFAULT : executionHint;
-            return InternalTDigestPercentileRanks.empty(name, values, compression, hint, keyed, formatter, metadata);
+            return InternalTDigestPercentileRanks.empty(name, values, compression, hint, keyed, formatter, metadata, bigArrays);
         }
 
         @Override
@@ -361,7 +364,8 @@ public abstract class PercentilesConfig implements ToXContent, Writeable {
             double[] values,
             boolean keyed,
             DocValueFormat formatter,
-            Map<String, Object> metadata
+            Map<String, Object> metadata,
+            BigArrays bigArrays
         ) {
             return InternalHDRPercentileRanks.empty(name, values, keyed, formatter, metadata);
         }

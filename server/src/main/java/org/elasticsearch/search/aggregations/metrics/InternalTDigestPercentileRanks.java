@@ -8,7 +8,9 @@
  */
 package org.elasticsearch.search.aggregations.metrics;
 
+import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.common.io.stream.StreamInput;
+import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.search.DocValueFormat;
 
 import java.io.IOException;
@@ -49,9 +51,10 @@ public class InternalTDigestPercentileRanks extends AbstractInternalTDigestPerce
         TDigestExecutionHint executionHint,
         boolean keyed,
         DocValueFormat format,
-        Map<String, Object> metadata
+        Map<String, Object> metadata,
+        BigArrays bigArrays
     ) {
-        TDigestState state = TDigestState.create(compression, executionHint);
+        TDigestState state = TDigestState.create(bigArrays.breakerService().getBreaker(CircuitBreaker.REQUEST), compression, executionHint);
         return new InternalTDigestPercentileRanks(name, keys, state, keyed, format, metadata);
     }
 

@@ -17,6 +17,8 @@ import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.IndexRoutingTable;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.allocation.DataTier;
+import org.elasticsearch.common.breaker.CircuitBreaker;
+import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.search.aggregations.metrics.TDigestState;
 import org.elasticsearch.test.ESTestCase;
 import org.junit.Before;
@@ -90,17 +92,20 @@ public class DataTiersUsageTransportActionTests extends ESTestCase {
     }
 
     public void testCalculateMAD() {
-        assertThat(DataTiersUsageTransportAction.computeMedianAbsoluteDeviation(TDigestState.create(10)), equalTo(0L));
+        try (TDigestState emptyDigest = TDigestState.create(breaker(), 10)) {
+            assertThat(DataTiersUsageTransportAction.computeMedianAbsoluteDeviation(emptyDigest), equalTo(0L));
+        }
 
-        TDigestState sketch = TDigestState.create(randomDoubleBetween(1, 1000, false));
-        sketch.add(1);
-        sketch.add(1);
-        sketch.add(2);
-        sketch.add(2);
-        sketch.add(4);
-        sketch.add(6);
-        sketch.add(9);
-        assertThat(DataTiersUsageTransportAction.computeMedianAbsoluteDeviation(sketch), equalTo(1L));
+        try (TDigestState sketch = TDigestState.create(breaker(), randomDoubleBetween(1, 1000, false))) {
+            sketch.add(1);
+            sketch.add(1);
+            sketch.add(2);
+            sketch.add(2);
+            sketch.add(4);
+            sketch.add(6);
+            sketch.add(9);
+            assertThat(DataTiersUsageTransportAction.computeMedianAbsoluteDeviation(sketch), equalTo(1L));
+        }
     }
 
     public void testCalculateStatsNoTiers() {
@@ -113,6 +118,7 @@ public class DataTiersUsageTransportActionTests extends ESTestCase {
             new NodeDataTiersUsage(dataNode1, Map.of())
         );
         Map<String, DataTiersFeatureSetUsage.TierSpecificStats> tierSpecificStats = DataTiersUsageTransportAction.aggregateStats(
+            breaker(),
             nodeDataTiersUsages,
             Map.of()
         );
@@ -140,6 +146,7 @@ public class DataTiersUsageTransportActionTests extends ESTestCase {
         );
 
         Map<String, DataTiersFeatureSetUsage.TierSpecificStats> tierSpecificStats = DataTiersUsageTransportAction.aggregateStats(
+            breaker(),
             nodeDataTiersUsages,
             Map.of()
         );
@@ -253,6 +260,7 @@ public class DataTiersUsageTransportActionTests extends ESTestCase {
         );
         // Calculate usage
         Map<String, DataTiersFeatureSetUsage.TierSpecificStats> tierSpecificStats = DataTiersUsageTransportAction.aggregateStats(
+            breaker(),
             nodeDataTiersUsages,
             Map.of(
                 DataTier.DATA_HOT,
@@ -344,6 +352,7 @@ public class DataTiersUsageTransportActionTests extends ESTestCase {
         );
         // Calculate usage
         Map<String, DataTiersFeatureSetUsage.TierSpecificStats> tierSpecificStats = DataTiersUsageTransportAction.aggregateStats(
+            breaker(),
             nodeDataTiersUsages,
             Map.of(
                 DataTier.DATA_HOT,
@@ -427,6 +436,7 @@ public class DataTiersUsageTransportActionTests extends ESTestCase {
 
         // Calculate usage
         Map<String, DataTiersFeatureSetUsage.TierSpecificStats> tierSpecificStats = DataTiersUsageTransportAction.aggregateStats(
+            breaker(),
             nodeDataTiersUsages,
             Map.of(DataTier.DATA_HOT, Set.of(hotIndex1), DataTier.DATA_WARM, Set.of(warmIndex1, warmIndex2))
         );
@@ -486,6 +496,7 @@ public class DataTiersUsageTransportActionTests extends ESTestCase {
 
         // Calculate usage
         Map<String, DataTiersFeatureSetUsage.TierSpecificStats> tierSpecificStats = DataTiersUsageTransportAction.aggregateStats(
+            breaker(),
             nodeDataTiersUsages,
             Map.of(DataTier.DATA_HOT, Set.of(hotIndex1), DataTier.DATA_WARM, Set.of(warmIndex1))
         );
@@ -531,5 +542,9 @@ public class DataTiersUsageTransportActionTests extends ESTestCase {
         IndexRoutingTable.Builder indexRoutingTableBuilder = IndexRoutingTable.builder(indexMetadata.getIndex());
         routeTestShardToNodes(indexMetadata, 0, indexRoutingTableBuilder, node);
         return indexRoutingTableBuilder;
+    }
+
+    private CircuitBreaker breaker() {
+        return newLimitedBreaker(ByteSizeValue.ofMb(100));
     }
 }

@@ -54,14 +54,6 @@ public class TDigestState implements Releasable {
     private final Type type;
 
     /**
-     * @deprecated this method will be removed after all usages are replaced
-     */
-    @Deprecated
-    public static TDigestState create(double compression) {
-        return create(DEFAULT_NOOP_BREAKER, compression);
-    }
-
-    /**
      * Default factory for TDigestState. The underlying {@link org.elasticsearch.tdigest.TDigest} implementation is optimized for
      * performance, potentially providing slightly inaccurate results compared to other, substantially slower implementations.
      * @param compression the compression factor for the underlying {@link org.elasticsearch.tdigest.TDigest} object
@@ -78,14 +70,6 @@ public class TDigestState implements Releasable {
      */
     public static TDigestState createOptimizedForAccuracy(CircuitBreaker breaker, double compression) {
         return new TDigestState(breaker, Type.valueForHighAccuracy(), compression);
-    }
-
-    /**
-     * @deprecated this method will be removed after all usages are replaced
-     */
-    @Deprecated
-    public static TDigestState create(double compression, TDigestExecutionHint executionHint) {
-        return create(DEFAULT_NOOP_BREAKER, compression, executionHint);
     }
 
     /**

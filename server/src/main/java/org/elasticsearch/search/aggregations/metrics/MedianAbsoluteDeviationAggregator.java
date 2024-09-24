@@ -9,6 +9,7 @@
 
 package org.elasticsearch.search.aggregations.metrics;
 
+import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.common.util.ObjectArray;
 import org.elasticsearch.core.Releasables;
@@ -101,7 +102,7 @@ public class MedianAbsoluteDeviationAggregator extends NumericMetricsAggregator.
         valueSketches = bigArrays.grow(valueSketches, bucket + 1);
         TDigestState state = valueSketches.get(bucket);
         if (state == null) {
-            state = TDigestState.create(compression, executionHint);
+            state = TDigestState.create(bigArrays.breakerService().getBreaker(CircuitBreaker.REQUEST), compression, executionHint);
             valueSketches.set(bucket, state);
         }
         return state;
@@ -119,7 +120,7 @@ public class MedianAbsoluteDeviationAggregator extends NumericMetricsAggregator.
 
     @Override
     public InternalAggregation buildEmptyAggregation() {
-        return InternalMedianAbsoluteDeviation.empty(name, metadata(), format, compression, executionHint);
+        return InternalMedianAbsoluteDeviation.empty(name, metadata(), format, compression, executionHint, bigArrays());
     }
 
     @Override
