@@ -7,9 +7,16 @@
 
 package org.elasticsearch.compute.aggregation;
 
+import org.elasticsearch.TransportVersion;
+import org.elasticsearch.TransportVersions;
 import org.elasticsearch.compute.ann.Aggregator;
 import org.elasticsearch.compute.ann.GroupingAggregator;
 import org.elasticsearch.compute.ann.IntermediateState;
+import org.elasticsearch.compute.data.Block;
+import org.elasticsearch.compute.data.BooleanBlock;
+import org.elasticsearch.compute.data.BooleanVector;
+import org.elasticsearch.compute.data.Page;
+import org.elasticsearch.compute.operator.DriverContext;
 
 @Aggregator(
     value = {
@@ -20,6 +27,58 @@ import org.elasticsearch.compute.ann.IntermediateState;
 )
 @GroupingAggregator
 class SumLongAggregator {
+
+    public static Page translateFrom(DriverContext driverContext, Page page, int blockIndex, TransportVersion version) {
+        if (version.onOrAfter(TransportVersions.ESQL_SUM_LONG_AGG_OVERFLOW)) {
+            return page;
+        }
+
+        // Old intermediate state didn't have the failed flag, so we add it to "false" here
+        Block[] blocks = new Block[page.getBlockCount() + 1];
+        // Original: [x A A y]
+        // [_ _ _ _ _] -> [x A A _ _]
+        for (int i = 0; i < blockIndex + 2; i++) {
+            blocks[i] = page.getBlock(i);
+        }
+        // [x A A _ _] -> [x A A _ y]
+        for (int i = blockIndex + 2; i < page.getBlockCount(); i++) {
+            blocks[i + 1] = page.getBlock(i);
+        }
+        // [x A A _ y] -> [x A A N y]
+        blocks[blockIndex + 2] = driverContext.blockFactory().newConstantBooleanBlockWith(false, page.getPositionCount());
+
+        return new Page(page.getPositionCount(), blocks);
+    }
+
+    public static Page translateTo(Page page, int blockIndex, TransportVersion version) {
+        if (version.onOrAfter(TransportVersions.ESQL_SUM_LONG_AGG_OVERFLOW)) {
+            return page;
+        }
+
+        BooleanBlock failedBlock = page.getBlock(blockIndex + 2);
+        BooleanVector failedVector = failedBlock.asVector();
+
+        if (failedVector.allFalse() == false) {
+            // If something failed, the other node won't be able to handle it, so we throw instead
+            throw new ArithmeticException("long overflow");
+        }
+
+        // Old intermediate state didn't have the failed flag, so we remove it here so that it doesn't get sent to the old node
+        Block[] blocks = new Block[page.getBlockCount() - 1];
+        // Original: [x A A N y]
+        // [_ _ _ _] -> [x A A _]
+        for (int i = 0; i < blockIndex + 2; i++) {
+            blocks[i] = page.getBlock(i);
+        }
+        // [x A A _] -> [x A A y]
+        for (int i = blockIndex + 3; i < page.getBlockCount(); i++) {
+            blocks[i - 1] = page.getBlock(i);
+        }
+
+        blocks[blockIndex + 2].close();
+
+        return new Page(page.getPositionCount(), blocks);
+    }
 
     public static long init() {
         return 0;
