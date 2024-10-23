@@ -10,6 +10,8 @@ package org.elasticsearch.xpack.esql.planner;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.compute.Describable;
+import org.elasticsearch.compute.aggregation.Aggregator;
+import org.elasticsearch.compute.aggregation.AggregatorFunctionSupplier;
 import org.elasticsearch.compute.aggregation.AggregatorMode;
 import org.elasticsearch.compute.data.Block;
 import org.elasticsearch.compute.data.BlockFactory;
@@ -17,6 +19,7 @@ import org.elasticsearch.compute.data.ElementType;
 import org.elasticsearch.compute.data.LocalCircuitBreaker;
 import org.elasticsearch.compute.data.Page;
 import org.elasticsearch.compute.lucene.LuceneOperator;
+import org.elasticsearch.compute.operator.AggregationOperator;
 import org.elasticsearch.compute.operator.ColumnExtractOperator;
 import org.elasticsearch.compute.operator.ColumnLoadOperator;
 import org.elasticsearch.compute.operator.Driver;
@@ -66,6 +69,7 @@ import org.elasticsearch.xpack.esql.enrich.EnrichLookupService;
 import org.elasticsearch.xpack.esql.evaluator.EvalMapper;
 import org.elasticsearch.xpack.esql.evaluator.command.GrokEvaluatorExtracter;
 import org.elasticsearch.xpack.esql.expression.Order;
+import org.elasticsearch.xpack.esql.expression.function.aggregate.AggregateFunction;
 import org.elasticsearch.xpack.esql.plan.physical.AggregateExec;
 import org.elasticsearch.xpack.esql.plan.physical.DissectExec;
 import org.elasticsearch.xpack.esql.plan.physical.EnrichExec;
@@ -98,6 +102,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -324,6 +329,24 @@ public class LocalExecutionPlanner {
             ? Function.identity()
             : alignPageToAttributes(exchangeSink.output(), source.layout);
 
+        // TODO: translateTo() for sink
+        // TODO: Can the layout or the aggregator change between this planning and the execution, so that the translators get out of sync?
+        var translators = new ArrayList<Aggregator.Translator>();
+
+        // TODO: Is this child check required?
+        if (exchangeSink.isIntermediateAgg() && exchangeSink.child() instanceof AggregateExec childAggregate &&
+            source.intermediateOperatorFactories.isEmpty() == false &&
+            source.intermediateOperatorFactories.get(source.intermediateOperatorFactories.size() - 1)
+                instanceof AggregationOperator.AggregationOperatorFactory factory) {
+            for (var aggregatorFactory : factory.aggregators()) {
+                var translator = aggregatorFactory.getTranslator();
+                if (translator != null) {
+                    translators.add(translator);
+                }
+            }
+        }
+
+        // TODO: Pass the translators to the sink operator? Page uses writeTo(), can't be easily "overridden"
         return source.withSink(new ExchangeSinkOperatorFactory(exchangeSinkHandler::createExchangeSink, transformer), source.layout);
     }
 

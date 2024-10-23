@@ -7,8 +7,11 @@
 
 package org.elasticsearch.compute.aggregation;
 
+import org.elasticsearch.TransportVersion;
 import org.elasticsearch.compute.Describable;
+import org.elasticsearch.compute.data.Page;
 import org.elasticsearch.compute.operator.DriverContext;
+import org.elasticsearch.core.Nullable;
 
 /**
  * Builds aggregation implementations, closing over any state required to do so.
@@ -18,11 +21,21 @@ public interface AggregatorFunctionSupplier extends Describable {
 
     GroupingAggregatorFunction groupingAggregator(DriverContext driverContext);
 
+    @Nullable
+    default Aggregator.Translator getTranslator() {
+        return null;
+    }
+
     default Aggregator.Factory aggregatorFactory(AggregatorMode mode) {
         return new Aggregator.Factory() {
             @Override
             public Aggregator apply(DriverContext driverContext) {
                 return new Aggregator(aggregator(driverContext), mode);
+            }
+
+            @Override
+            public Aggregator.Translator getTranslator() {
+                return AggregatorFunctionSupplier.this.getTranslator();
             }
 
             @Override

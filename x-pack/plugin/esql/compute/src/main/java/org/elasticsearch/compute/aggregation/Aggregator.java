@@ -7,21 +7,34 @@
 
 package org.elasticsearch.compute.aggregation;
 
+import org.elasticsearch.TransportVersion;
 import org.elasticsearch.compute.Describable;
 import org.elasticsearch.compute.data.Block;
 import org.elasticsearch.compute.data.BooleanVector;
 import org.elasticsearch.compute.data.Page;
 import org.elasticsearch.compute.operator.DriverContext;
+import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.Releasable;
 
-import java.util.function.Function;
 
 public class Aggregator implements Releasable {
     private final AggregatorFunction aggregatorFunction;
 
     private final AggregatorMode mode;
 
-    public interface Factory extends Function<DriverContext, Aggregator>, Describable {}
+    public interface Translator {
+        Page translateFrom(Page page, TransportVersion version);
+        Page translateTo(Page page, TransportVersion version);
+    }
+
+    public interface Factory extends Describable {
+        Aggregator apply(DriverContext driverContext);
+
+        @Nullable
+        default Translator getTranslator() {
+            return null;
+        }
+    }
 
     public Aggregator(AggregatorFunction aggregatorFunction, AggregatorMode mode) {
         this.aggregatorFunction = aggregatorFunction;
