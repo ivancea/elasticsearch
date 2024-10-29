@@ -80,11 +80,11 @@ public class Methods {
     }
 
     static ExecutableElement findMethod(String[] names, Predicate<ExecutableElement> filter, TypeElement... declarationTypes) {
-        for (TypeElement declarationType : declarationTypes) {
-            for (ExecutableElement e : ElementFilter.methodsIn(declarationType.getEnclosedElements())) {
-                if (e.getModifiers().contains(Modifier.STATIC)) {
-                    String name = e.getSimpleName().toString();
-                    for (String n : names) {
+        for (String n : names) {
+            for (TypeElement declarationType : declarationTypes) {
+                for (ExecutableElement e : ElementFilter.methodsIn(declarationType.getEnclosedElements())) {
+                    if (e.getModifiers().contains(Modifier.STATIC)) {
+                        String name = e.getSimpleName().toString();
                         if (n.equals(name) && filter.test(e)) {
                             return e;
                         }

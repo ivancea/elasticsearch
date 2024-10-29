@@ -111,7 +111,7 @@ public class AggregatorImplementer {
                 return false;
             }
             TypeName firstParamType = TypeName.get(e.getParameters().get(0).asType());
-            return firstParamType.isPrimitive() || firstParamType.toString().equals(stateType.toString());
+            return stateTypeFromType(firstParamType).toString().equals(stateType.toString());
         });
         this.combineValueCount = findMethod(declarationType, "combineValueCount");
         this.combineIntermediate = findMethod(declarationType, "combineIntermediate");
@@ -140,13 +140,17 @@ public class AggregatorImplementer {
 
     private TypeName choseStateType() {
         TypeName initReturn = TypeName.get(init.getReturnType());
-        if (false == initReturn.isPrimitive()) {
-            return initReturn;
+        return stateTypeFromType(initReturn);
+    }
+
+    private TypeName stateTypeFromType(TypeName type) {
+        if (type.isPrimitive() == false) {
+            return type;
         }
         if (warnExceptions.isEmpty()) {
-            return ClassName.get("org.elasticsearch.compute.aggregation", firstUpper(initReturn.toString()) + "State");
+            return ClassName.get("org.elasticsearch.compute.aggregation", firstUpper(type.toString()) + "State");
         }
-        return ClassName.get("org.elasticsearch.compute.aggregation", firstUpper(initReturn.toString()) + "FallibleState");
+        return ClassName.get("org.elasticsearch.compute.aggregation", firstUpper(type.toString()) + "FallibleState");
     }
 
     static String valueType(ExecutableElement init, ExecutableElement combine) {

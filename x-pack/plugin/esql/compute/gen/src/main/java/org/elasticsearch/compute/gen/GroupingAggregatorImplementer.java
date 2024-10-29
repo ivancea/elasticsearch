@@ -89,7 +89,7 @@ public class GroupingAggregatorImplementer {
         this.declarationType = declarationType;
         this.warnExceptions = warnExceptions;
 
-        this.init = findRequiredMethod(declarationType, new String[] { "init", "initGrouping" }, e -> true);
+        this.init = findRequiredMethod(declarationType, new String[] { "initGrouping", "init" }, e -> true);
         this.stateType = choseStateType();
 
         this.combine = findRequiredMethod(declarationType, new String[] { "combine" }, e -> {
@@ -97,7 +97,7 @@ public class GroupingAggregatorImplementer {
                 return false;
             }
             TypeName firstParamType = TypeName.get(e.getParameters().get(0).asType());
-            return firstParamType.isPrimitive() || firstParamType.toString().equals(stateType.toString());
+            return stateTypeFromType(firstParamType).toString().equals(stateType.toString());
         });
         this.combineStates = findMethod(declarationType, "combineStates");
         this.combineIntermediate = findMethod(declarationType, "combineIntermediate");
@@ -130,11 +130,15 @@ public class GroupingAggregatorImplementer {
 
     private TypeName choseStateType() {
         TypeName initReturn = TypeName.get(init.getReturnType());
-        if (false == initReturn.isPrimitive()) {
-            return initReturn;
+        return stateTypeFromType(initReturn);
+    }
+
+    private TypeName stateTypeFromType(TypeName type) {
+        if (type.isPrimitive() == false) {
+            return type;
         }
-        String head = initReturn.toString().substring(0, 1).toUpperCase(Locale.ROOT);
-        String tail = initReturn.toString().substring(1);
+        String head = type.toString().substring(0, 1).toUpperCase(Locale.ROOT);
+        String tail = type.toString().substring(1);
         if (warnExceptions.isEmpty()) {
             return ClassName.get("org.elasticsearch.compute.aggregation", head + tail + "ArrayState");
         }
@@ -528,7 +532,10 @@ public class GroupingAggregatorImplementer {
         builder.beginControlFlow("for (int groupPosition = 0; groupPosition < groups.getPositionCount(); groupPosition++)");
         {
             builder.addStatement("int groupId = groups.getInt(groupPosition)");
-            if (hasPrimitiveState()) {
+
+            if (combineIntermediate != null) {
+                builder.addStatement("$T.combineIntermediate(state, groupId, " + intermediateStateRowAccess() + ")", declarationType);
+            } else if (hasPrimitiveState()) {
                 if (warnExceptions.isEmpty()) {
                     assert intermediateState.size() == 2;
                     assert intermediateState.get(1).name().equals("seen");
@@ -564,7 +571,7 @@ public class GroupingAggregatorImplementer {
                 }
                 builder.endControlFlow();
             } else {
-                builder.addStatement("$T.combineIntermediate(state, groupId, " + intermediateStateRowAccess() + ")", declarationType);
+                throw new IllegalArgumentException("Don't know how to combine intermediate input. Define combineIntermediate");
             }
             builder.endControlFlow();
         }

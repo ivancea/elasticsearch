@@ -9,23 +9,25 @@ package org.elasticsearch.compute.aggregation;
 
 import org.elasticsearch.TransportVersion;
 import org.elasticsearch.TransportVersions;
+import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.compute.ann.Aggregator;
 import org.elasticsearch.compute.ann.GroupingAggregator;
 import org.elasticsearch.compute.ann.IntermediateState;
 import org.elasticsearch.compute.data.Block;
 import org.elasticsearch.compute.data.BooleanBlock;
 import org.elasticsearch.compute.data.BooleanVector;
+import org.elasticsearch.compute.data.CompositeBlock;
+import org.elasticsearch.compute.data.LongBlock;
 import org.elasticsearch.compute.data.Page;
 import org.elasticsearch.compute.operator.DriverContext;
+import org.elasticsearch.core.Releasable;
 
 import java.util.List;
 
 @Aggregator(
     value = {
         @IntermediateState(name = "sum", type = "LONG"),
-        @IntermediateState(name = "seen", type = "BOOLEAN"),
-        @IntermediateState(name = "failed", type = "BOOLEAN") },
-    warnExceptions = ArithmeticException.class
+        @IntermediateState(name = "seenAndFailed", type = "COMPOSITE_BLOCK"), }
 )
 @GroupingAggregator
 class SumLongAggregator {
@@ -86,11 +88,64 @@ class SumLongAggregator {
         }
     }
 
-    public static long init() {
-        return 0;
+    public static LongFallibleState init() {
+        return new LongFallibleState(0);
     }
 
-    public static long combine(long current, long v) {
+    public static LongFallibleArrayState initGrouping(BigArrays bigArrays) {
+        return new LongFallibleArrayState(bigArrays, 0);
+    }
+
+    public static void combine(LongFallibleState state, long v) {
+        state.longValue(combineValues(state.longValue(), v));
+        state.seen(true);
+    }
+
+    public static void combine(LongFallibleArrayState state, int groupId, long v) {
+        state.set(groupId, combineValues(state.getOrDefault(groupId), v));
+    }
+
+    public static void combineIntermediate(LongFallibleState state, long sum, Block seenAndFailed) {
+        if (failed(seenAndFailed, 0)) {
+            state.failed(true);
+        } else if (seen(seenAndFailed, 0)) {
+            combine(state, sum);
+        }
+    }
+
+    public static void combineIntermediate(LongFallibleArrayState state, int groupId, long sum, Block seenAndFailed, int position) {
+        // TODO: What to do with "position" here?
+        if (failed(seenAndFailed, groupId)) {
+            state.setFailed(groupId);
+        } else if (seen(seenAndFailed, groupId)) {
+            combine(state, groupId, sum);
+        }
+    }
+
+    public static void combineStates(LongFallibleArrayState state, int groupId, LongFallibleArrayState inState, int inGroupId) {
+        if (inState.hasFailed(inGroupId)) {
+            state.setFailed(groupId);
+        } else if (inState.hasValue(inGroupId)) {
+            // TODO: Catch exception here
+            state.set(groupId, combineValues(state.getOrDefault(groupId), inState.get(inGroupId)));
+        }
+    }
+
+    private static long combineValues(long current, long v) {
         return Math.addExact(current, v);
     }
+
+    private static boolean seen(Block seenAndFailed, int position) {
+        // TODO: Implement logic to use either one or the other block
+        return true; // seenAndFailed.getBlock(0).getBoolean(position) && !seenAndFailed.getBlock(1).getBoolean(position);
+    }
+
+    private static boolean failed(Block seenAndFailed, int position) {
+        // TODO: Implement logic to use either one or the other block
+        return true; // seenAndFailed.getBlock(0).getBoolean(position) && !seenAndFailed.getBlock(1).getBoolean(position);
+    }
+
+    /*public static class SingleState extends Releasable {
+
+    }*/
 }
