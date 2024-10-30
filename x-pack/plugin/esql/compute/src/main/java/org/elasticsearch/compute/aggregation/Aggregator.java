@@ -16,7 +16,6 @@ import org.elasticsearch.compute.operator.DriverContext;
 import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.Releasable;
 
-
 public class Aggregator implements Releasable {
     private final AggregatorFunction aggregatorFunction;
 
@@ -24,6 +23,7 @@ public class Aggregator implements Releasable {
 
     public interface Translator {
         Page translateFrom(Page page, TransportVersion version);
+
         Page translateTo(Page page, TransportVersion version);
     }
 

@@ -45,6 +45,7 @@ public class Types {
     static final ClassName LONG_BLOCK = ClassName.get(DATA_PACKAGE, "LongBlock");
     static final ClassName DOUBLE_BLOCK = ClassName.get(DATA_PACKAGE, "DoubleBlock");
     static final ClassName FLOAT_BLOCK = ClassName.get(DATA_PACKAGE, "FloatBlock");
+    static final ClassName COMPOSITE_BLOCK = ClassName.get(DATA_PACKAGE, "CompositeBlock");
 
     static final ClassName BOOLEAN_BLOCK_BUILDER = BOOLEAN_BLOCK.nestedClass("Builder");
     static final ClassName BYTES_REF_BLOCK_BUILDER = BYTES_REF_BLOCK.nestedClass("Builder");
@@ -175,6 +176,9 @@ public class Types {
         }
         if (elementType.equalsIgnoreCase(TypeName.FLOAT.toString())) {
             return FLOAT_BLOCK;
+        }
+        if (elementType.equalsIgnoreCase("COMPOSITE")) {
+            return COMPOSITE_BLOCK;
         }
         throw new IllegalArgumentException("unknown vector type for [" + elementType + "]");
     }

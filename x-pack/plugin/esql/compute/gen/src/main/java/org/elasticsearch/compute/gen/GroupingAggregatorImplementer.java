@@ -252,7 +252,17 @@ public class GroupingAggregatorImplementer {
         boolean addComma = false;
         for (var interState : intermediateState) {
             if (addComma) builder.add(",");
-            builder.add("$Wnew $T($S, $T." + interState.elementType() + ")", INTERMEDIATE_STATE_DESC, interState.name(), ELEMENT_TYPE);
+            if (interState.dataType().isEmpty()) {
+                builder.add("$Wnew $T($S, $T." + interState.elementType() + ")", INTERMEDIATE_STATE_DESC, interState.name(), ELEMENT_TYPE);
+            } else {
+                builder.add(
+                    "$Wnew $T($S, $T." + interState.elementType() + ", $S)",
+                    INTERMEDIATE_STATE_DESC,
+                    interState.name(),
+                    ELEMENT_TYPE,
+                    interState.dataType()
+                );
+            }
             addComma = true;
         }
         builder.add("$W$W)");

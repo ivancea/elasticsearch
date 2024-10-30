@@ -127,7 +127,7 @@ public class AggregatorImplementer {
             (declarationType.getSimpleName() + "AggregatorFunction").replace("AggregatorAggregator", "Aggregator")
         );
         this.valuesIsBytesRef = BYTES_REF.equals(TypeName.get(combine.getParameters().get(combine.getParameters().size() - 1).asType()));
-        intermediateState = Arrays.stream(interStateAnno).map(IntermediateStateDesc::newIntermediateStateDesc).toList();
+        this.intermediateState = Arrays.stream(interStateAnno).map(IntermediateStateDesc::newIntermediateStateDesc).toList();
     }
 
     ClassName implementation() {
@@ -306,7 +306,17 @@ public class AggregatorImplementer {
         boolean addComma = false;
         for (var interState : intermediateState) {
             if (addComma) builder.add(",");
-            builder.add("$Wnew $T($S, $T." + interState.elementType() + ")", INTERMEDIATE_STATE_DESC, interState.name(), ELEMENT_TYPE);
+            if (interState.dataType().isEmpty()) {
+                builder.add("$Wnew $T($S, $T." + interState.elementType() + ")", INTERMEDIATE_STATE_DESC, interState.name(), ELEMENT_TYPE);
+            } else {
+                builder.add(
+                    "$Wnew $T($S, $T." + interState.elementType() + ", $S)",
+                    INTERMEDIATE_STATE_DESC,
+                    interState.name(),
+                    ELEMENT_TYPE,
+                    interState.dataType()
+                );
+            }
             addComma = true;
         }
         builder.add("$W$W)");
@@ -660,7 +670,7 @@ public class AggregatorImplementer {
         return PRIMITIVE_STATE_PATTERN.matcher(stateType.toString()).matches();
     }
 
-    record IntermediateStateDesc(String name, String elementType, boolean block) {
+    record IntermediateStateDesc(String name, String elementType, boolean block, String dataType) {
         static IntermediateStateDesc newIntermediateStateDesc(IntermediateState state) {
             String type = state.type();
             boolean block = false;
@@ -668,7 +678,8 @@ public class AggregatorImplementer {
                 type = type.substring(0, type.length() - "_BLOCK".length());
                 block = true;
             }
-            return new IntermediateStateDesc(state.name(), type, block);
+            String dataType = type.equals("COMPOSITE") ? "partial_agg" : "";
+            return new IntermediateStateDesc(state.name(), type, block, dataType);
         }
 
         public String access(String position) {
