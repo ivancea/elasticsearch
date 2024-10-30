@@ -18,9 +18,11 @@ import com.squareup.javapoet.TypeSpec;
 import org.elasticsearch.compute.ann.Aggregator;
 import org.elasticsearch.compute.ann.IntermediateState;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -87,6 +89,13 @@ public class AggregatorImplementer {
     private final boolean valuesIsBytesRef;
     private final List<IntermediateStateDesc> intermediateState;
     private final List<Parameter> createParameters;
+    private final boolean requiresWarnings;
+
+    private static final Map<TypeName, String> SPECIAL_PARAMETERS = Map.of(
+        BIG_ARRAYS, "driverContext.bigArrays()",
+        DRIVER_CONTEXT, "driverContext",
+        WARNINGS, "warnings"
+    );
 
     public AggregatorImplementer(
         Elements elements,
@@ -114,20 +123,32 @@ public class AggregatorImplementer {
             return stateTypeFromType(firstParamType).toString().equals(stateType.toString());
         });
         this.combineValueCount = findMethod(declarationType, "combineValueCount");
-        this.combineIntermediate = findMethod(declarationType, "combineIntermediate");
+        this.combineIntermediate = findMethod(declarationType, "combineIntermediate",
+            e -> e.getParameters().get(0).asType().toString().equals(stateType.toString()));
         this.evaluateFinal = findMethod(declarationType, "evaluateFinal");
         this.createParameters = init.getParameters()
             .stream()
             .map(Parameter::from)
-            .filter(f -> false == f.type().equals(BIG_ARRAYS) && false == f.type().equals(DRIVER_CONTEXT))
+            .filter(f -> SPECIAL_PARAMETERS.containsKey(f.type()) == false)
             .toList();
 
         this.implementation = ClassName.get(
             elements.getPackageOf(declarationType).toString(),
             (declarationType.getSimpleName() + "AggregatorFunction").replace("AggregatorAggregator", "Aggregator")
         );
-        this.valuesIsBytesRef = BYTES_REF.equals(TypeName.get(combine.getParameters().get(combine.getParameters().size() - 1).asType()));
+        this.valuesIsBytesRef = BYTES_REF.toString().equals(valueType(init, combine));
         this.intermediateState = Arrays.stream(interStateAnno).map(IntermediateStateDesc::newIntermediateStateDesc).toList();
+        this.requiresWarnings = warnExceptions.isEmpty() == false || anyMethodRequiresWarnings(new ExecutableElement[]{
+            init, combine, combineValueCount, combineIntermediate, evaluateFinal
+        });
+    }
+
+    static boolean anyMethodRequiresWarnings(ExecutableElement[] methods) {
+        return Arrays.stream(methods)
+            .filter(Objects::nonNull)
+            .flatMap(m -> m.getParameters().stream())
+            .map(Parameter::from)
+            .anyMatch(param -> param.type().equals(WARNINGS));
     }
 
     ClassName implementation() {
@@ -136,6 +157,10 @@ public class AggregatorImplementer {
 
     List<Parameter> createParameters() {
         return createParameters;
+    }
+
+    boolean requiresWarnings() {
+        return requiresWarnings;
     }
 
     private TypeName choseStateType() {
@@ -156,7 +181,11 @@ public class AggregatorImplementer {
     static String valueType(ExecutableElement init, ExecutableElement combine) {
         if (combine != null) {
             // If there's an explicit combine function it's final parameter is the type of the value.
-            return combine.getParameters().get(combine.getParameters().size() - 1).asType().toString();
+            var lastParameter = combine.getParameters().stream()
+                .filter(p -> SPECIAL_PARAMETERS.containsKey(TypeName.get(p.asType())) == false)
+                .reduce((first, second) -> second)
+                .get();
+            return lastParameter.asType().toString();
         }
         String initReturn = init.getReturnType().toString();
         switch (initReturn) {
@@ -227,7 +256,7 @@ public class AggregatorImplementer {
                 .build()
         );
 
-        if (warnExceptions.isEmpty() == false) {
+        if (requiresWarnings) {
             builder.addField(WARNINGS, "warnings", Modifier.PRIVATE, Modifier.FINAL);
         }
 
@@ -259,7 +288,7 @@ public class AggregatorImplementer {
     private MethodSpec create() {
         MethodSpec.Builder builder = MethodSpec.methodBuilder("create");
         builder.addModifiers(Modifier.PUBLIC, Modifier.STATIC).returns(implementation);
-        if (warnExceptions.isEmpty() == false) {
+        if (requiresWarnings) {
             builder.addParameter(WARNINGS, "warnings");
         }
         builder.addParameter(DRIVER_CONTEXT, "driverContext");
@@ -271,14 +300,14 @@ public class AggregatorImplementer {
             builder.addStatement(
                 "return new $T($LdriverContext, channels, $L)",
                 implementation,
-                warnExceptions.isEmpty() ? "" : "warnings, ",
+                requiresWarnings ? "warnings, " : "",
                 callInit()
             );
         } else {
             builder.addStatement(
                 "return new $T($LdriverContext, channels, $L, $L)",
                 implementation,
-                warnExceptions.isEmpty() ? "" : "warnings, ",
+                requiresWarnings ? "warnings, " : "",
                 callInit(),
                 createParameters.stream().map(p -> p.name()).collect(joining(", "))
             );
@@ -289,7 +318,13 @@ public class AggregatorImplementer {
     private CodeBlock callInit() {
         String initParametersCall = init.getParameters()
             .stream()
-            .map(p -> TypeName.get(p.asType()).equals(BIG_ARRAYS) ? "driverContext.bigArrays()" : p.getSimpleName().toString())
+            .map(p -> {
+                var specialParameter = SPECIAL_PARAMETERS.get(TypeName.get(p.asType()));
+                if (specialParameter != null) {
+                    return specialParameter;
+                }
+                return p.getSimpleName().toString();
+            })
             .collect(joining(", "));
         CodeBlock.Builder builder = CodeBlock.builder();
         if (init.getReturnType().toString().equals(stateType.toString())) {
@@ -325,14 +360,14 @@ public class AggregatorImplementer {
 
     private MethodSpec ctor() {
         MethodSpec.Builder builder = MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC);
-        if (warnExceptions.isEmpty() == false) {
+        if (requiresWarnings) {
             builder.addParameter(WARNINGS, "warnings");
         }
         builder.addParameter(DRIVER_CONTEXT, "driverContext");
         builder.addParameter(LIST_INTEGER, "channels");
         builder.addParameter(stateType, "state");
 
-        if (warnExceptions.isEmpty() == false) {
+        if (requiresWarnings) {
             builder.addStatement("this.warnings = warnings");
         }
         builder.addStatement("this.driverContext = driverContext");
@@ -422,9 +457,29 @@ public class AggregatorImplementer {
         }
         builder.endControlFlow();
         if (combineValueCount != null) {
-            builder.addStatement("$T.combineValueCount(state, vector.getPositionCount())", declarationType);
+            builder.addStatement("$T.combineValueCount(state, vector.getPositionCount()$L)",
+                makeParametersForMethod(combineValueCount, 2));
         }
         return builder.build();
+    }
+
+    static String makeParametersForMethod(ExecutableElement method, int skipN) {
+        String parameters = method.getParameters().stream()
+            .skip(skipN)
+            .map(p -> {
+                var specialParameter = SPECIAL_PARAMETERS.get(TypeName.get(p.asType()));
+                if (specialParameter != null) {
+                    return specialParameter;
+                }
+                return p.getSimpleName().toString();
+            })
+            .collect(joining(", "));
+
+        if (parameters.isEmpty() || skipN == 0) {
+            return parameters;
+        }
+
+        return ", " + parameters;
     }
 
     private MethodSpec addRawBlock(boolean masked) {
@@ -488,27 +543,30 @@ public class AggregatorImplementer {
 
     private void combineRawInputForPrimitive(TypeName returnType, MethodSpec.Builder builder, String blockVariable) {
         builder.addStatement(
-            "state.$TValue($T.combine(state.$TValue(), $L.get$L(i)))",
+            "state.$TValue($T.combine(state.$TValue(), $L.get$L(i)$L))",
             returnType,
             declarationType,
             returnType,
             blockVariable,
-            firstUpper(combine.getParameters().get(1).asType().toString())
+            firstUpper(combine.getParameters().get(1).asType().toString()),
+            makeParametersForMethod(combine, 2)
         );
     }
 
     private void combineRawInputForVoid(MethodSpec.Builder builder, String blockVariable) {
         builder.addStatement(
-            "$T.combine(state, $L.get$L(i))",
+            "$T.combine(state, $L.get$L(i)$L)",
             declarationType,
             blockVariable,
-            firstUpper(combine.getParameters().get(1).asType().toString())
+            firstUpper(combine.getParameters().get(1).asType().toString()),
+            makeParametersForMethod(combine, 2)
         );
     }
 
     private void combineRawInputForBytesRef(MethodSpec.Builder builder, String blockVariable) {
         // scratch is a BytesRef var that must have been defined before the iteration starts
-        builder.addStatement("$T.combine(state, $L.getBytesRef(i, scratch))", declarationType, blockVariable);
+        builder.addStatement("$T.combine(state, $L.getBytesRef(i, scratch)$L)", declarationType, blockVariable,
+            makeParametersForMethod(combine, 2));
     }
 
     private MethodSpec addIntermediateInput() {
@@ -525,7 +583,8 @@ public class AggregatorImplementer {
             if (intermediateState.stream().map(IntermediateStateDesc::elementType).anyMatch(n -> n.equals("BYTES_REF"))) {
                 builder.addStatement("$T scratch = new $T()", BYTES_REF, BYTES_REF);
             }
-            builder.addStatement("$T.combineIntermediate(state, " + intermediateStateRowAccess() + ")", declarationType);
+            builder.addStatement("$T.combineIntermediate(state, " + intermediateStateRowAccess() + "$L)", declarationType,
+                makeParametersForMethod(combineIntermediate, 1 + intermediateState.size()));
         } else if (hasPrimitiveState()) {
             if (warnExceptions.isEmpty()) {
                 assert intermediateState.size() == 2;

@@ -115,7 +115,7 @@ public class AggregatorProcessor implements Processor {
                         aggClass,
                         implementer,
                         groupingAggregatorImplementer,
-                        warnExceptionsTypes.isEmpty() == false
+                        (implementer != null && implementer.requiresWarnings()) || warnExceptionsTypes.isEmpty() == false
                     ).sourceFile(),
                     env
                 );

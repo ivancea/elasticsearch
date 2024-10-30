@@ -22,6 +22,7 @@ import org.elasticsearch.compute.data.IntVector;
 import org.elasticsearch.compute.data.LongBlock;
 import org.elasticsearch.compute.data.Page;
 import org.elasticsearch.compute.operator.DriverContext;
+import org.elasticsearch.compute.operator.Warnings;
 import org.elasticsearch.core.Releasables;
 
 import java.util.List;
@@ -93,28 +94,30 @@ class SumLongAggregator {
         return new GroupingState(bigArrays, 0);
     }
 
-    public static void combine(SingleState state, long v) {
+    public static void combine(SingleState state, long v, Warnings warnings) {
         try {
             state.longValue(combineValues(state.longValue(), v));
             state.seen(true);
         } catch (ArithmeticException e) {
+            warnings.registerException(e);
             state.failed(true);
         }
     }
 
-    public static void combine(GroupingState state, int groupId, long v) {
+    public static void combine(GroupingState state, int groupId, long v/*, Warnings warnings*/) {
         try {
             state.set(groupId, combineValues(state.getOrDefault(groupId), v));
         } catch (ArithmeticException e) {
+            //warnings.registerException(e);
             state.setFailed(groupId);
         }
     }
 
-    public static void combineIntermediate(SingleState state, long sum, Block seenAndFailed) {
+    public static void combineIntermediate(SingleState state, long sum, Block seenAndFailed, Warnings warnings) {
         if (failed(seenAndFailed, 0)) {
             state.failed(true);
         } else if (seen(seenAndFailed, 0)) {
-            combine(state, sum);
+            combine(state, sum, warnings);
         }
     }
 

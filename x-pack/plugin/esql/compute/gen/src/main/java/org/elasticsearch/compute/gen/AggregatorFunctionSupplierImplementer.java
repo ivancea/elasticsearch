@@ -57,6 +57,7 @@ public class AggregatorFunctionSupplierImplementer {
         this.declarationType = declarationType;
         this.aggregatorImplementer = aggregatorImplementer;
         this.groupingAggregatorImplementer = groupingAggregatorImplementer;
+        // TODO: Remove this param/field after grouping agg has warnings support too
         this.hasWarnings = hasWarnings;
 
         Set<Parameter> createParameters = new LinkedHashSet<>();
@@ -138,7 +139,7 @@ public class AggregatorFunctionSupplierImplementer {
         builder.addParameter(DRIVER_CONTEXT, "driverContext");
         builder.returns(aggregatorImplementer.implementation());
 
-        if (hasWarnings) {
+        if (aggregatorImplementer.requiresWarnings()) {
             builder.addStatement(
                 "var warnings = $T.createWarnings(driverContext.warningsMode(), "
                     + "warningsLineNumber, warningsColumnNumber, warningsSourceText)",
@@ -150,7 +151,7 @@ public class AggregatorFunctionSupplierImplementer {
             "return $T.create($L)",
             aggregatorImplementer.implementation(),
             Stream.concat(
-                Stream.concat(hasWarnings ? Stream.of("warnings") : Stream.of(), Stream.of("driverContext, channels")),
+                Stream.concat(aggregatorImplementer.requiresWarnings() ? Stream.of("warnings") : Stream.of(), Stream.of("driverContext, channels")),
                 aggregatorImplementer.createParameters().stream().map(Parameter::name)
             ).collect(Collectors.joining(", "))
         );

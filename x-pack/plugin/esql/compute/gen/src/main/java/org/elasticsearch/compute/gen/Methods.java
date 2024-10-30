@@ -61,7 +61,11 @@ public class Methods {
     }
 
     static ExecutableElement findMethod(TypeElement declarationType, String name) {
-        return findMethod(new String[] { name }, e -> true, declarationType, superClassOf(declarationType));
+        return findMethod(declarationType, name, e -> true);
+    }
+
+    static ExecutableElement findMethod(TypeElement declarationType, String name, Predicate<ExecutableElement> filter) {
+        return findMethod(new String[] { name }, filter, declarationType, superClassOf(declarationType));
     }
 
     private static TypeElement superClassOf(TypeElement declarationType) {
