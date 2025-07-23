@@ -294,9 +294,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.action.CrossClusterQueryWithPartialResultsIT
   method: testOneRemoteClusterPartial
   issue: https://github.com/elastic/elasticsearch/issues/124055
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {lookup-join.MvJoinKeyOnTheLookupIndex ASYNC}
-  issue: https://github.com/elastic/elasticsearch/issues/128030
 - class: org.elasticsearch.packaging.test.EnrollmentProcessTests
   method: test20DockerAutoFormCluster
   issue: https://github.com/elastic/elasticsearch/issues/128113
@@ -370,9 +367,6 @@ tests:
 - class: org.elasticsearch.index.IndexingPressureIT
   method: testWriteCanRejectOnPrimaryBasedOnMaxOperationSize
   issue: https://github.com/elastic/elasticsearch/issues/130281
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {lookup-join.MvJoinKeyOnFrom SYNC}
-  issue: https://github.com/elastic/elasticsearch/issues/130296
 - class: org.elasticsearch.xpack.esql.inference.bulk.BulkInferenceExecutorTests
   method: testSuccessfulExecution
   issue: https://github.com/elastic/elasticsearch/issues/130306
@@ -385,9 +379,6 @@ tests:
 - class: org.elasticsearch.gradle.LoggedExecFuncTest
   method: failed tasks output logged to console when spooling true
   issue: https://github.com/elastic/elasticsearch/issues/119509
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {lookup-join.MvJoinKeyFromRow ASYNC}
-  issue: https://github.com/elastic/elasticsearch/issues/130642
 - class: org.elasticsearch.index.engine.ThreadPoolMergeExecutorServiceDiskSpaceTests
   method: testUnavailableBudgetBlocksNewMergeTasksFromStartingExecution
   issue: https://github.com/elastic/elasticsearch/issues/130205
@@ -400,9 +391,6 @@ tests:
 - class: org.elasticsearch.search.SearchWithRejectionsIT
   method: testOpenContextsAfterRejections
   issue: https://github.com/elastic/elasticsearch/issues/130821
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {lookup-join.MvJoinKeyOnFromAfterStats ASYNC}
-  issue: https://github.com/elastic/elasticsearch/issues/131148
 - class: org.elasticsearch.xpack.esql.ccq.MultiClustersIT
   method: testLookupJoinAliases
   issue: https://github.com/elastic/elasticsearch/issues/131166
