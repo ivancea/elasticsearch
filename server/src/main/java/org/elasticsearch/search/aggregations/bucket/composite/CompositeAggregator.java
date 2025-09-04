@@ -591,6 +591,7 @@ public final class CompositeAggregator extends BucketsAggregator implements Size
             @Override
             public void collect(int doc, long zeroBucket) throws IOException {
                 assert zeroBucket == 0;
+                checkRealMemoryCBAndTaskCancellation("composite-second-pass-collector");
                 Integer slot = queue.compareCurrent();
                 if (slot != null) {
                     // The candidate key is a top bucket.

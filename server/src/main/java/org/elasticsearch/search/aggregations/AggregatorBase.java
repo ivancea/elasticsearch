@@ -24,6 +24,7 @@ import org.elasticsearch.search.aggregations.metrics.MinAggregator;
 import org.elasticsearch.search.aggregations.metrics.SumAggregator;
 import org.elasticsearch.search.aggregations.support.AggregationContext;
 import org.elasticsearch.search.aggregations.support.ValuesSourceConfig;
+import org.elasticsearch.tasks.TaskCancelledException;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -352,6 +353,18 @@ public abstract class AggregatorBase extends Aggregator {
      */
     protected final void checkRealMemoryCB(String label) {
         if ((++callCount & 0x3FF) == 0) {
+            breaker.addEstimateBytesAndMaybeBreak(0, label);
+        }
+    }
+
+    /**
+     * Same as {@link #checkRealMemoryCB(String)} but also checks if the task has been cancelled.
+     */
+    protected final void checkRealMemoryCBAndTaskCancellation(String label) {
+        if ((++callCount & 0x3FF) == 0) {
+            if (context.isCancelled()) {
+                throw new TaskCancelledException("cancelled");
+            }
             breaker.addEstimateBytesAndMaybeBreak(0, label);
         }
     }
