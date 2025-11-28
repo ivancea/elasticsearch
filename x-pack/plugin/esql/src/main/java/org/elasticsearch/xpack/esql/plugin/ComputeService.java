@@ -599,6 +599,7 @@ public class ComputeService {
     void runCompute(CancellableTask task, ComputeContext context, PhysicalPlan plan, ActionListener<DriverCompletionInfo> listener) {
         var shardContexts = context.searchContexts().map(ComputeSearchContext::shardContext);
         EsPhysicalOperationProviders physicalOperationProviders = new EsPhysicalOperationProviders(
+            context.configuration(),
             context.foldCtx(),
             shardContexts,
             searchService.getIndicesService().getAnalysis(),

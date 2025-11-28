@@ -23,6 +23,7 @@ import org.elasticsearch.xpack.esql.expression.function.FunctionType;
 import org.elasticsearch.xpack.esql.expression.function.OptionalArgument;
 import org.elasticsearch.xpack.esql.expression.function.Param;
 import org.elasticsearch.xpack.esql.expression.predicate.operator.arithmetic.Div;
+import org.elasticsearch.xpack.esql.session.Configuration;
 
 import java.io.IOException;
 import java.util.List;
@@ -104,7 +105,7 @@ public class AvgOverTime extends TimeSeriesAggregateFunction implements Optional
     }
 
     @Override
-    public Expression surrogate() {
+    public Expression surrogate(Configuration configuration) {
         Source s = source();
         Expression f = field();
         return new Div(s, new SumOverTime(s, f, filter(), window()), new CountOverTime(s, f, filter(), window()), dataType());

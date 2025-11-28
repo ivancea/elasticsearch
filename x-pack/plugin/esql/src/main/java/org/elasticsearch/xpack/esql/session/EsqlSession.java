@@ -231,7 +231,7 @@ public class EsqlSession {
                     TransportVersion minimumVersion = analyzedPlan.minimumVersion();
 
                     var logicalPlanPreOptimizer = new LogicalPlanPreOptimizer(
-                        new LogicalPreOptimizerContext(foldContext, inferenceService, minimumVersion)
+                        new LogicalPreOptimizerContext(configuration, foldContext, inferenceService, minimumVersion)
                     );
                     var logicalPlanOptimizer = new LogicalPlanOptimizer(
                         new LogicalOptimizerContext(configuration, foldContext, minimumVersion)
@@ -239,7 +239,11 @@ public class EsqlSession {
 
                     SubscribableListener.<LogicalPlan>newForked(l -> preOptimizedPlan(plan, logicalPlanPreOptimizer, l))
                         .<LogicalPlan>andThen(
-                            (l, p) -> preMapper.preMapper(new Versioned<>(optimizedPlan(p, logicalPlanOptimizer), minimumVersion), l)
+                            (l, p) -> preMapper.preMapper(
+                                new Versioned<>(optimizedPlan(p, logicalPlanOptimizer), minimumVersion),
+                                configuration,
+                                l
+                            )
                         )
                         .<Result>andThen(
                             (l, p) -> executeOptimizedPlan(
