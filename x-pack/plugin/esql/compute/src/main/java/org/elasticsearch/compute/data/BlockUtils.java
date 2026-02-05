@@ -239,22 +239,47 @@ public final class BlockUtils {
         }
         if (value instanceof Collection<?> multiValue) {
             if (multiValue.isEmpty()) {
-                return constantBlock(blockFactory, NULL, value, positions);
+                return constantSingleValueBlock(blockFactory, NULL, value, positions);
             }
-            try (
-                var wrapper = BlockUtils.wrapperFor(blockFactory, ElementType.fromJava(multiValue.iterator().next().getClass()), positions)
-            ) {
-                for (int i = 0; i < positions; i++) {
-                    wrapper.accept(multiValue);
-                }
-                return wrapper.builder().build();
-            }
+            return constantMultivalueBlock(blockFactory, fromJava(multiValue.iterator().next().getClass()), multiValue, positions);
         }
-        return constantBlock(blockFactory, fromJava(value.getClass()), value, positions);
+        return constantSingleValueBlock(blockFactory, fromJava(value.getClass()), value, positions);
+    }
+
+    /**
+     * Creates a constant block with the specified element type, avoiding reflection to determine the type.
+     * This is more efficient when the element type is already known.
+     *
+     * @param blockFactory the block factory to use
+     * @param elementType the element type for the block
+     * @param value the value (can be null, a single value, or a Collection for multivalues)
+     * @param positions the number of positions in the block
+     * @return a constant block with the given value repeated for each position
+     */
+    public static Block constantBlock(BlockFactory blockFactory, ElementType elementType, Object value, int positions) {
+        if (value == null) {
+            return blockFactory.newConstantNullBlock(positions);
+        }
+        if (value instanceof Collection<?> multiValue) {
+            if (multiValue.isEmpty()) {
+                return blockFactory.newConstantNullBlock(positions);
+            }
+            return constantMultivalueBlock(blockFactory, elementType, multiValue, positions);
+        }
+        return constantSingleValueBlock(blockFactory, elementType, value, positions);
+    }
+
+    private static Block constantMultivalueBlock(BlockFactory blockFactory, ElementType elementType, Collection<?> multiValue, int size) {
+        try (var wrapper = BlockUtils.wrapperFor(blockFactory, elementType, size)) {
+            for (int i = 0; i < size; i++) {
+                wrapper.accept(multiValue);
+            }
+            return wrapper.builder().build();
+        }
     }
 
     // TODO: allow null values
-    private static Block constantBlock(BlockFactory blockFactory, ElementType type, Object val, int size) {
+    private static Block constantSingleValueBlock(BlockFactory blockFactory, ElementType type, Object val, int size) {
         return switch (type) {
             case NULL -> blockFactory.newConstantNullBlock(size);
             case LONG -> blockFactory.newConstantLongBlockWith((long) val, size);

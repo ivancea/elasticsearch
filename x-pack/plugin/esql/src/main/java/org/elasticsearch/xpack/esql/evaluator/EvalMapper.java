@@ -13,6 +13,7 @@ import org.elasticsearch.compute.data.Block;
 import org.elasticsearch.compute.data.BlockUtils;
 import org.elasticsearch.compute.data.BooleanBlock;
 import org.elasticsearch.compute.data.BooleanVector;
+import org.elasticsearch.compute.data.ElementType;
 import org.elasticsearch.compute.data.Page;
 import org.elasticsearch.compute.data.Vector;
 import org.elasticsearch.compute.lucene.EmptyIndexedByShardId;
@@ -31,6 +32,7 @@ import org.elasticsearch.xpack.esql.expression.predicate.logical.BinaryLogic;
 import org.elasticsearch.xpack.esql.expression.predicate.operator.comparison.InsensitiveEqualsMapper;
 import org.elasticsearch.xpack.esql.planner.EsPhysicalOperationProviders.ShardContext;
 import org.elasticsearch.xpack.esql.planner.Layout;
+import org.elasticsearch.xpack.esql.planner.PlannerUtils;
 
 import java.util.List;
 
@@ -248,36 +250,44 @@ public final class EvalMapper {
             Layout layout,
             IndexedByShardId<? extends ShardContext> shardContexts
         ) {
-            record LiteralsEvaluator(DriverContext context, Literal lit) implements ExpressionEvaluator {
+            record LiteralsEvaluator(DriverContext context, Object value, ElementType elementType, long litRamBytesUsed)
+                implements
+                    ExpressionEvaluator {
                 private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(LiteralsEvaluator.class);
 
                 @Override
                 public Block eval(Page page) {
-                    return BlockUtils.constantBlock(context.blockFactory(), lit.value(), page.getPositionCount());
+                    return BlockUtils.constantBlock(context.blockFactory(), elementType, value, page.getPositionCount());
                 }
 
                 @Override
                 public String toString() {
-                    return "LiteralsEvaluator[lit=" + lit + ']';
+                    return "LiteralsEvaluator[value=" + value + ", type=" + elementType + ']';
                 }
 
                 @Override
                 public long baseRamBytesUsed() {
-                    return BASE_RAM_BYTES_USED + lit.ramBytesUsed();
+                    return BASE_RAM_BYTES_USED + litRamBytesUsed;
                 }
 
                 @Override
                 public void close() {}
             }
-            record LiteralsEvaluatorFactory(Literal lit) implements ExpressionEvaluator.Factory {
+            // Compute ElementType once at factory creation time, avoiding reflection in the hot path
+            ElementType elementType = PlannerUtils.toElementType(lit.dataType());
+            Object value = lit.value();
+            long litRamBytesUsed = lit.ramBytesUsed();
+            record LiteralsEvaluatorFactory(Object value, ElementType elementType, long litRamBytesUsed)
+                implements
+                    ExpressionEvaluator.Factory {
                 @Override
                 public ExpressionEvaluator get(DriverContext driverContext) {
-                    return new LiteralsEvaluator(driverContext, lit);
+                    return new LiteralsEvaluator(driverContext, value, elementType, litRamBytesUsed);
                 }
 
                 @Override
                 public String toString() {
-                    return "LiteralsEvaluator[lit=" + lit + "]";
+                    return "LiteralsEvaluator[value=" + value + ", type=" + elementType + "]";
                 }
 
                 @Override
@@ -285,7 +295,7 @@ public final class EvalMapper {
                     return true;
                 }
             }
-            return new LiteralsEvaluatorFactory(lit);
+            return new LiteralsEvaluatorFactory(value, elementType, litRamBytesUsed);
         }
     }
 }

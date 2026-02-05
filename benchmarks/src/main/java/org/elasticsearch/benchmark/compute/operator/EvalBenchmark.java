@@ -129,6 +129,9 @@ public class EvalBenchmark {
             "coalesce_2_lazy",
             "date_trunc",
             "equal_to_const",
+            "literal_long",
+            "literal_keyword",
+            "literal_mv_keyword",
             "long_equal_to_long",
             "long_equal_to_int",
             "mv_min",
@@ -234,6 +237,22 @@ public class EvalBenchmark {
                     new Equals(Source.EMPTY, longField, new Literal(Source.EMPTY, 100_000L, DataType.LONG)),
                     layout(longField)
                 ).get(driverContext);
+            }
+            case "literal_long" -> {
+                Literal longLit = new Literal(Source.EMPTY, 42L, DataType.LONG);
+                yield EvalMapper.toEvaluator(FOLD_CONTEXT, longLit, new Layout.Builder().build()).get(driverContext);
+            }
+            case "literal_keyword" -> {
+                Literal keywordLit = new Literal(Source.EMPTY, new BytesRef("constant_value"), DataType.KEYWORD);
+                yield EvalMapper.toEvaluator(FOLD_CONTEXT, keywordLit, new Layout.Builder().build()).get(driverContext);
+            }
+            case "literal_mv_keyword" -> {
+                Literal mvKeywordLit = new Literal(
+                    Source.EMPTY,
+                    List.of(new BytesRef("dangerous.net"), new BytesRef("very-bad-actor.com"), new BytesRef("malware.org")),
+                    DataType.KEYWORD
+                );
+                yield EvalMapper.toEvaluator(FOLD_CONTEXT, mvKeywordLit, new Layout.Builder().build()).get(driverContext);
             }
             case "long_equal_to_long" -> {
                 FieldAttribute lhs = longField();
@@ -488,6 +507,45 @@ public class EvalBenchmark {
                     }
                 }
             }
+            case "literal_long" -> {
+                LongVector v = actual.<LongBlock>getBlock(0).asVector();
+                for (int i = 0; i < BLOCK_LENGTH; i++) {
+                    if (v.getLong(i) != 42L) {
+                        throw new AssertionError("[" + operation + "] expected [42] but was [" + v.getLong(i) + "]");
+                    }
+                }
+            }
+            case "literal_keyword" -> {
+                BytesRefVector v = actual.<BytesRefBlock>getBlock(0).asVector();
+                BytesRef expected = new BytesRef("constant_value");
+                BytesRef scratch = new BytesRef();
+                for (int i = 0; i < BLOCK_LENGTH; i++) {
+                    BytesRef b = v.getBytesRef(i, scratch);
+                    if (b.equals(expected) == false) {
+                        throw new AssertionError("[" + operation + "] expected [" + expected + "] but was [" + b + "]");
+                    }
+                }
+            }
+            case "literal_mv_keyword" -> {
+                BytesRefBlock block = actual.<BytesRefBlock>getBlock(0);
+                BytesRef[] expectedVals = new BytesRef[] {
+                    new BytesRef("dangerous.net"),
+                    new BytesRef("very-bad-actor.com"),
+                    new BytesRef("malware.org") };
+                BytesRef scratch = new BytesRef();
+                for (int i = 0; i < BLOCK_LENGTH; i++) {
+                    if (block.getValueCount(i) != 3) {
+                        throw new AssertionError("[" + operation + "] expected 3 values but was " + block.getValueCount(i));
+                    }
+                    int start = block.getFirstValueIndex(i);
+                    for (int j = 0; j < 3; j++) {
+                        BytesRef b = block.getBytesRef(start + j, scratch);
+                        if (b.equals(expectedVals[j]) == false) {
+                            throw new AssertionError("[" + operation + "] expected [" + expectedVals[j] + "] but was [" + b + "]");
+                        }
+                    }
+                }
+            }
             case "long_equal_to_long", "long_equal_to_int" -> {
                 BooleanVector v = actual.<BooleanBlock>getBlock(2).asVector();
                 for (int i = 0; i < BLOCK_LENGTH; i++) {
@@ -642,6 +700,10 @@ public class EvalBenchmark {
                     f2.appendLong(-i);
                 }
                 yield new Page(f1.build(), f2.build());
+            }
+            case "literal_long", "literal_keyword", "literal_mv_keyword" -> {
+                // Literals don't need input data, just a page with the correct position count
+                yield new Page(BLOCK_LENGTH);
             }
             case "long_equal_to_long" -> {
                 var lhs = blockFactory.newLongBlockBuilder(BLOCK_LENGTH);
