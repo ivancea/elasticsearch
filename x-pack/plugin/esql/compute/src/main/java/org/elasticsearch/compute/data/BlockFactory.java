@@ -432,6 +432,62 @@ public class BlockFactory {
         return b;
     }
 
+    // Constant multivalue block factory methods
+
+    /**
+     * Creates a constant multivalue block where every position has the same set of boolean values.
+     */
+    public BooleanBlock newConstantBooleanMultivalueBlockWith(BooleanVector values, int positions) {
+        var b = new ConstantBooleanMultivalueBlock(values, positions);
+        adjustBreaker(b.ramBytesUsed());
+        return b;
+    }
+
+    /**
+     * Creates a constant multivalue block where every position has the same set of int values.
+     */
+    public IntBlock newConstantIntMultivalueBlockWith(IntVector values, int positions) {
+        var b = new ConstantIntMultivalueBlock(values, positions);
+        adjustBreaker(b.ramBytesUsed());
+        return b;
+    }
+
+    /**
+     * Creates a constant multivalue block where every position has the same set of long values.
+     */
+    public LongBlock newConstantLongMultivalueBlockWith(LongVector values, int positions) {
+        var b = new ConstantLongMultivalueBlock(values, positions);
+        adjustBreaker(b.ramBytesUsed());
+        return b;
+    }
+
+    /**
+     * Creates a constant multivalue block where every position has the same set of float values.
+     */
+    public FloatBlock newConstantFloatMultivalueBlockWith(FloatVector values, int positions) {
+        var b = new ConstantFloatMultivalueBlock(values, positions);
+        adjustBreaker(b.ramBytesUsed());
+        return b;
+    }
+
+    /**
+     * Creates a constant multivalue block where every position has the same set of double values.
+     */
+    public DoubleBlock newConstantDoubleMultivalueBlockWith(DoubleVector values, int positions) {
+        var b = new ConstantDoubleMultivalueBlock(values, positions);
+        adjustBreaker(b.ramBytesUsed());
+        return b;
+    }
+
+    /**
+     * Creates a constant multivalue block where every position has the same set of BytesRef values.
+     */
+    public BytesRefBlock newConstantBytesRefMultivalueBlockWith(BytesRefVector values, int positions) {
+        var b = new ConstantBytesRefMultivalueBlock(values, positions);
+        adjustBreaker(b.ramBytesUsed());
+        return b;
+    }
+
     /**
      * Create a {@link IntVector} that includes a range of integers from startInclusive (inclusive) to endExclusive (exclusive).
      */

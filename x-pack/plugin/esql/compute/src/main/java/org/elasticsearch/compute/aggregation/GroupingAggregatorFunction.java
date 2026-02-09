@@ -8,6 +8,7 @@
 package org.elasticsearch.compute.aggregation;
 
 import org.elasticsearch.compute.data.Block;
+import org.elasticsearch.compute.data.ConstantIntMultivalueBlock;
 import org.elasticsearch.compute.data.ConstantNullBlock;
 import org.elasticsearch.compute.data.IntArrayBlock;
 import org.elasticsearch.compute.data.IntBigArrayBlock;
@@ -74,6 +75,9 @@ public interface GroupingAggregatorFunction extends Releasable {
                 case IntBigArrayBlock b:
                     add(positionOffset, b);
                     break;
+                case ConstantIntMultivalueBlock b:
+                    add(positionOffset, b);
+                    break;
             }
         }
 
@@ -86,6 +90,23 @@ public interface GroupingAggregatorFunction extends Releasable {
          * Implementation of {@link #add(int, IntBlock)} for a specific type of block.
          */
         void add(int positionOffset, IntBigArrayBlock groupIds);
+
+        /**
+         * Implementation of {@link #add(int, IntBlock)} for a constant multivalue block.
+         * Default implementation expands the block and delegates to the array block method.
+         */
+        default void add(int positionOffset, ConstantIntMultivalueBlock groupIds) {
+            // Expand to array block and delegate
+            try (IntBlock expanded = groupIds.expand()) {
+                if (expanded instanceof IntArrayBlock arrayBlock) {
+                    add(positionOffset, arrayBlock);
+                } else if (expanded instanceof IntBigArrayBlock bigArrayBlock) {
+                    add(positionOffset, bigArrayBlock);
+                } else {
+                    throw new IllegalStateException("Unexpected expanded block type: " + expanded.getClass());
+                }
+            }
+        }
 
         /**
          * Send a batch of group ids to the aggregator. The {@code groupIds}

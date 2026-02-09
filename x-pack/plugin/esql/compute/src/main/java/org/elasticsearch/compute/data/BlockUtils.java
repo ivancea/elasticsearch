@@ -270,12 +270,67 @@ public final class BlockUtils {
     }
 
     private static Block constantMultivalueBlock(BlockFactory blockFactory, ElementType elementType, Collection<?> multiValue, int size) {
-        try (var wrapper = BlockUtils.wrapperFor(blockFactory, elementType, size)) {
-            for (int i = 0; i < size; i++) {
-                wrapper.accept(multiValue);
+        // Build a vector containing the multivalue, then wrap it in a constant multivalue block
+        int valueCount = multiValue.size();
+        return switch (elementType) {
+            case BOOLEAN -> {
+                try (var builder = blockFactory.newBooleanVectorBuilder(valueCount)) {
+                    for (Object v : multiValue) {
+                        builder.appendBoolean((Boolean) v);
+                    }
+                    yield blockFactory.newConstantBooleanMultivalueBlockWith(builder.build(), size);
+                }
             }
-            return wrapper.builder().build();
-        }
+            case INT -> {
+                try (var builder = blockFactory.newIntVectorBuilder(valueCount)) {
+                    for (Object v : multiValue) {
+                        builder.appendInt((Integer) v);
+                    }
+                    yield blockFactory.newConstantIntMultivalueBlockWith(builder.build(), size);
+                }
+            }
+            case LONG -> {
+                try (var builder = blockFactory.newLongVectorBuilder(valueCount)) {
+                    for (Object v : multiValue) {
+                        builder.appendLong((Long) v);
+                    }
+                    yield blockFactory.newConstantLongMultivalueBlockWith(builder.build(), size);
+                }
+            }
+            case FLOAT -> {
+                try (var builder = blockFactory.newFloatVectorBuilder(valueCount)) {
+                    for (Object v : multiValue) {
+                        builder.appendFloat((Float) v);
+                    }
+                    yield blockFactory.newConstantFloatMultivalueBlockWith(builder.build(), size);
+                }
+            }
+            case DOUBLE -> {
+                try (var builder = blockFactory.newDoubleVectorBuilder(valueCount)) {
+                    for (Object v : multiValue) {
+                        builder.appendDouble((Double) v);
+                    }
+                    yield blockFactory.newConstantDoubleMultivalueBlockWith(builder.build(), size);
+                }
+            }
+            case BYTES_REF -> {
+                try (var builder = blockFactory.newBytesRefVectorBuilder(valueCount)) {
+                    for (Object v : multiValue) {
+                        builder.appendBytesRef(toBytesRef(v));
+                    }
+                    yield blockFactory.newConstantBytesRefMultivalueBlockWith(builder.build(), size);
+                }
+            }
+            default -> {
+                // Fall back to the wrapper approach for unsupported types
+                try (var wrapper = BlockUtils.wrapperFor(blockFactory, elementType, size)) {
+                    for (int i = 0; i < size; i++) {
+                        wrapper.accept(multiValue);
+                    }
+                    yield wrapper.builder().build();
+                }
+            }
+        };
     }
 
     // TODO: allow null values
