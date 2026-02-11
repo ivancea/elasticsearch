@@ -29,13 +29,14 @@ import org.elasticsearch.compute.operator.PageConsumerOperator;
 import org.elasticsearch.compute.operator.topn.TopNOperator.InputOrdering;
 import org.elasticsearch.compute.test.CannedSourceOperator;
 import org.elasticsearch.compute.test.OperatorTestCase;
-import org.elasticsearch.compute.test.SequenceLongBlockSourceOperator;
 import org.elasticsearch.compute.test.TestBlockBuilder;
 import org.elasticsearch.compute.test.TestBlockFactory;
 import org.elasticsearch.compute.test.TestDriverFactory;
 import org.elasticsearch.compute.test.TestDriverRunner;
 import org.elasticsearch.compute.test.TupleLongLongBlockSourceOperator;
 import org.elasticsearch.compute.test.TypedAbstractBlockSourceBuilder;
+import org.elasticsearch.compute.test.operator.blocksource.SequenceLongBlockSourceOperator;
+import org.elasticsearch.compute.test.operator.blocksource.TupleLongLongBlockSourceOperator;
 import org.elasticsearch.core.Releasables;
 import org.elasticsearch.core.Tuple;
 import org.elasticsearch.indices.CrankyCircuitBreakerService;
@@ -242,7 +243,9 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
                     append(secondColumn, value.v2());
                 }
                 pages.add(
-                    new Page(layout.buildPageBlocks(pageValues.size(), driverContext().blockFactory(), firstColumn.build(), secondColumn.build()))
+                    new Page(
+                        layout.buildPageBlocks(pageValues.size(), driverContext().blockFactory(), firstColumn.build(), secondColumn.build())
+                    )
                 );
             }
         }
