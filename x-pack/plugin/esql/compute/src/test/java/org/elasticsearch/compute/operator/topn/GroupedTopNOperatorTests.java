@@ -23,6 +23,7 @@ import org.elasticsearch.compute.operator.SourceOperator;
 import org.elasticsearch.compute.operator.topn.TopNOperator.SortOrder;
 import org.elasticsearch.compute.test.CannedSourceOperator;
 import org.elasticsearch.compute.test.TestBlockBuilder;
+import org.elasticsearch.compute.test.TestDriverRunner;
 import org.elasticsearch.compute.test.TupleLongLongBlockSourceOperator;
 import org.elasticsearch.core.RefCounted;
 import org.elasticsearch.core.Releasables;
@@ -285,20 +286,20 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
 
         List<SortOrder> uniqueOrders = sortColumns.stream().map(column -> new SortOrder(column, randomBoolean(), randomBoolean())).toList();
 
-        List<Page> results = drive(
-            new TopNOperator(
-                driverContext.blockFactory(),
-                nonBreakingBigArrays().breakerService().getBreaker("request"),
-                topCount,
-                randomBlocksResult.elementTypes,
-                randomBlocksResult.encoders,
-                uniqueOrders.stream().toList(),
-                groupKeys.stream().mapToInt(Integer::intValue).toArray(),
-                rows
-            ),
-            List.of(new Page(randomBlocksResult.blocks.toArray(Block[]::new))).iterator(),
-            driverContext
-        );
+        List<Page> results = new TestDriverRunner().builder(driverContext)
+            .input(List.of(new Page(randomBlocksResult.blocks.toArray(Block[]::new))).iterator())
+            .run(
+                new TopNOperator(
+                    driverContext.blockFactory(),
+                    nonBreakingBigArrays().breakerService().getBreaker("request"),
+                    topCount,
+                    randomBlocksResult.elementTypes,
+                    randomBlocksResult.encoders,
+                    uniqueOrders.stream().toList(),
+                    groupKeys.stream().mapToInt(Integer::intValue).toArray(),
+                    rows
+                )
+            );
         List<List<Object>> actualValues = new ArrayList<>();
         for (Page p : results) {
             actualValues.addAll(readAsRowsSingleValue(p));

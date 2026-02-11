@@ -22,6 +22,7 @@ import org.elasticsearch.compute.operator.SourceOperator;
 import org.elasticsearch.compute.operator.TupleDocLongBlockSourceOperator;
 import org.elasticsearch.compute.test.CannedSourceOperator;
 import org.elasticsearch.compute.test.SequenceLongBlockSourceOperator;
+import org.elasticsearch.compute.test.TestDriverRunner;
 import org.elasticsearch.core.RefCounted;
 import org.elasticsearch.core.Releasables;
 import org.elasticsearch.core.SimpleRefCounted;
@@ -273,20 +274,20 @@ public class UngroupedTopNOperatorTests extends TopNOperatorTests {
         );
 
         List<List<List<Object>>> actualValues = new ArrayList<>();
-        List<Page> results = drive(
-            new TopNOperator(
-                driverContext.blockFactory(),
-                nonBreakingBigArrays().breakerService().getBreaker("request"),
-                topCount,
-                blocksResult.elementTypes,
-                blocksResult.encoders,
-                uniqueOrders.stream().toList(),
-                groupKeys(),
-                rows
-            ),
-            List.of(new Page(blocksResult.blocks.toArray(Block[]::new))).iterator(),
-            driverContext
-        );
+        List<Page> results = new TestDriverRunner().builder(driverContext)
+            .input(List.of(new Page(blocksResult.blocks.toArray(Block[]::new))).iterator())
+            .run(
+                new TopNOperator(
+                    driverContext.blockFactory(),
+                    nonBreakingBigArrays().breakerService().getBreaker("request"),
+                    topCount,
+                    blocksResult.elementTypes,
+                    blocksResult.encoders,
+                    uniqueOrders.stream().toList(),
+                    groupKeys(),
+                    rows
+                )
+            );
         for (Page p : results) {
             readAsRows(actualValues, p);
             p.releaseBlocks();
