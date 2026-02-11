@@ -174,38 +174,26 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
         boolean asc,
         boolean nullsFirst
     ) {
-        int[] groupKeys = groupKeys();
-        List<Page> pages = new ArrayList<>(pagesValues.size());
+        var layout = ChannelLayout.forDataColumns(1, groupKeys());
 
+        List<Page> pages = new ArrayList<>(pagesValues.size());
         for (var pageValues : pagesValues) {
             assert isSorted(pageValues, asc, nullsFirst);
-            List<Block> blocks = new ArrayList<>();
             try (Block.Builder column = INT.newBlockBuilder(8, driverContext().blockFactory())) {
                 for (var value : pageValues) {
                     append(column, value);
                 }
-                blocks.add(column.build());
+                pages.add(new Page(layout.buildPageBlocks(pageValues.size(), driverContext().blockFactory(), column.build())));
             }
-            if (groupKeys.length > 0) {
-                // Add a constant-value group key column so all rows are in the same group
-                try (Block.Builder groupCol = INT.newBlockBuilder(pageValues.size(), driverContext().blockFactory())) {
-                    for (int j = 0; j < pageValues.size(); j++) {
-                        append(groupCol, 0);
-                    }
-                    blocks.add(groupCol.build());
-                }
-            }
-            pages.add(new Page(blocks.toArray(Block[]::new)));
         }
         List<List<Object>> actual = new ArrayList<>();
         DriverContext driverContext = driverContext();
 
-        List<ElementType> elementTypes = new ArrayList<>(List.of(INT));
-        List<TopNEncoder> encoders = new ArrayList<>(List.of(DEFAULT_SORTABLE));
-        if (groupKeys.length > 0) {
+        List<ElementType> elementTypes = new ArrayList<>();
+        List<TopNEncoder> encoders = new ArrayList<>();
+        for (int ch = 0; ch < layout.totalChannels(); ch++) {
             elementTypes.add(INT);
-            encoders.add(DEFAULT_UNSORTABLE);
-            groupKeys = new int[] { 1 };
+            encoders.add(layout.groupKeySet().contains(ch) ? DEFAULT_UNSORTABLE : DEFAULT_SORTABLE);
         }
 
         try (
@@ -219,8 +207,8 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
                         topNCount,
                         elementTypes,
                         encoders,
-                        List.of(new TopNOperator.SortOrder(0, asc, nullsFirst)),
-                        groupKeys,
+                        List.of(new TopNOperator.SortOrder(layout.dataChannel(0), asc, nullsFirst)),
+                        groupKeys(),
                         randomPageSize(),
                         InputOrdering.SORTED
                     )
@@ -231,12 +219,7 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
             new TestDriverRunner().run(driver);
         }
 
-        if (groupKeys.length > 0 && actual.size() > 1) {
-            // Strip the group key column from results before comparing
-            assertThat(actual.subList(0, 1), equalTo(expectedResult));
-        } else {
-            assertThat(actual, equalTo(expectedResult));
-        }
+        assertThat(layout.extractDataColumns(actual), equalTo(expectedResult));
     }
 
     private void testTopNSortedInputWithTwoColumns(
@@ -246,12 +229,10 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
         boolean asc,
         boolean nullsFirst
     ) {
-        int[] gk = groupKeys();
+        var layout = ChannelLayout.forDataColumns(2, groupKeys());
+
         List<Page> pages = new ArrayList<>(pagesValues.size());
-
         for (var pageValues : pagesValues) {
-            List<Block> blocks = new ArrayList<>();
-
             try (
                 Block.Builder firstColumn = INT.newBlockBuilder(8, driverContext().blockFactory());
                 Block.Builder secondColumn = INT.newBlockBuilder(8, driverContext().blockFactory());
@@ -260,30 +241,19 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
                     append(firstColumn, value.v1());
                     append(secondColumn, value.v2());
                 }
-                blocks.add(firstColumn.build());
-                blocks.add(secondColumn.build());
+                pages.add(
+                    new Page(layout.buildPageBlocks(pageValues.size(), driverContext().blockFactory(), firstColumn.build(), secondColumn.build()))
+                );
             }
-            if (gk.length > 0) {
-                // Add a constant-value group key column so all rows are in the same group
-                try (Block.Builder groupCol = INT.newBlockBuilder(pageValues.size(), driverContext().blockFactory())) {
-                    for (int j = 0; j < pageValues.size(); j++) {
-                        append(groupCol, 0);
-                    }
-                    blocks.add(groupCol.build());
-                }
-            }
-            pages.add(new Page(blocks.toArray(Block[]::new)));
         }
         List<List<Object>> actual = new ArrayList<>();
         DriverContext driverContext = driverContext();
 
-        List<ElementType> elementTypes = new ArrayList<>(List.of(INT, INT));
-        List<TopNEncoder> encoders = new ArrayList<>(List.of(DEFAULT_SORTABLE, DEFAULT_SORTABLE));
-        int[] effectiveGroupKeys = gk;
-        if (gk.length > 0) {
+        List<ElementType> elementTypes = new ArrayList<>();
+        List<TopNEncoder> encoders = new ArrayList<>();
+        for (int ch = 0; ch < layout.totalChannels(); ch++) {
             elementTypes.add(INT);
-            encoders.add(DEFAULT_UNSORTABLE);
-            effectiveGroupKeys = new int[] { 2 };
+            encoders.add(layout.groupKeySet().contains(ch) ? DEFAULT_UNSORTABLE : DEFAULT_SORTABLE);
         }
 
         try (
@@ -297,8 +267,11 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
                         topNCount,
                         elementTypes,
                         encoders,
-                        List.of(new TopNOperator.SortOrder(0, asc, nullsFirst), new TopNOperator.SortOrder(1, asc, nullsFirst)),
-                        effectiveGroupKeys,
+                        List.of(
+                            new TopNOperator.SortOrder(layout.dataChannel(0), asc, nullsFirst),
+                            new TopNOperator.SortOrder(layout.dataChannel(1), asc, nullsFirst)
+                        ),
+                        groupKeys(),
                         randomPageSize(),
                         InputOrdering.SORTED
                     )
@@ -309,12 +282,7 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
             new TestDriverRunner().run(driver);
         }
 
-        if (gk.length > 0 && actual.size() > 2) {
-            // Strip the group key column from results before comparing
-            assertThat(actual.subList(0, 2), equalTo(expectedResult));
-        } else {
-            assertThat(actual, equalTo(expectedResult));
-        }
+        assertThat(layout.extractDataColumns(actual), equalTo(expectedResult));
     }
 
     public final void testTopNWithSortedInputToString() {
@@ -1444,19 +1412,27 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
             }
         }
 
-        // Add a constant-value group key column if needed so all rows are in the same group
+        // Insert constant-value group key columns at their specified channels
         int[] gk = groupKeys();
-        int[] effectiveGroupKeys = gk;
+        var layout = ChannelLayout.forDataColumns(blocksCount, gk);
         if (gk.length > 0) {
-            try (Block.Builder groupCol = INT.newBlockBuilder(rows, driverContext.blockFactory())) {
-                for (int i = 0; i < rows; i++) {
-                    append(groupCol, 0);
+            // Insert group key blocks, element types, encoders, and expected values at the right channels.
+            // Inserting at sorted positions in ascending order keeps indices consistent.
+            layout.insertGroupKeyEntries(blocks, null); // placeholder, replaced below
+            int[] sortedGk = IntStream.of(gk).sorted().toArray();
+            for (int g : sortedGk) {
+                try (Block.Builder groupCol = INT.newBlockBuilder(rows, driverContext.blockFactory())) {
+                    for (int i = 0; i < rows; i++) {
+                        append(groupCol, 0);
+                    }
+                    blocks.set(g, groupCol.build());
                 }
-                blocks.add(groupCol.build());
             }
-            elementTypes.add(INT);
-            encoders.add(DEFAULT_UNSORTABLE);
-            effectiveGroupKeys = new int[] { blocksCount };
+            layout.insertGroupKeyEntries(elementTypes, INT);
+            layout.insertGroupKeyEntries(encoders, DEFAULT_UNSORTABLE);
+            for (int i = 0; i < rows; i++) {
+                layout.insertGroupKeyEntries(expectedValues.get(i), List.of(0));
+            }
         }
 
         /*
@@ -1469,7 +1445,7 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
          */
         for (int i = 0; i < sortingByColumns; i++) {
             int column = randomValueOtherThanMany(c -> false == validSortKeys[c], () -> randomIntBetween(0, blocksCount - 1));
-            uniqueOrders.add(new TopNOperator.SortOrder(column, randomBoolean(), randomBoolean()));
+            uniqueOrders.add(new TopNOperator.SortOrder(layout.dataChannel(column), randomBoolean(), randomBoolean()));
         }
 
         List<List<List<Object>>> actualValues = new ArrayList<>();
@@ -1483,7 +1459,7 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
                     elementTypes,
                     encoders,
                     uniqueOrders.stream().toList(),
-                    effectiveGroupKeys,
+                    gk,
                     rows,
                     InputOrdering.NOT_SORTED
                 )
@@ -2194,5 +2170,61 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
         }
 
         return new RandomBlocksResult(expectedValues, blocks, validSortKeys, elementTypes, encoders);
+    }
+
+    /**
+     * Maps group key channels and data channels for tests that need to add constant-value
+     * group key columns alongside their data columns. When {@code groupKeys} is empty, the
+     * layout is an identity mapping (data channel i == channel i).
+     */
+    protected record ChannelLayout(int[] groupKeys, Set<Integer> groupKeySet, int[] dataChannels, int totalChannels) {
+
+        static ChannelLayout forDataColumns(int dataColumnCount, int[] groupKeys) {
+            int totalChannels = dataColumnCount + groupKeys.length;
+            Set<Integer> groupKeySet = IntStream.of(groupKeys).boxed().collect(Collectors.toSet());
+            int[] dataChannels = IntStream.range(0, totalChannels).filter(ch -> groupKeySet.contains(ch) == false).toArray();
+            return new ChannelLayout(groupKeys, groupKeySet, dataChannels, totalChannels);
+        }
+
+        /** Returns the actual channel index for the given data column index. */
+        int dataChannel(int dataIndex) {
+            return dataChannels[dataIndex];
+        }
+
+        /**
+         * Builds a {@code Block[]} with constant-0 INT blocks at the group key channels
+         * and the supplied data blocks placed at the corresponding data channels.
+         */
+        Block[] buildPageBlocks(int positions, BlockFactory blockFactory, Block... dataBlocks) {
+            Block[] blockArray = new Block[totalChannels];
+            for (int g : groupKeys) {
+                try (Block.Builder groupCol = INT.newBlockBuilder(positions, blockFactory)) {
+                    for (int j = 0; j < positions; j++) {
+                        append(groupCol, 0);
+                    }
+                    blockArray[g] = groupCol.build();
+                }
+            }
+            for (int d = 0; d < dataBlocks.length; d++) {
+                blockArray[dataChannels[d]] = dataBlocks[d];
+            }
+            return blockArray;
+        }
+
+        /** Extracts only the data-channel columns from column-oriented results. */
+        List<List<Object>> extractDataColumns(List<List<Object>> actual) {
+            if (groupKeys.length == 0 || actual.isEmpty()) {
+                return actual;
+            }
+            return IntStream.of(dataChannels).mapToObj(actual::get).toList();
+        }
+
+        /** Inserts group key entries into pre-built lists at the correct positions. */
+        <T> void insertGroupKeyEntries(List<T> list, T value) {
+            int[] sortedGk = IntStream.of(groupKeys).sorted().toArray();
+            for (int g : sortedGk) {
+                list.add(g, value);
+            }
+        }
     }
 }
