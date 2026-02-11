@@ -7,9 +7,11 @@
 
 package org.elasticsearch.xpack.esql.plan.physical;
 
+import org.elasticsearch.TransportVersion;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.compute.operator.topn.TopNOperator.InputOrdering;
 import org.elasticsearch.xpack.esql.core.expression.Attribute;
 import org.elasticsearch.xpack.esql.core.expression.Expression;
 import org.elasticsearch.xpack.esql.core.tree.NodeInfo;
@@ -26,6 +28,8 @@ import java.util.Set;
 import static org.elasticsearch.xpack.esql.plan.logical.Limit.ESQL_LIMIT_PER;
 
 public class TopNExec extends UnaryExec implements EstimatesRowSize {
+    private static final TransportVersion ESQL_TOPN_AVOID_RESORTING = TransportVersion.fromName("esql_topn_avoid_resorting");
+
     public static final NamedWriteableRegistry.Entry ENTRY = new NamedWriteableRegistry.Entry(
         PhysicalPlan.class,
         "TopNExec",
@@ -53,6 +57,8 @@ public class TopNExec extends UnaryExec implements EstimatesRowSize {
 
     private List<Expression> groupings;
 
+    private final InputOrdering inputOrdering;
+
     public TopNExec(
         Source source,
         PhysicalPlan child,
@@ -61,7 +67,7 @@ public class TopNExec extends UnaryExec implements EstimatesRowSize {
         List<Expression> groupings,
         Integer estimatedRowSize
     ) {
-        this(source, child, order, limit, estimatedRowSize, groupings, Set.of());
+        this(source, child, order, limit, estimatedRowSize, groupings, Set.of(), InputOrdering.NOT_SORTED);
     }
 
     private TopNExec(
@@ -71,12 +77,26 @@ public class TopNExec extends UnaryExec implements EstimatesRowSize {
         Expression limit,
         Integer estimatedRowSize,
         List<Expression> groupings,
-        Set<Attribute> docValuesAttributes
+        InputOrdering inputOrdering
+    ) {
+        this(source, child, order, limit, estimatedRowSize, groupings, Set.of(), inputOrdering);
+    }
+
+    private TopNExec(
+        Source source,
+        PhysicalPlan child,
+        List<Order> order,
+        Expression limit,
+        Integer estimatedRowSize,
+        List<Expression> groupings,
+        Set<Attribute> docValuesAttributes,
+        InputOrdering inputOrdering
     ) {
         super(source, child);
         this.order = order;
         this.limit = limit;
         this.estimatedRowSize = estimatedRowSize;
+        this.inputOrdering = inputOrdering;
         this.docValuesAttributes = docValuesAttributes;
         this.groupings = groupings;
     }
@@ -87,8 +107,9 @@ public class TopNExec extends UnaryExec implements EstimatesRowSize {
             in.readNamedWriteable(PhysicalPlan.class),
             in.readCollectionAsList(org.elasticsearch.xpack.esql.expression.Order::new),
             in.readNamedWriteable(Expression.class),
+            in.readOptionalVInt(),
             List.of(),
-            in.readOptionalVInt()
+            in.getTransportVersion().supports(ESQL_TOPN_AVOID_RESORTING) ? InputOrdering.valueOf(in.readString()) : InputOrdering.NOT_SORTED
         );
 
         if (in.getTransportVersion().supports(ESQL_LIMIT_PER)) {
@@ -104,6 +125,10 @@ public class TopNExec extends UnaryExec implements EstimatesRowSize {
         out.writeCollection(order());
         out.writeNamedWriteable(limit());
         out.writeOptionalVInt(estimatedRowSize());
+
+        if (out.getTransportVersion().supports(ESQL_TOPN_AVOID_RESORTING)) {
+            out.writeString(inputOrdering.toString());
+        }
 
         if (out.getTransportVersion().supports(ESQL_LIMIT_PER)) {
             out.writeNamedWriteableCollection(groupings());
@@ -126,11 +151,19 @@ public class TopNExec extends UnaryExec implements EstimatesRowSize {
 
     @Override
     public TopNExec replaceChild(PhysicalPlan newChild) {
-        return new TopNExec(source(), newChild, order, limit, estimatedRowSize, groupings, docValuesAttributes);
+        return new TopNExec(source(), newChild, order, limit, estimatedRowSize, groupings, docValuesAttributes, inputOrdering);
     }
 
     public TopNExec withDocValuesAttributes(Set<Attribute> docValuesAttributes) {
-        return new TopNExec(source(), child(), order, limit, estimatedRowSize, groupings, docValuesAttributes);
+        return new TopNExec(source(), child(), order, limit, estimatedRowSize, groupings, docValuesAttributes, inputOrdering);
+    }
+
+    public TopNExec withSortedInput() {
+        return new TopNExec(source(), child(), order, limit, estimatedRowSize, groupings, docValuesAttributes, InputOrdering.SORTED);
+    }
+
+    public TopNExec withNonSortedInput() {
+        return new TopNExec(source(), child(), order, limit, estimatedRowSize, groupings, docValuesAttributes, InputOrdering.NOT_SORTED);
     }
 
     public Expression limit() {
@@ -166,12 +199,12 @@ public class TopNExec extends UnaryExec implements EstimatesRowSize {
         size = Math.max(size, 1);
         return Objects.equals(this.estimatedRowSize, size)
             ? this
-            : new TopNExec(source(), child(), order, limit, size, groupings, docValuesAttributes);
+            : new TopNExec(source(), child(), order, limit, size, groupings, docValuesAttributes, inputOrdering);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), order, limit, estimatedRowSize, groupings, docValuesAttributes);
+        return Objects.hash(super.hashCode(), order, limit, estimatedRowSize, groupings, docValuesAttributes, inputOrdering);
     }
 
     @Override
@@ -183,8 +216,13 @@ public class TopNExec extends UnaryExec implements EstimatesRowSize {
                 && Objects.equals(limit, other.limit)
                 && Objects.equals(estimatedRowSize, other.estimatedRowSize)
                 && Objects.equals(docValuesAttributes, other.docValuesAttributes)
-                && Objects.equals(groupings, other.groupings);
+                && Objects.equals(groupings, other.groupings)
+                && Objects.equals(inputOrdering, other.inputOrdering);
         }
         return equals;
+    }
+
+    public InputOrdering inputOrdering() {
+        return inputOrdering;
     }
 }

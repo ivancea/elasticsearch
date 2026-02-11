@@ -135,7 +135,8 @@ public class UngroupedTopNOperatorTests extends TopNOperatorTests {
             List.of(DEFAULT_UNSORTABLE),
             List.of(new TopNOperator.SortOrder(0, true, false)),
             IntStream.of(groupKeys()).boxed().toList(),
-            pageSize
+            pageSize,
+            TopNOperator.InputOrdering.NOT_SORTED
         );
     }
 
@@ -143,7 +144,7 @@ public class UngroupedTopNOperatorTests extends TopNOperatorTests {
     protected Matcher<String> expectedToStringOfSimple() {
         return equalTo(
             "TopNOperator[count=0/4, elementTypes=[LONG], encoders=[DefaultUnsortable], "
-                + "sortOrders=[SortOrder[channel=0, asc=true, nullsFirst=false]]]"
+                + "sortOrders=[SortOrder[channel=0, asc=true, nullsFirst=false]], inputOrdering=NOT_SORTED]"
         );
     }
 
@@ -151,7 +152,7 @@ public class UngroupedTopNOperatorTests extends TopNOperatorTests {
     protected Matcher<String> expectedDescriptionOfSimple() {
         return equalTo(
             "TopNOperator[count=4, elementTypes=[LONG], encoders=[DefaultUnsortable], "
-                + "sortOrders=[SortOrder[channel=0, asc=true, nullsFirst=false]]]"
+                + "sortOrders=[SortOrder[channel=0, asc=true, nullsFirst=false]], inputOrdering=NOT_SORTED]"
         );
     }
 
@@ -194,7 +195,8 @@ public class UngroupedTopNOperatorTests extends TopNOperatorTests {
                 List.of(DEFAULT_UNSORTABLE),
                 List.of(new TopNOperator.SortOrder(0, true, false)),
                 IntStream.of(groupKeys()).boxed().toList(),
-                pageSize
+                pageSize,
+                TopNOperator.InputOrdering.NOT_SORTED
             ).get(context)
         ) {
             long actualEmpty = RamUsageTester.ramUsed(op, acc);
@@ -285,7 +287,8 @@ public class UngroupedTopNOperatorTests extends TopNOperatorTests {
                     blocksResult.encoders,
                     uniqueOrders.stream().toList(),
                     groupKeys(),
-                    rows
+                    rows,
+                    TopNOperator.InputOrdering.NOT_SORTED
                 )
             );
         for (Page p : results) {

@@ -39,6 +39,11 @@ public class TopNOperator implements Operator, Accountable {
     private static final byte SMALL_NULL = 0x01; // "null" representation for "nulls first"
     private static final byte BIG_NULL = 0x02; // "null" representation for "nulls last"
 
+    public enum InputOrdering {
+        SORTED,
+        NOT_SORTED
+    }
+
     static final class BytesOrder implements Releasable, Accountable {
         private static final long BASE_RAM_USAGE = RamUsageEstimator.shallowSizeOfInstance(BytesOrder.class);
         private final CircuitBreaker breaker;
@@ -113,7 +118,8 @@ public class TopNOperator implements Operator, Accountable {
         List<TopNEncoder> encoders,
         List<SortOrder> sortOrders,
         List<Integer> groupKeys,
-        int maxPageSize
+        int maxPageSize,
+        InputOrdering inputOrdering
     ) implements OperatorFactory {
         public TopNOperatorFactory {
             for (ElementType e : elementTypes) {
@@ -133,7 +139,8 @@ public class TopNOperator implements Operator, Accountable {
                 encoders,
                 sortOrders,
                 groupKeys.stream().mapToInt(Integer::intValue).toArray(),
-                maxPageSize
+                maxPageSize,
+                inputOrdering
             );
         }
 
@@ -148,6 +155,8 @@ public class TopNOperator implements Operator, Accountable {
                 + ", sortOrders="
                 + sortOrders
                 + (groupKeys.isEmpty() ? "" : ", groupKeys=" + groupKeys)
+                + ", inputOrdering="
+                + inputOrdering
                 + "]";
         }
     }
@@ -157,6 +166,7 @@ public class TopNOperator implements Operator, Accountable {
 
     private final int maxPageSize;
 
+    private final int topCount;
     private final List<ElementType> elementTypes;
     private final List<TopNEncoder> encoders;
     private final List<SortOrder> sortOrders;
@@ -190,6 +200,8 @@ public class TopNOperator implements Operator, Accountable {
      */
     private long rowsEmitted;
 
+    private final InputOrdering inputOrdering;
+
     public TopNOperator(
         BlockFactory blockFactory,
         CircuitBreaker breaker,
@@ -198,17 +210,20 @@ public class TopNOperator implements Operator, Accountable {
         List<TopNEncoder> encoders,
         List<SortOrder> sortOrders,
         int[] groupKeys,
-        int maxPageSize
+        int maxPageSize,
+        InputOrdering inputOrdering
     ) {
         this.blockFactory = blockFactory;
         this.breaker = breaker;
         this.maxPageSize = maxPageSize;
+        this.topCount = topCount;
         this.elementTypes = elementTypes;
         this.encoders = encoders;
         this.sortOrders = sortOrders;
         this.groupKeys = groupKeys;
         this.processor = groupKeys.length == 0 ? new UngroupedTopNProcessor() : new GroupedTopNProcessor(groupKeys);
         this.inputQueue = processor.queue(breaker, topCount);
+        this.inputOrdering = inputOrdering;
     }
 
     static int compareRows(Row r1, Row r2) {
@@ -266,6 +281,9 @@ public class TopNOperator implements Operator, Accountable {
          * inputQueue or because we hit an allocation failure while building it.
          */
         try {
+            if (this.topCount <= 0) {
+                return;
+            }
             RowFiller rowFiller = processor.rowFiller(elementTypes, encoders, sortOrders, page);
 
             for (int i = 0; i < page.getPositionCount(); i++) {
@@ -281,6 +299,16 @@ public class TopNOperator implements Operator, Accountable {
                     var insertedRow = spare;
                     spare = nextSpare; // Update spare before writing values in case the writing fails, to avoid releasing spare twice.
                     rowFiller.writeValues(i, insertedRow);
+                } else if (inputOrdering == TopNOperator.InputOrdering.SORTED) {
+                    /*
+                     The queue (min-heap) is full and we have sorted input for the input page. Any other element that comes after the one
+                     we just compared will be greater or equal than any other one in the queue, so we can short circuit the execution here.
+
+                     Note we always need to check whether the min-heap top's is greater or equal than the current element. For example: we
+                     could have processed all the data from a first data node, have a full queue (a partial result), but a page from a
+                     second data node could interleave with our partial result in arbitrary ways.
+                     */
+                    break;
                 }
             }
         } finally {
@@ -396,6 +424,8 @@ public class TopNOperator implements Operator, Accountable {
             + ", sortOrders="
             + sortOrders
             + (groupKeys.length == 0 ? "" : ", groupKeys=" + Arrays.toString(groupKeys))
+            + ", inputOrdering="
+            + inputOrdering
             + "]";
     }
 

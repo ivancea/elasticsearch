@@ -116,7 +116,8 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
             List.of(DEFAULT_UNSORTABLE, DEFAULT_UNSORTABLE),
             List.of(new SortOrder(0, true, false)),
             List.of(1),
-            pageSize
+            pageSize,
+            TopNOperator.InputOrdering.NOT_SORTED
         );
     }
 
@@ -124,7 +125,7 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
     protected Matcher<String> expectedDescriptionOfSimple() {
         return equalTo(
             "TopNOperator[count=4, elementTypes=[LONG, LONG], encoders=[DefaultUnsortable, DefaultUnsortable], "
-                + "sortOrders=[SortOrder[channel=0, asc=true, nullsFirst=false]], groupKeys=[1]]"
+                + "sortOrders=[SortOrder[channel=0, asc=true, nullsFirst=false]], groupKeys=[1], inputOrdering=NOT_SORTED]"
         );
     }
 
@@ -132,7 +133,7 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
     protected Matcher<String> expectedToStringOfSimple() {
         return equalTo(
             "TopNOperator[count=0/4, elementTypes=[LONG, LONG], encoders=[DefaultUnsortable, DefaultUnsortable], "
-                + "sortOrders=[SortOrder[channel=0, asc=true, nullsFirst=false]], groupKeys=[1]]"
+                + "sortOrders=[SortOrder[channel=0, asc=true, nullsFirst=false]], groupKeys=[1], inputOrdering=NOT_SORTED]"
         );
     }
 
@@ -193,7 +194,8 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
                 List.of(DEFAULT_UNSORTABLE, DEFAULT_UNSORTABLE),
                 List.of(new SortOrder(0, true, false)),
                 List.of(1),
-                pageSize
+                pageSize,
+                TopNOperator.InputOrdering.NOT_SORTED
             ).get(context)
         ) {
             long actualEmpty = RamUsageTester.ramUsed(op, acc);
@@ -297,7 +299,8 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
                     randomBlocksResult.encoders,
                     uniqueOrders.stream().toList(),
                     groupKeys.stream().mapToInt(Integer::intValue).toArray(),
-                    rows
+                    rows,
+                    TopNOperator.InputOrdering.NOT_SORTED
                 )
             );
         List<List<Object>> actualValues = new ArrayList<>();

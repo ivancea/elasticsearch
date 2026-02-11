@@ -7,6 +7,7 @@
 
 package org.elasticsearch.xpack.esql.plan.physical;
 
+import org.elasticsearch.compute.operator.topn.TopNOperator.InputOrdering;
 import org.elasticsearch.xpack.esql.core.expression.Expression;
 import org.elasticsearch.xpack.esql.core.expression.Literal;
 import org.elasticsearch.xpack.esql.core.tree.Source;
@@ -40,7 +41,9 @@ public class TopNExecSerializationTests extends AbstractPhysicalPlanSerializatio
         Expression limit = instance.limit();
         Integer estimatedRowSize = instance.estimatedRowSize();
         List<Expression> groupings = instance.groupings();
-        switch (between(0, 4)) {
+        InputOrdering inputOrdering = instance.inputOrdering();
+
+        switch (between(0, 5)) {
             case 0 -> child = randomValueOtherThan(child, () -> randomChild(0));
             case 1 -> order = randomValueOtherThan(order, () -> randomList(1, 10, OrderSerializationTests::randomOrder));
             case 2 -> limit = randomValueOtherThan(limit, () -> new Literal(randomSource(), randomNonNegativeInt(), DataType.INTEGER));
@@ -52,9 +55,11 @@ public class TopNExecSerializationTests extends AbstractPhysicalPlanSerializatio
                 groupings,
                 () -> randomFieldAttributes(0, 5, false).stream().map(a -> (Expression) a).toList()
             );
+            case 5 -> inputOrdering = (inputOrdering == InputOrdering.SORTED ? InputOrdering.NOT_SORTED : InputOrdering.SORTED);
             default -> throw new UnsupportedOperationException();
         }
-        return new TopNExec(instance.source(), child, order, limit, groupings, estimatedRowSize);
+        var result = new TopNExec(instance.source(), child, order, limit, groupings, estimatedRowSize);
+        return inputOrdering == InputOrdering.SORTED ? result.withSortedInput() : result.withNonSortedInput();
     }
 
     @Override
