@@ -562,3 +562,341 @@ Tzvetan            | Zielinski         | 74572          | 4
 Lillian            | Haddadi           | 73717          | 1
 Valter             | Sullins           | 73578          | 2
 ;
+
+sortByLimitExpression
+required_capability: sort_by_limit
+
+FROM employees
+| SORT salary DESC
+| LIMIT 5 BY languages * 2
+| KEEP first_name, last_name, salary, languages
+| SORT languages DESC nulls last, salary DESC
+;
+
+first_name:keyword | last_name:keyword | salary:integer | languages:integer
+Arumugam           | Ossenbruggen      | 66817          | 5
+Bezalel            | Simmel            | 56371          | 5
+Hironoby           | Sidou             | 54518          | 5
+Premal             | Baek              | 52833          | 5
+Gao                | Dolinsky          | 51956          | 5
+Tzvetan            | Zielinski         | 74572          | 4
+Hironobu           | Haraldson         | 68431          | 4
+Mayumi             | Schueller         | 65367          | 4
+Parto              | Bamford           | 61805          | 4
+null               | Portugali         | 60781          | 4
+Moss               | Shanbhogue        | 74970          | 3
+Remzi              | Waschkowski       | 71165          | 3
+null               | Demeyer           | 67492          | 3
+Anoosh             | Peyn              | 65030          | 3
+Erez               | Ritzmann          | 62405          | 3
+Valter             | Sullins           | 73578          | 2
+Danel              | Mondadori         | 69904          | 2
+Kazuhito           | Cappelletti       | 61358          | 2
+Cristinel          | Bouloucos         | 58715          | 2
+Georgi             | Facello           | 57305          | 2
+Lillian            | Haddadi           | 73717          | 1
+null               | Merlo             | 70011          | 1
+Somnath            | Foote             | 68547          | 1
+Sumant             | Peac              | 66174          | 1
+Kyoichi            | Maliniak          | 63528          | 1
+Otmar              | Herbst            | 74999          | null
+Divier             | Reistad           | 73851          | null
+Suzette            | Pettey            | 64675          | null
+Ramzi              | Erde              | 60408          | null
+Shahaf             | Famili            | 48233          | null
+;
+
+sortByLimitMixed
+required_capability: sort_by_limit
+
+FROM employees
+| SORT salary DESC
+| LIMIT 2 BY languages, gender
+| KEEP first_name, last_name, salary, languages, gender
+| SORT languages DESC nulls last, salary DESC
+;
+
+first_name:keyword | last_name:keyword | salary:integer | languages:integer | gender:keyword
+Arumugam           | Ossenbruggen      | 66817          | 5                 | F
+Bezalel            | Simmel            | 56371          | 5                 | F
+Premal             | Baek              | 52833          | 5                 | M
+Georgy             | Dredge            | 49281          | 5                 | M
+Patricio           | Bridgland         | 48942          | 5                 | null
+Berni              | Genin             | 37137          | 5                 | null
+Tzvetan            | Zielinski         | 74572          | 4                 | F
+Hironobu           | Haraldson         | 68431          | 4                 | F
+Mayumi             | Schueller         | 65367          | 4                 | M
+Parto              | Bamford           | 61805          | 4                 | M
+Duangkaew          | Piveteau          | 45797          | 4                 | null
+Moss               | Shanbhogue        | 74970          | 3                 | M
+Remzi              | Waschkowski       | 71165          | 3                 | M
+Erez               | Ritzmann          | 62405          | 3                 | F
+null               | Reistad           | 62233          | 3                 | F
+Valter             | Sullins           | 73578          | 2                 | F
+Danel              | Mondadori         | 69904          | 2                 | F
+Kazuhito           | Cappelletti       | 61358          | 2                 | null
+Cristinel          | Bouloucos         | 58715          | 2                 | null
+Georgi             | Facello           | 57305          | 2                 | M
+Claudi             | Stavenow          | 52044          | 2                 | M
+Lillian            | Haddadi           | 73717          | 1                 | null
+null               | Merlo             | 70011          | 1                 | M
+Somnath            | Foote             | 68547          | 1                 | M
+Sumant             | Peac              | 66174          | 1                 | F
+Uri                | Lenart            | 56415          | 1                 | F
+Eberhardt          | Terkki            | 48735          | 1                 | null
+Otmar              | Herbst            | 74999          | null              | M
+Divier             | Reistad           | 73851          | null              | F
+Suzette            | Pettey            | 64675          | null              | F
+Ramzi              | Erde              | 60408          | null              | M
+;
+
+sortByLimitByConstant
+required_capability: sort_by_limit
+
+FROM employees
+| SORT salary DESC
+| LIMIT 5 BY 20 * 5, 10
+| KEEP first_name, last_name, salary, languages
+;
+
+first_name:keyword | last_name:keyword | salary:integer | languages:integer
+Otmar              | Herbst            | 74999          | null
+Moss               | Shanbhogue        | 74970          | 3
+Tzvetan            | Zielinski         | 74572          | 4
+Divier             | Reistad           | 73851          | null
+Lillian            | Haddadi           | 73717          | 1
+;
+
+sortByLimitMixedFoldableAndAttribute
+required_capability: sort_by_limit
+
+FROM employees
+| SORT salary DESC
+| LIMIT 5 BY languages, 42
+| KEEP first_name, last_name, salary, languages
+| SORT languages DESC nulls last, salary DESC
+;
+
+first_name:keyword | last_name:keyword | salary:integer | languages:integer
+Arumugam           | Ossenbruggen      | 66817          | 5
+Bezalel            | Simmel            | 56371          | 5
+Hironoby           | Sidou             | 54518          | 5
+Premal             | Baek              | 52833          | 5
+Gao                | Dolinsky          | 51956          | 5
+Tzvetan            | Zielinski         | 74572          | 4
+Hironobu           | Haraldson         | 68431          | 4
+Mayumi             | Schueller         | 65367          | 4
+Parto              | Bamford           | 61805          | 4
+null               | Portugali         | 60781          | 4
+Moss               | Shanbhogue        | 74970          | 3
+Remzi              | Waschkowski       | 71165          | 3
+null               | Demeyer           | 67492          | 3
+Anoosh             | Peyn              | 65030          | 3
+Erez               | Ritzmann          | 62405          | 3
+Valter             | Sullins           | 73578          | 2
+Danel              | Mondadori         | 69904          | 2
+Kazuhito           | Cappelletti       | 61358          | 2
+Cristinel          | Bouloucos         | 58715          | 2
+Georgi             | Facello           | 57305          | 2
+Lillian            | Haddadi           | 73717          | 1
+null               | Merlo             | 70011          | 1
+Somnath            | Foote             | 68547          | 1
+Sumant             | Peac              | 66174          | 1
+Kyoichi            | Maliniak          | 63528          | 1
+Otmar              | Herbst            | 74999          | null
+Divier             | Reistad           | 73851          | null
+Suzette            | Pettey            | 64675          | null
+Ramzi              | Erde              | 60408          | null
+Shahaf             | Famili            | 48233          | null
+;
+
+sortByLimitMixedFoldableAndExpression
+required_capability: sort_by_limit
+
+FROM employees
+| SORT salary DESC
+| LIMIT 5 BY languages * 2, 42
+| KEEP first_name, last_name, salary, languages
+| SORT languages DESC nulls last, salary DESC
+;
+
+first_name:keyword | last_name:keyword | salary:integer | languages:integer
+Arumugam           | Ossenbruggen      | 66817          | 5
+Bezalel            | Simmel            | 56371          | 5
+Hironoby           | Sidou             | 54518          | 5
+Premal             | Baek              | 52833          | 5
+Gao                | Dolinsky          | 51956          | 5
+Tzvetan            | Zielinski         | 74572          | 4
+Hironobu           | Haraldson         | 68431          | 4
+Mayumi             | Schueller         | 65367          | 4
+Parto              | Bamford           | 61805          | 4
+null               | Portugali         | 60781          | 4
+Moss               | Shanbhogue        | 74970          | 3
+Remzi              | Waschkowski       | 71165          | 3
+null               | Demeyer           | 67492          | 3
+Anoosh             | Peyn              | 65030          | 3
+Erez               | Ritzmann          | 62405          | 3
+Valter             | Sullins           | 73578          | 2
+Danel              | Mondadori         | 69904          | 2
+Kazuhito           | Cappelletti       | 61358          | 2
+Cristinel          | Bouloucos         | 58715          | 2
+Georgi             | Facello           | 57305          | 2
+Lillian            | Haddadi           | 73717          | 1
+null               | Merlo             | 70011          | 1
+Somnath            | Foote             | 68547          | 1
+Sumant             | Peac              | 66174          | 1
+Kyoichi            | Maliniak          | 63528          | 1
+Otmar              | Herbst            | 74999          | null
+Divier             | Reistad           | 73851          | null
+Suzette            | Pettey            | 64675          | null
+Ramzi              | Erde              | 60408          | null
+Shahaf             | Famili            | 48233          | null
+;
+
+sortByLimitSeveralSorts
+required_capability: sort_by_limit
+
+FROM employees
+| SORT emp_no DESC
+| SORT salary DESC
+| LIMIT 5 BY languages
+| KEEP first_name, last_name, salary, languages
+| SORT languages DESC nulls last, salary DESC
+;
+
+first_name:keyword | last_name:keyword | salary:integer | languages:integer
+Arumugam           | Ossenbruggen      | 66817          | 5
+Bezalel            | Simmel            | 56371          | 5
+Hironoby           | Sidou             | 54518          | 5
+Premal             | Baek              | 52833          | 5
+Gao                | Dolinsky          | 51956          | 5
+Tzvetan            | Zielinski         | 74572          | 4
+Hironobu           | Haraldson         | 68431          | 4
+Mayumi             | Schueller         | 65367          | 4
+Parto              | Bamford           | 61805          | 4
+null               | Portugali         | 60781          | 4
+Moss               | Shanbhogue        | 74970          | 3
+Remzi              | Waschkowski       | 71165          | 3
+null               | Demeyer           | 67492          | 3
+Anoosh             | Peyn              | 65030          | 3
+Erez               | Ritzmann          | 62405          | 3
+Valter             | Sullins           | 73578          | 2
+Danel              | Mondadori         | 69904          | 2
+Kazuhito           | Cappelletti       | 61358          | 2
+Cristinel          | Bouloucos         | 58715          | 2
+Georgi             | Facello           | 57305          | 2
+Lillian            | Haddadi           | 73717          | 1
+null               | Merlo             | 70011          | 1
+Somnath            | Foote             | 68547          | 1
+Sumant             | Peac              | 66174          | 1
+Kyoichi            | Maliniak          | 63528          | 1
+Otmar              | Herbst            | 74999          | null
+Divier             | Reistad           | 73851          | null
+Suzette            | Pettey            | 64675          | null
+Ramzi              | Erde              | 60408          | null
+Shahaf             | Famili            | 48233          | null
+;
+
+sortByLimitNonContiguousSorts
+required_capability: sort_by_limit
+
+FROM employees
+| SORT emp_no DESC
+| KEEP emp_no, salary, languages
+| SORT salary DESC
+| LIMIT 5 BY languages
+| KEEP emp_no, salary, languages
+| SORT languages DESC nulls last, salary DESC
+;
+
+emp_no:integer | salary:integer | languages:integer
+10094             | 66817          | 5
+10002             | 56371          | 5
+10072             | 54518          | 5
+10080             | 52833          | 5
+10075             | 51956          | 5
+10007             | 74572          | 4
+10100             | 68431          | 4
+10054             | 65367          | 4
+10003             | 61805          | 4
+10036             | 60781          | 4
+10045             | 74970          | 3
+10097             | 71165          | 3
+10030             | 67492          | 3
+10062             | 65030          | 3
+10076             | 62405          | 3
+10099             | 73578          | 2
+10078             | 69904          | 2
+10016             | 61358          | 2
+10017             | 58715          | 2
+10001             | 57305          | 2
+10019             | 73717          | 1
+10033             | 70011          | 1
+10086             | 68547          | 1
+10009             | 66174          | 1
+10005             | 63528          | 1
+10029             | 74999          | null
+10027             | 73851          | null
+10024             | 64675          | null
+10021             | 60408          | null
+10022             | 48233          | null
+;
+
+sortByLimitEvalAndNonEvalGroupings
+required_capability: sort_by_limit
+
+FROM employees
+| SORT emp_no DESC
+| KEEP emp_no, salary, languages, gender
+| SORT salary DESC
+| LIMIT 3 BY languages * 2, gender
+| SORT languages DESC nulls last, gender DESC nulls last, salary DESC
+;
+
+emp_no:integer | salary:integer | languages:integer | gender:keyword
+10080          | 52833          | 5                 | M
+10055          | 49281          | 5                 | M
+10077          | 46595          | 5                 | M
+10094          | 66817          | 5                 | F
+10002          | 56371          | 5                 | F
+10072          | 54518          | 5                 | F
+10012          | 48942          | 5                 | null
+10014          | 37137          | 5                 | null
+10011          | 31120          | 5                 | null
+10054          | 65367          | 4                 | M
+10003          | 61805          | 4                 | M
+10036          | 60781          | 4                 | M
+10007          | 74572          | 4                 | F
+10100          | 68431          | 4                 | F
+10098          | 44817          | 4                 | F
+10010          | 45797          | 4                 | null
+10045          | 74970          | 3                 | M
+10097          | 71165          | 3                 | M
+10030          | 67492          | 3                 | M
+10076          | 62405          | 3                 | F
+10032          | 62233          | 3                 | F
+10006          | 60335          | 3                 | F
+10001          | 57305          | 2                 | M
+10067          | 52044          | 2                 | M
+10065          | 50249          | 2                 | M
+10099          | 73578          | 2                 | F
+10078          | 69904          | 2                 | F
+10059          | 44307          | 2                 | F
+10016          | 61358          | 2                 | null
+10017          | 58715          | 2                 | null
+10018          | 56760          | 2                 | null
+10033          | 70011          | 1                 | M
+10086          | 68547          | 1                 | M
+10005          | 63528          | 1                 | M
+10009          | 66174          | 1                 | F
+10041          | 56415          | 1                 | F
+10044          | 39728          | 1                 | F
+10019          | 73717          | 1                 | null
+10013          | 48735          | 1                 | null
+10029          | 74999          | null              | M
+10021          | 60408          | null              | M
+10022          | 48233          | null              | M
+10027          | 73851          | null              | F
+10024          | 64675          | null              | F
+10023          | 47896          | null              | F
+;
