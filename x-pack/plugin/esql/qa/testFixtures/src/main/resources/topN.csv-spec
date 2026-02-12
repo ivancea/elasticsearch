@@ -458,3 +458,73 @@ Patricio           | Bridgland         | 5                 | [false, false, true
 Mayuko             | Warwick           | null              | [false, true, true]
 Shahaf             | Famili            | null              | [false, true]          
 ;
+
+sortByLimitNoSortAfter
+required_capability: sort_by_limit
+
+FROM employees
+| SORT salary DESC
+| LIMIT 1 BY languages
+| KEEP first_name, last_name, salary, languages
+;
+
+first_name:keyword | last_name:keyword | salary:integer | languages:integer
+Otmar              | Herbst            | 74999          | null
+Moss               | Shanbhogue        | 74970          | 3
+Tzvetan            | Zielinski         | 74572          | 4
+Lillian            | Haddadi           | 73717          | 1
+Valter             | Sullins           | 73578          | 2
+Arumugam           | Ossenbruggen      | 66817          | 5
+;
+
+sortByLimitMultiplePerGroupNoSortAfter
+required_capability: sort_by_limit
+
+FROM employees
+| SORT salary DESC
+| LIMIT 2 BY languages
+| KEEP first_name, last_name, salary, languages
+;
+
+first_name:keyword | last_name:keyword | salary:integer | languages:integer
+Otmar              | Herbst            | 74999          | null
+Moss               | Shanbhogue        | 74970          | 3
+Tzvetan            | Zielinski         | 74572          | 4
+Divier             | Reistad           | 73851          | null
+Lillian            | Haddadi           | 73717          | 1
+Valter             | Sullins           | 73578          | 2
+Remzi              | Waschkowski       | 71165          | 3
+null               | Merlo             | 70011          | 1
+Danel              | Mondadori         | 69904          | 2
+Hironobu           | Haraldson         | 68431          | 4
+Arumugam           | Ossenbruggen      | 66817          | 5
+Bezalel            | Simmel            | 56371          | 5
+;
+
+sortByLimitMultiColumnNoSortAfter
+required_capability: sort_by_limit
+
+FROM employees
+| SORT salary DESC
+| LIMIT 1 BY languages, gender
+| KEEP first_name, last_name, salary, languages, gender
+;
+
+first_name:keyword | last_name:keyword | salary:integer | languages:integer | gender:keyword
+Otmar              | Herbst            | 74999          | null              | M
+Moss               | Shanbhogue        | 74970          | 3                 | M
+Tzvetan            | Zielinski         | 74572          | 4                 | F
+Divier             | Reistad           | 73851          | null              | F
+Lillian            | Haddadi           | 73717          | 1                 | null
+Valter             | Sullins           | 73578          | 2                 | F
+null               | Merlo             | 70011          | 1                 | M
+Arumugam           | Ossenbruggen      | 66817          | 5                 | F
+Sumant             | Peac              | 66174          | 1                 | F
+Mayumi             | Schueller         | 65367          | 4                 | M
+Erez               | Ritzmann          | 62405          | 3                 | F
+Kazuhito           | Cappelletti       | 61358          | 2                 | null
+Georgi             | Facello           | 57305          | 2                 | M
+Premal             | Baek              | 52833          | 5                 | M
+Patricio           | Bridgland         | 48942          | 5                 | null
+Duangkaew          | Piveteau          | 45797          | 4                 | null
+;
