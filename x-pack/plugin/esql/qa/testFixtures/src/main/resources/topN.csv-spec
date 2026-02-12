@@ -528,3 +528,37 @@ Premal             | Baek              | 52833          | 5                 | M
 Patricio           | Bridgland         | 48942          | 5                 | null
 Duangkaew          | Piveteau          | 45797          | 4                 | null
 ;
+
+sortByLimitByGenderNoSortAfter
+required_capability: sort_by_limit
+
+FROM employees
+| SORT salary DESC
+| LIMIT 1 BY gender
+| KEEP first_name, last_name, salary, gender
+;
+
+first_name:keyword | last_name:keyword | salary:integer | gender:keyword
+Otmar              | Herbst            | 74999          | M
+Tzvetan            | Zielinski         | 74572          | F
+Lillian            | Haddadi           | 73717          | null
+;
+
+sortLimitThenSortByLimitNoSortAfter
+required_capability: sort_by_limit
+
+FROM employees
+| SORT salary DESC
+| LIMIT 10
+| SORT salary DESC
+| LIMIT 1 BY languages
+| KEEP first_name, last_name, salary, languages
+;
+
+first_name:keyword | last_name:keyword | salary:integer | languages:integer
+Otmar              | Herbst            | 74999          | null
+Moss               | Shanbhogue        | 74970          | 3
+Tzvetan            | Zielinski         | 74572          | 4
+Lillian            | Haddadi           | 73717          | 1
+Valter             | Sullins           | 73578          | 2
+;

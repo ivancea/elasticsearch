@@ -299,7 +299,7 @@ public class TopNOperator implements Operator, Accountable {
                     var insertedRow = spare;
                     spare = nextSpare; // Update spare before writing values in case the writing fails, to avoid releasing spare twice.
                     rowFiller.writeValues(i, insertedRow);
-                } else if (inputOrdering == TopNOperator.InputOrdering.SORTED) {
+                } else if (inputOrdering == TopNOperator.InputOrdering.SORTED && groupKeys.length == 0) {
                     /*
                      The queue (min-heap) is full and we have sorted input for the input page. Any other element that comes after the one
                      we just compared will be greater or equal than any other one in the queue, so we can short circuit the execution here.

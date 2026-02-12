@@ -17,11 +17,14 @@ import org.elasticsearch.compute.data.ElementType;
 import org.elasticsearch.compute.data.LongBlock;
 import org.elasticsearch.compute.data.Page;
 import org.elasticsearch.compute.lucene.IndexedByShardIdFromList;
+import org.elasticsearch.compute.operator.Driver;
 import org.elasticsearch.compute.operator.DriverContext;
+import org.elasticsearch.compute.operator.PageConsumerOperator;
 import org.elasticsearch.compute.operator.SourceOperator;
 import org.elasticsearch.compute.operator.topn.TopNOperator.SortOrder;
 import org.elasticsearch.compute.test.CannedSourceOperator;
 import org.elasticsearch.compute.test.TestBlockBuilder;
+import org.elasticsearch.compute.test.TestDriverFactory;
 import org.elasticsearch.compute.test.TestDriverRunner;
 import org.elasticsearch.compute.test.operator.blocksource.ListRowsBlockSourceOperator;
 import org.elasticsearch.compute.test.operator.blocksource.TupleLongLongBlockSourceOperator;
@@ -47,6 +50,8 @@ import java.util.stream.Stream;
 import static org.elasticsearch.compute.data.ElementType.DOC;
 import static org.elasticsearch.compute.data.ElementType.LONG;
 import static org.elasticsearch.compute.operator.topn.TopNEncoder.DEFAULT_UNSORTABLE;
+import static org.elasticsearch.compute.test.BlockTestUtils.append;
+import static org.elasticsearch.compute.test.BlockTestUtils.readInto;
 import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
@@ -161,6 +166,84 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
                 .toList(),
             equalTo(expected)
         );
+    }
+
+    /**
+     * Tests that the SORTED input ordering optimization short-circuiting addInput() doesn't incorrectly skip rows
+     * belonging to groups not yet populated when another group's row is rejected.
+     *
+     * <pre>{@code
+     * Scenario (SORT ASC, LIMIT 1 BY group):
+     * - Page 1: (group=0), (group=1) → both groups populated
+     * - Page 2: (group=0), (group=2) → (group=0) rejected from full group 0 → break skips (group=2), which was empty
+     * Expected groups: {0, 1, 2}
+     * Bug result: {0, 1} (group 2 missing)
+     * }</pre>
+     */
+    public void testSortedInputWithMultipleGroups() {
+        int topCount = 1;
+        int[] groupKeys = new int[] { 1 };
+        List<ElementType> elementTypes = List.of(ElementType.INT, ElementType.INT);
+        List<TopNEncoder> encoders = List.of(TopNEncoder.DEFAULT_SORTABLE, DEFAULT_UNSORTABLE);
+        List<SortOrder> sortOrders = List.of(new SortOrder(0, true, true));
+
+        BlockFactory bf = driverContext().blockFactory();
+
+        // Page 1: sorted ASC by sort key
+        Page page1;
+        try (
+            Block.Builder sortCol = ElementType.INT.newBlockBuilder(2, bf);
+            Block.Builder groupCol = ElementType.INT.newBlockBuilder(2, bf)
+        ) {
+            append(sortCol, 1);
+            append(sortCol, 3);
+            append(groupCol, 0);
+            append(groupCol, 1);
+            page1 = new Page(sortCol.build(), groupCol.build());
+        }
+
+        // Page 2: sorted ASC by sort key
+        Page page2;
+        try (
+            Block.Builder sortCol = ElementType.INT.newBlockBuilder(2, bf);
+            Block.Builder groupCol = ElementType.INT.newBlockBuilder(2, bf)
+        ) {
+            append(sortCol, 2);
+            append(sortCol, 4);
+            append(groupCol, 0);
+            append(groupCol, 2);
+            page2 = new Page(sortCol.build(), groupCol.build());
+        }
+
+        List<List<Object>> actual = new ArrayList<>();
+        DriverContext driverContext = driverContext();
+
+        try (
+            Driver driver = TestDriverFactory.create(
+                driverContext,
+                new CannedSourceOperator(List.of(page1, page2).iterator()),
+                List.of(
+                    new TopNOperator(
+                        driverContext.blockFactory(),
+                        nonBreakingBigArrays().breakerService().getBreaker("request"),
+                        topCount,
+                        elementTypes,
+                        encoders,
+                        sortOrders,
+                        groupKeys,
+                        randomPageSize(),
+                        TopNOperator.InputOrdering.SORTED
+                    )
+                ),
+                new PageConsumerOperator(p -> readInto(actual, p))
+            )
+        ) {
+            new TestDriverRunner().run(driver);
+        }
+
+        // 3 groups, each with 1 value, ordered ASC: [1, 3, 4]
+        assertThat(actual.get(0), equalTo(List.of(1, 3, 4)));
+        assertThat(actual.get(1), equalTo(List.of(0, 1, 2)));
     }
 
     public void testEstimateRamBytesUsed() {
