@@ -156,7 +156,7 @@ public class Limit extends UnaryPlan implements TelemetryAware, PipelineBreaker,
 
     @Override
     public int hashCode() {
-        return Objects.hash(limit, child(), duplicated, local);
+        return Objects.hash(limit, child(), duplicated, local, groupings);
     }
 
     @Override
@@ -173,7 +173,8 @@ public class Limit extends UnaryPlan implements TelemetryAware, PipelineBreaker,
         return Objects.equals(limit, other.limit)
             && Objects.equals(child(), other.child())
             && (duplicated == other.duplicated)
-            && (local == other.local);
+            && (local == other.local)
+            && Objects.equals(groupings, other.groupings);
     }
 
     @Override

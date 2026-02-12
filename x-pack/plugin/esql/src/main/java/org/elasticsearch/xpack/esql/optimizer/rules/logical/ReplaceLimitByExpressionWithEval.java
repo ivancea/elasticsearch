@@ -44,7 +44,7 @@ public final class ReplaceLimitByExpressionWithEval extends OptimizerRules.Optim
 
         // Phase 1: prune foldable groupings -- they evaluate to a constant and have no grouping effect.
         // Groupings arrive from the parser as either raw Attributes (e.g. languages) or Alias nodes wrapping
-        // the expression (e.g. Alias("languages * 2", Mul(...))).  Alias.foldable() is always false, so we
+        // the expression (e.g. Alias("languages * 2", Mul(...))). Alias.foldable() is always false, so we
         // unwrap to check the child.
         List<Expression> newGroupings = new ArrayList<>();
         for (Expression g : limit.groupings()) {
@@ -59,7 +59,7 @@ public final class ReplaceLimitByExpressionWithEval extends OptimizerRules.Optim
         }
 
         // Phase 2: extract non-attribute grouping expressions into a synthetic Eval.
-        // Groupings that are already Attributes are left as-is.  Alias nodes are moved directly into
+        // Groupings that are already Attributes are left as-is. Alias nodes are moved directly into
         // the eval list (mirroring ReplaceAggregateNestedExpressionWithEval) rather than wrapped in a
         // second Alias.
         int counter = 0;
