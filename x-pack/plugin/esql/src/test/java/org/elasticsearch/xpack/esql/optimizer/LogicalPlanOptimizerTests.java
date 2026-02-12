@@ -11257,6 +11257,102 @@ public class LogicalPlanOptimizerTests extends AbstractLogicalPlanOptimizerTests
     }
 
     /**
+     * LIMIT BY with an expression should extract the expression into a synthetic EVAL.
+     * {@code FROM employees | SORT salary | LIMIT 2 BY languages * 2}
+     * becomes
+     * {@code Project | TopN[groupings=[$$limit_by_ref]] | Eval[$$limit_by = languages * 2] | EsRelation}
+     */
+    public void testTopNWithGroupingsExpressionPlan() {
+        var query = """
+            FROM employees
+            | SORT salary DESC
+            | LIMIT 5 BY languages * 2
+            """;
+
+        var plan = optimizedPlan(query);
+
+        // Project hides the synthetic eval attribute
+        var project = as(plan, Project.class);
+
+        // TopN has the synthetic attribute as grouping
+        var groupedTopN = as(project.child(), TopN.class);
+        var limit = as(groupedTopN.limit(), Literal.class);
+        assertThat(limit.value(), equalTo(5));
+        assertThat(groupedTopN.order().size(), equalTo(1));
+
+        assertThat(groupedTopN.groupings().size(), equalTo(1));
+        var groupKey = as(groupedTopN.groupings().getFirst(), ReferenceAttribute.class);
+
+        var order = as(groupedTopN.order().getFirst(), Order.class);
+        var orderAttr = as(order.child(), FieldAttribute.class);
+        assertThat(orderAttr.name(), equalTo("salary"));
+        assertThat(order.direction(), equalTo(Order.OrderDirection.DESC));
+
+        // Eval computes the expression
+        var eval = as(groupedTopN.child(), Eval.class);
+        assertThat(eval.fields().size(), equalTo(1));
+        var alias = as(eval.fields().getFirst(), Alias.class);
+        assertThat(alias.toAttribute().id(), equalTo(groupKey.id()));
+        assertThat(as(alias.child(), Alias.class).child(), instanceOf(Mul.class));
+
+        as(eval.child(), EsRelation.class);
+    }
+
+    /**
+     * LIMIT BY with a plain attribute should not introduce any synthetic EVAL.
+     * The plan should be the same as the existing testTopNWithGroupingsPlan.
+     */
+    public void testTopNWithGroupingsAttributeNoEval() {
+        var query = """
+            FROM employees
+            | SORT salary DESC
+            | LIMIT 5 BY languages
+            """;
+
+        var plan = optimizedPlan(query);
+
+        // No Project wrapper -- grouping is already an attribute
+        var groupedTopN = as(plan, TopN.class);
+        assertThat(groupedTopN.groupings().size(), equalTo(1));
+        assertThat(groupedTopN.groupings().getFirst(), instanceOf(FieldAttribute.class));
+        as(groupedTopN.child(), EsRelation.class);
+    }
+
+    /**
+     * LIMIT BY with a mix of attributes and expressions should only extract the expression.
+     * {@code FROM employees | SORT salary | LIMIT 2 BY languages, salary * 2}
+     */
+    public void testTopNWithGroupingsMixedPlan() {
+        var query = """
+            FROM employees
+            | SORT salary DESC
+            | LIMIT 5 BY languages, salary * 2
+            """;
+
+        var plan = optimizedPlan(query);
+
+        var project = as(plan, Project.class);
+        var groupedTopN = as(project.child(), TopN.class);
+        assertThat(groupedTopN.groupings().size(), equalTo(2));
+
+        // First grouping is a plain attribute -- no extraction needed
+        var firstGroupKey = as(groupedTopN.groupings().get(0), FieldAttribute.class);
+        assertThat(firstGroupKey.name(), equalTo("languages"));
+
+        // Second grouping is a synthetic reference attribute
+        var secondGroupKey = as(groupedTopN.groupings().get(1), ReferenceAttribute.class);
+
+        // Eval only computes the expression for the second grouping
+        var eval = as(groupedTopN.child(), Eval.class);
+        assertThat(eval.fields().size(), equalTo(1));
+        var alias = as(eval.fields().getFirst(), Alias.class);
+        assertThat(alias.toAttribute().id(), equalTo(secondGroupKey.id()));
+        assertThat(as(alias.child(), Alias.class).child(), instanceOf(Mul.class));
+
+        as(eval.child(), EsRelation.class);
+    }
+
+    /**
      * SORT followed by LOOKUP JOIN should warn because the order is lost.
      */
     public void testWarnSortBeforeLookupJoin() {

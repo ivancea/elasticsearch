@@ -17,7 +17,7 @@ import org.elasticsearch.xpack.esql.common.Failures;
 import org.elasticsearch.xpack.esql.core.capabilities.Unresolvable;
 import org.elasticsearch.xpack.esql.core.expression.Alias;
 import org.elasticsearch.xpack.esql.core.expression.Expression;
-import org.elasticsearch.xpack.esql.core.expression.FieldAttribute;
+
 import org.elasticsearch.xpack.esql.core.expression.MetadataAttribute;
 import org.elasticsearch.xpack.esql.core.expression.TypeResolutions;
 import org.elasticsearch.xpack.esql.core.expression.function.Function;
@@ -339,12 +339,6 @@ public class Verifier {
         if (plan instanceof Limit limit && limit.groupings().isEmpty() == false) {
             if (limit.child() instanceof OrderBy == false) {
                 failures.add(fail(limit, "When BY is used in LIMIT, the query needs to have a SORT before the LIMIT"));
-            }
-
-            var groupings = limit.groupings();
-
-            if (groupings.stream().anyMatch(grouping -> grouping instanceof FieldAttribute == false)) {
-                failures.add(fail(limit, "only index attributes can be used in LIMIT BY"));
             }
         }
     }

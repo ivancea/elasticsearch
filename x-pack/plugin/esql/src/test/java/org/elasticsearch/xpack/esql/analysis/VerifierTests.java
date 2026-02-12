@@ -3639,18 +3639,6 @@ public class VerifierTests extends ESTestCase {
             | SORT salary DESC
             | LIMIT 5 BY made_up_attr
             """, defaultAnalyzer, VerificationException.class), containsString("Unknown column [made_up_attr]"));
-
-        assertThat(error("""
-            FROM test
-            | SORT salary DESC
-            | LIMIT 5 BY 45
-            """, defaultAnalyzer, VerificationException.class), containsString("only index attributes can be used in LIMIT BY"));
-
-        assertThat(error("""
-            FROM test
-            | SORT salary DESC
-            | LIMIT 5 BY languages * 2
-            """, defaultAnalyzer, VerificationException.class), containsString("only index attributes can be used in LIMIT BY"));
     }
 
     public void testMMRLimitedInput() {

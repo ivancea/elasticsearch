@@ -59,6 +59,7 @@ import org.elasticsearch.xpack.esql.optimizer.rules.logical.ReplaceAggregateAggE
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.ReplaceAggregateNestedExpressionWithEval;
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.ReplaceAliasingEvalWithProject;
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.ReplaceLimitAndSortAsTopN;
+import org.elasticsearch.xpack.esql.optimizer.rules.logical.ReplaceLimitByExpressionWithEval;
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.ReplaceOrderByExpressionWithEval;
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.ReplaceRegexMatch;
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.ReplaceRowAsLocalRelation;
@@ -174,7 +175,8 @@ public class LogicalPlanOptimizer extends ParameterizedRuleExecutor<LogicalPlan,
             new SubstituteSurrogateExpressions(),
             // check for a trivial conversion introduced by a surrogate
             new ReplaceTrivialTypeConversions(),
-            new ReplaceOrderByExpressionWithEval()
+            new ReplaceOrderByExpressionWithEval(),
+            new ReplaceLimitByExpressionWithEval()
             // new NormalizeAggregate(), - waits on https://github.com/elastic/elasticsearch/issues/100634
         );
     }
