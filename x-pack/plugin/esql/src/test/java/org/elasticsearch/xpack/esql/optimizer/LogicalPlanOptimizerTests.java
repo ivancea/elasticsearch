@@ -11270,7 +11270,7 @@ public class LogicalPlanOptimizerTests extends AbstractLogicalPlanOptimizerTests
         assertThat(eval.fields().size(), equalTo(1));
         var alias = as(eval.fields().getFirst(), Alias.class);
         assertThat(alias.toAttribute().id(), equalTo(groupKey.id()));
-        assertThat(as(alias.child(), Alias.class).child(), instanceOf(Mul.class));
+        assertThat(alias.child(), instanceOf(Mul.class));
 
         as(eval.child(), EsRelation.class);
     }
@@ -11304,14 +11304,14 @@ public class LogicalPlanOptimizerTests extends AbstractLogicalPlanOptimizerTests
         assertThat(eval.fields().size(), equalTo(1));
         var alias = as(eval.fields().getFirst(), Alias.class);
         assertThat(alias.toAttribute().id(), equalTo(secondGroupKey.id()));
-        assertThat(as(alias.child(), Alias.class).child(), instanceOf(Mul.class));
+        assertThat(alias.child(), instanceOf(Mul.class));
 
         as(eval.child(), EsRelation.class);
     }
 
     /**
-     * The groupings should be removed in this case and we should have a normal LIMIT 5
-     **/
+     * All groupings are foldable -- the LIMIT BY degenerates to a plain LIMIT (TopN with no groupings).
+     */
     public void testTopNWithGroupingsByConstant() {
         var query = """
             FROM employees
@@ -11321,9 +11321,61 @@ public class LogicalPlanOptimizerTests extends AbstractLogicalPlanOptimizerTests
 
         var plan = optimizedPlan(query);
 
+        // No Project wrapper needed -- no synthetic eval was created
+        var topN = as(plan, TopN.class);
+        assertThat(topN.groupings().size(), equalTo(0));
+        var limit = as(topN.limit(), Literal.class);
+        assertThat(limit.value(), equalTo(5));
+        as(topN.child(), EsRelation.class);
+    }
+
+    /**
+     * Mixed foldable and attribute groupings: the foldable one (42) is pruned, the attribute (languages) remains.
+     */
+    public void testTopNWithGroupingsMixedFoldableAndAttribute() {
+        var query = """
+            FROM employees
+            | SORT salary DESC
+            | LIMIT 5 BY languages, 42
+            """;
+
+        var plan = optimizedPlan(query);
+
+        // No Project wrapper -- the remaining grouping is a plain attribute, no eval needed
+        var topN = as(plan, TopN.class);
+        assertThat(topN.groupings().size(), equalTo(1));
+        var groupKey = as(topN.groupings().getFirst(), FieldAttribute.class);
+        assertThat(groupKey.name(), equalTo("languages"));
+        var limit = as(topN.limit(), Literal.class);
+        assertThat(limit.value(), equalTo(5));
+        as(topN.child(), EsRelation.class);
+    }
+
+    /**
+     * Mixed foldable and expression groupings: the foldable (42) is pruned, the expression (languages * 2) is extracted to eval.
+     */
+    public void testTopNWithGroupingsMixedFoldableAndExpression() {
+        var query = """
+            FROM employees
+            | SORT salary DESC
+            | LIMIT 5 BY languages * 2, 42
+            """;
+
+        var plan = optimizedPlan(query);
+
+        // Project hides the synthetic eval attribute
         var project = as(plan, Project.class);
         var topN = as(project.child(), TopN.class);
-        assertThat(topN.groupings().size(), equalTo(0));
+        assertThat(topN.groupings().size(), equalTo(1));
+        var groupKey = as(topN.groupings().getFirst(), ReferenceAttribute.class);
+
+        // Eval computes the expression
+        var eval = as(topN.child(), Eval.class);
+        assertThat(eval.fields().size(), equalTo(1));
+        var alias = as(eval.fields().getFirst(), Alias.class);
+        assertThat(alias.toAttribute().id(), equalTo(groupKey.id()));
+
+        as(eval.child(), EsRelation.class);
     }
 
     public void testTopNWithGroupingsAndSeveralSorts() {
@@ -11418,7 +11470,7 @@ public class LogicalPlanOptimizerTests extends AbstractLogicalPlanOptimizerTests
 
         assertThat(groupedTopN.groupings().size(), equalTo(2));
         var firstGroupKey = as(groupedTopN.groupings().get(0), ReferenceAttribute.class);
-        assertThat(firstGroupKey.synthetic(), equalTo(true));
+        assertThat(firstGroupKey.synthetic(), equalTo(false));
         var secondGroupKey = as(groupedTopN.groupings().get(1), FieldAttribute.class);
         assertThat(secondGroupKey.synthetic(), equalTo(false));
         assertThat(secondGroupKey.field().getName(), equalTo("job"));
@@ -11427,7 +11479,7 @@ public class LogicalPlanOptimizerTests extends AbstractLogicalPlanOptimizerTests
         assertThat(eval.fields().size(), equalTo(1));
         var alias = as(eval.fields().getFirst(), Alias.class);
         assertThat(alias.toAttribute().id(), equalTo(firstGroupKey.id()));
-        assertThat(as(alias.child(), Alias.class).child(), instanceOf(Mul.class));
+        as(alias.child(), Mul.class);
 
         var order = as(groupedTopN.order().getFirst(), Order.class);
         var orderAttr = as(order.child(), FieldAttribute.class);

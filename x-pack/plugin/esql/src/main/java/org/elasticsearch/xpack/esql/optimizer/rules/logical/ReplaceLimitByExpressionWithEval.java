@@ -22,12 +22,17 @@ import java.util.List;
 import static org.elasticsearch.xpack.esql.core.expression.Attribute.rawTemporaryName;
 
 /**
- * Replace nested expressions inside a {@link Limit}'s groupings (LIMIT BY) with synthetic eval.
- * {@code SORT salary | LIMIT 2 BY languages * 2}
- * becomes
- * {@code SORT salary | EVAL $$limit_by_0 = languages * 2 | LIMIT 2 BY $$limit_by_0}
- * The eval is inserted below the {@link OrderBy} to preserve the {@code Limit -> OrderBy} structure
- * needed by {@link ReplaceLimitAndSortAsTopN}.
+ * Two-phase rewrite of {@link Limit} groupings (LIMIT BY):
+ * <ol>
+ *   <li><b>Prune foldable groupings.</b> A foldable expression evaluates to the same constant for every row, so it has
+ *       no grouping effect. If all groupings are foldable the LIMIT BY degenerates to a plain LIMIT.</li>
+ *   <li><b>Extract non-attribute expressions into a synthetic {@link Eval}.</b>
+ *       {@code SORT salary | LIMIT N BY languages * 2}
+ *       becomes
+ *       {@code SORT salary | EVAL $$limit_by_0 = languages * 2 | LIMIT N BY $$limit_by_0}
+ *       The eval is inserted below the {@link OrderBy} to preserve the {@code Limit -> OrderBy} structure
+ *       needed by {@link ReplaceLimitAndSortAsTopN}.</li>
+ * </ol>
  */
 public final class ReplaceLimitByExpressionWithEval extends OptimizerRules.OptimizerRule<Limit> {
 
@@ -37,23 +42,50 @@ public final class ReplaceLimitByExpressionWithEval extends OptimizerRules.Optim
             return limit;
         }
 
-        List<Expression> groupings = limit.groupings();
-        int size = groupings.size();
+        // Phase 1: prune foldable groupings -- they evaluate to a constant and have no grouping effect.
+        // Groupings arrive from the parser as either raw Attributes (e.g. languages) or Alias nodes wrapping
+        // the expression (e.g. Alias("languages * 2", Mul(...))).  Alias.foldable() is always false, so we
+        // unwrap to check the child.
+        List<Expression> newGroupings = new ArrayList<>();
+        for (Expression g : limit.groupings()) {
+            Expression toCheck = g instanceof Alias as ? as.child() : g;
+            if (toCheck.foldable() == false) {
+                newGroupings.add(g);
+            }
+        }
+        if (newGroupings.isEmpty()) {
+            // All groupings were foldable -- degenerate to plain LIMIT
+            return new Limit(limit.source(), limit.limit(), limit.child(), List.of(), limit.duplicated(), limit.local());
+        }
+
+        // Phase 2: extract non-attribute grouping expressions into a synthetic Eval.
+        // Groupings that are already Attributes are left as-is.  Alias nodes are moved directly into
+        // the eval list (mirroring ReplaceAggregateNestedExpressionWithEval) rather than wrapped in a
+        // second Alias.
         int counter = 0;
+        int size = newGroupings.size();
         List<Alias> evals = new ArrayList<>(size);
-        List<Expression> newGroupings = new ArrayList<>(groupings);
 
         for (int i = 0; i < size; i++) {
             Expression g = newGroupings.get(i);
-            if (g instanceof Attribute == false) {
+            if (g instanceof Alias as) {
+                // Move the existing alias into the eval and replace the grouping with its attribute
+                evals.add(as);
+                newGroupings.set(i, as.toAttribute());
+            } else if (g instanceof Attribute == false) {
                 var name = rawTemporaryName("LIMIT BY", String.valueOf(i), String.valueOf(counter++));
                 var alias = new Alias(g.source(), name, g, null, true);
                 evals.add(alias);
                 newGroupings.set(i, alias.toAttribute());
             }
+            // else: g is already an Attribute, leave it as-is
         }
 
         if (evals.isEmpty()) {
+            // Groupings changed (foldables pruned) but all remaining are already attributes -- update the Limit
+            if (newGroupings.size() != limit.groupings().size()) {
+                return new Limit(limit.source(), limit.limit(), limit.child(), newGroupings, limit.duplicated(), limit.local());
+            }
             return limit;
         }
 
