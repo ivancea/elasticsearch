@@ -16,26 +16,17 @@ import java.util.Map;
 import static org.elasticsearch.xpack.esql.type.EsqlDataTypeConverter.dateTimeToLong;
 
 public class LimitPerGoldenTests extends GoldenTestCase {
-    String query = """
-        FROM employees
-        | SORT salary
-        | LIMIT 2 PER_🐔 languages
-        """;
 
-    public void testLimitPerParsing() {
-        runGoldenTest(query, EnumSet.of(Stage.ANALYSIS), STATS);
-    }
-
-    public void testLimitPerLogicalPlan() {
-        runGoldenTest(query, EnumSet.of(Stage.LOGICAL_OPTIMIZATION), STATS);
-    }
-
-    public void testLimitPerPhysical() {
-        runGoldenTest(query, EnumSet.of(Stage.PHYSICAL_OPTIMIZATION), STATS);
-    }
-
-    public void testLimitPerLocalPhysical() {
-        runGoldenTest(query, EnumSet.of(Stage.LOCAL_PHYSICAL_OPTIMIZATION), STATS);
+    public void testLimitPer() {
+        runGoldenTest(
+            """
+                FROM employees
+                | SORT salary
+                | LIMIT 2 PER_🐔 languages
+                """,
+            EnumSet.of(Stage.ANALYSIS, Stage.LOGICAL_OPTIMIZATION, Stage.PHYSICAL_OPTIMIZATION, Stage.LOCAL_PHYSICAL_OPTIMIZATION),
+            STATS
+        );
     }
 
     private static final EsqlTestUtils.TestSearchStatsWithMinMax STATS = new EsqlTestUtils.TestSearchStatsWithMinMax(
