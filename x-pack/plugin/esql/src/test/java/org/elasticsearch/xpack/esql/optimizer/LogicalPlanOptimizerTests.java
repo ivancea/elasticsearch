@@ -11200,6 +11200,10 @@ public class LogicalPlanOptimizerTests extends AbstractLogicalPlanOptimizerTests
         as(leftEval.child(), EsRelation.class);
     }
 
+    /**
+     * LIMIT BY with a plain attribute should not introduce any synthetic EVAL.
+     * The plan should be the same as the existing testTopNWithGroupingsPlan.
+     */
     public void testTopNWithGroupingsPlan() {
         var query = """
             FROM employees
@@ -11217,34 +11221,7 @@ public class LogicalPlanOptimizerTests extends AbstractLogicalPlanOptimizerTests
         assertThat(groupedTopN.groupings(), everyItem(instanceOf(FieldAttribute.class)));
         assertThat(groupedTopN.groupings().size(), equalTo(1));
         var groupKey = as(groupedTopN.groupings().getFirst(), FieldAttribute.class);
-        assertThat(groupKey.name(), equalTo("languages"));
-
-        var order = as(groupedTopN.order().getFirst(), Order.class);
-        var orderAttr = as(order.child(), FieldAttribute.class);
-        assertThat(orderAttr.name(), equalTo("salary"));
-        assertThat(order.direction(), equalTo(Order.OrderDirection.DESC));
-
-        var esRelation = as(groupedTopN.child(), EsRelation.class);
-        assertThat(esRelation.indexPattern(), equalTo("employees"));
-    }
-
-    public void testTopNWithGroupingsQualifiedNamePlan() {
-        var query = """
-            FROM employees
-            | SORT salary DESC
-            | LIMIT 5 BY [employees].[languages]
-            """;
-
-        var plan = optimizedPlan(query);
-
-        var groupedTopN = as(plan, TopN.class);
-        var limit = as(groupedTopN.limit(), Literal.class);
-        assertThat(limit.value(), equalTo(5));
-        assertThat(groupedTopN.order().size(), equalTo(1));
-
-        assertThat(groupedTopN.groupings(), everyItem(instanceOf(FieldAttribute.class)));
-        assertThat(groupedTopN.groupings().size(), equalTo(1));
-        var groupKey = as(groupedTopN.groupings().getFirst(), FieldAttribute.class);
+        assertThat(groupKey.synthetic(), equalTo(false));
         assertThat(groupKey.name(), equalTo("languages"));
 
         var order = as(groupedTopN.order().getFirst(), Order.class);
@@ -11299,26 +11276,6 @@ public class LogicalPlanOptimizerTests extends AbstractLogicalPlanOptimizerTests
     }
 
     /**
-     * LIMIT BY with a plain attribute should not introduce any synthetic EVAL.
-     * The plan should be the same as the existing testTopNWithGroupingsPlan.
-     */
-    public void testTopNWithGroupingsAttributeNoEval() {
-        var query = """
-            FROM employees
-            | SORT salary DESC
-            | LIMIT 5 BY languages
-            """;
-
-        var plan = optimizedPlan(query);
-
-        // No Project wrapper -- grouping is already an attribute
-        var groupedTopN = as(plan, TopN.class);
-        assertThat(groupedTopN.groupings().size(), equalTo(1));
-        assertThat(groupedTopN.groupings().getFirst(), instanceOf(FieldAttribute.class));
-        as(groupedTopN.child(), EsRelation.class);
-    }
-
-    /**
      * LIMIT BY with a mix of attributes and expressions should only extract the expression.
      * {@code FROM employees | SORT salary | LIMIT 2 BY languages, salary * 2}
      */
@@ -11350,6 +11307,163 @@ public class LogicalPlanOptimizerTests extends AbstractLogicalPlanOptimizerTests
         assertThat(as(alias.child(), Alias.class).child(), instanceOf(Mul.class));
 
         as(eval.child(), EsRelation.class);
+    }
+
+    /**
+     * The groupings should be removed in this case and we should have a normal LIMIT 5
+     **/
+    public void testTopNWithGroupingsByConstant() {
+        var query = """
+            FROM employees
+            | SORT salary DESC
+            | LIMIT 5 BY 20 * 5, 10
+            """;
+
+        var plan = optimizedPlan(query);
+
+        var project = as(plan, Project.class);
+        var topN = as(project.child(), TopN.class);
+        assertThat(topN.groupings().size(), equalTo(0));
+    }
+
+    public void testTopNWithGroupingsAndSeveralSorts() {
+        var query = """
+            FROM employees
+            | SORT emp_no DESC
+            | SORT salary DESC
+            | LIMIT 5 BY languages
+            """;
+
+        var plan = optimizedPlan(query);
+
+        var groupedTopN = as(plan, TopN.class);
+        var limit = as(groupedTopN.limit(), Literal.class);
+        assertThat(limit.value(), equalTo(5));
+        assertThat(groupedTopN.order().size(), equalTo(1));
+
+        assertThat(groupedTopN.groupings(), everyItem(instanceOf(FieldAttribute.class)));
+        assertThat(groupedTopN.groupings().size(), equalTo(1));
+        var groupKey = as(groupedTopN.groupings().getFirst(), FieldAttribute.class);
+        assertThat(groupKey.name(), equalTo("languages"));
+
+        var order = as(groupedTopN.order().getFirst(), Order.class);
+        var orderAttr = as(order.child(), FieldAttribute.class);
+        assertThat(orderAttr.name(), equalTo("salary"));
+        assertThat(order.direction(), equalTo(Order.OrderDirection.DESC));
+
+        var esRelation = as(groupedTopN.child(), EsRelation.class);
+        assertThat(esRelation.indexPattern(), equalTo("employees"));
+    }
+
+    public void testTopNWithGroupingsAndNonContiguousSorts() {
+        var query = """
+            FROM employees
+            | SORT emp_no DESC
+            | KEEP emp_no, salary, languages
+            | SORT salary DESC
+            | LIMIT 5 BY languages
+            """;
+
+        var plan = optimizedPlan(query);
+
+        var project = as(plan, Project.class);
+        var projections = project.projections();
+        assertThat(projections.size(), equalTo(3));
+        assertThat(projections.get(0).name(), equalTo("emp_no"));
+        assertThat(projections.get(1).name(), equalTo("salary"));
+        assertThat(projections.get(2).name(), equalTo("languages"));
+
+        var groupedTopN = as(project.child(), TopN.class);
+        var limit = as(groupedTopN.limit(), Literal.class);
+        assertThat(limit.value(), equalTo(5));
+        assertThat(groupedTopN.order().size(), equalTo(1));
+
+        assertThat(groupedTopN.groupings(), everyItem(instanceOf(FieldAttribute.class)));
+        assertThat(groupedTopN.groupings().size(), equalTo(1));
+        var groupKey = as(groupedTopN.groupings().getFirst(), FieldAttribute.class);
+        assertThat(groupKey.name(), equalTo("languages"));
+
+        var order = as(groupedTopN.order().getFirst(), Order.class);
+        var orderAttr = as(order.child(), FieldAttribute.class);
+        assertThat(orderAttr.name(), equalTo("salary"));
+        assertThat(order.direction(), equalTo(Order.OrderDirection.DESC));
+
+        var esRelation = as(groupedTopN.child(), EsRelation.class);
+        assertThat(esRelation.indexPattern(), equalTo("employees"));
+    }
+
+    public void testTopNWithEvalAndNonEvalGroupings() {
+        var query = """
+            FROM employees
+            | SORT emp_no DESC
+            | KEEP emp_no, salary, languages, job
+            | SORT salary DESC
+            | LIMIT 5 BY languages * 2, job
+            """;
+
+        var plan = optimizedPlan(query);
+
+        var project = as(plan, Project.class);
+        var projections = project.projections();
+        assertThat(projections.size(), equalTo(4));
+        assertThat(projections.get(0).name(), equalTo("emp_no"));
+        assertThat(projections.get(1).name(), equalTo("salary"));
+        assertThat(projections.get(2).name(), equalTo("languages"));
+        assertThat(projections.get(3).name(), equalTo("job"));
+
+        var groupedTopN = as(project.child(), TopN.class);
+        var limit = as(groupedTopN.limit(), Literal.class);
+        assertThat(limit.value(), equalTo(5));
+        assertThat(groupedTopN.order().size(), equalTo(1));
+
+        assertThat(groupedTopN.groupings().size(), equalTo(2));
+        var firstGroupKey = as(groupedTopN.groupings().get(0), ReferenceAttribute.class);
+        assertThat(firstGroupKey.synthetic(), equalTo(true));
+        var secondGroupKey = as(groupedTopN.groupings().get(1), FieldAttribute.class);
+        assertThat(secondGroupKey.synthetic(), equalTo(false));
+        assertThat(secondGroupKey.field().getName(), equalTo("job"));
+
+        var eval = as(groupedTopN.child(), Eval.class);
+        assertThat(eval.fields().size(), equalTo(1));
+        var alias = as(eval.fields().getFirst(), Alias.class);
+        assertThat(alias.toAttribute().id(), equalTo(firstGroupKey.id()));
+        assertThat(as(alias.child(), Alias.class).child(), instanceOf(Mul.class));
+
+        var order = as(groupedTopN.order().getFirst(), Order.class);
+        var orderAttr = as(order.child(), FieldAttribute.class);
+        assertThat(orderAttr.name(), equalTo("salary"));
+        assertThat(order.direction(), equalTo(Order.OrderDirection.DESC));
+
+        var esRelation = as(eval.child(), EsRelation.class);
+        assertThat(esRelation.indexPattern(), equalTo("employees"));
+    }
+
+    public void testTopNWithGroupingsQualifiedNamePlan() {
+        var query = """
+            FROM employees
+            | SORT salary DESC
+            | LIMIT 5 BY [employees].[languages]
+            """;
+
+        var plan = optimizedPlan(query);
+
+        var groupedTopN = as(plan, TopN.class);
+        var limit = as(groupedTopN.limit(), Literal.class);
+        assertThat(limit.value(), equalTo(5));
+        assertThat(groupedTopN.order().size(), equalTo(1));
+
+        assertThat(groupedTopN.groupings(), everyItem(instanceOf(FieldAttribute.class)));
+        assertThat(groupedTopN.groupings().size(), equalTo(1));
+        var groupKey = as(groupedTopN.groupings().getFirst(), FieldAttribute.class);
+        assertThat(groupKey.name(), equalTo("languages"));
+
+        var order = as(groupedTopN.order().getFirst(), Order.class);
+        var orderAttr = as(order.child(), FieldAttribute.class);
+        assertThat(orderAttr.name(), equalTo("salary"));
+        assertThat(order.direction(), equalTo(Order.OrderDirection.DESC));
+
+        var esRelation = as(groupedTopN.child(), EsRelation.class);
+        assertThat(esRelation.indexPattern(), equalTo("employees"));
     }
 
     /**

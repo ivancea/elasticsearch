@@ -30,7 +30,6 @@ import static org.elasticsearch.xpack.esql.core.expression.Attribute.rawTemporar
  * needed by {@link ReplaceLimitAndSortAsTopN}.
  */
 public final class ReplaceLimitByExpressionWithEval extends OptimizerRules.OptimizerRule<Limit> {
-    private static int counter = 0;
 
     @Override
     protected LogicalPlan rule(Limit limit) {
@@ -38,15 +37,17 @@ public final class ReplaceLimitByExpressionWithEval extends OptimizerRules.Optim
             return limit;
         }
 
-        int size = limit.groupings().size();
+        List<Expression> groupings = limit.groupings();
+        int size = groupings.size();
+        int counter = 0;
         List<Alias> evals = new ArrayList<>(size);
-        List<Expression> newGroupings = new ArrayList<>(limit.groupings());
+        List<Expression> newGroupings = new ArrayList<>(groupings);
 
         for (int i = 0; i < size; i++) {
             Expression g = newGroupings.get(i);
             if (g instanceof Attribute == false) {
-                var name = rawTemporaryName("limit_by", String.valueOf(i), String.valueOf(counter++));
-                var alias = new Alias(g.source(), name, g);
+                var name = rawTemporaryName("LIMIT BY", String.valueOf(i), String.valueOf(counter++));
+                var alias = new Alias(g.source(), name, g, null, true);
                 evals.add(alias);
                 newGroupings.set(i, alias.toAttribute());
             }
