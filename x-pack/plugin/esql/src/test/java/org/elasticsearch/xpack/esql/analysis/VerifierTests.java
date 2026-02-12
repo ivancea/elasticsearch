@@ -3625,32 +3625,32 @@ public class VerifierTests extends ESTestCase {
         );
     }
 
-    public void testLimitPer() {
+    public void testLimitBy() {
         assertThat(
             error("""
                 FROM test
-                | LIMIT 5 PER_🐔 languages
+                | LIMIT 5 BY languages
                 """, defaultAnalyzer, VerificationException.class),
-            containsString("When PER is used in LIMIT, the query needs to have a SORT before the LIMIT")
+            containsString("When BY is used in LIMIT, the query needs to have a SORT before the LIMIT")
         );
 
         assertThat(error("""
             FROM test
             | SORT salary DESC
-            | LIMIT 5 PER_🐔 made_up_attr
+            | LIMIT 5 BY made_up_attr
             """, defaultAnalyzer, VerificationException.class), containsString("Unknown column [made_up_attr]"));
 
         assertThat(error("""
             FROM test
             | SORT salary DESC
-            | LIMIT 5 PER_🐔 45
-            """, defaultAnalyzer, VerificationException.class), containsString("only index attributes can be used in LIMIT PER"));
+            | LIMIT 5 BY 45
+            """, defaultAnalyzer, VerificationException.class), containsString("only index attributes can be used in LIMIT BY"));
 
         assertThat(error("""
             FROM test
             | SORT salary DESC
-            | LIMIT 5 PER_🐔 languages * 2
-            """, defaultAnalyzer, VerificationException.class), containsString("only index attributes can be used in LIMIT PER"));
+            | LIMIT 5 BY languages * 2
+            """, defaultAnalyzer, VerificationException.class), containsString("only index attributes can be used in LIMIT BY"));
     }
 
     public void testMMRLimitedInput() {

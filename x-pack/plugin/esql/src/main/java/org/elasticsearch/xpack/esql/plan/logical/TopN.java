@@ -21,7 +21,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
 
-import static org.elasticsearch.xpack.esql.plan.logical.Limit.ESQL_LIMIT_PER;
+import static org.elasticsearch.xpack.esql.plan.logical.Limit.ESQL_LIMIT_BY;
 
 public class TopN extends UnaryPlan implements PipelineBreaker, ExecutesOn {
     public static final NamedWriteableRegistry.Entry ENTRY = new NamedWriteableRegistry.Entry(LogicalPlan.class, "TopN", TopN::new);
@@ -54,7 +54,7 @@ public class TopN extends UnaryPlan implements PipelineBreaker, ExecutesOn {
             false
         );
 
-        if (in.getTransportVersion().supports(ESQL_LIMIT_PER)) {
+        if (in.getTransportVersion().supports(ESQL_LIMIT_BY)) {
             this.groupings = in.readNamedWriteableCollectionAsList(Expression.class);
         }
     }
@@ -65,10 +65,10 @@ public class TopN extends UnaryPlan implements PipelineBreaker, ExecutesOn {
         out.writeNamedWriteable(child());
         out.writeCollection(order);
         out.writeNamedWriteable(limit);
-        if (out.getTransportVersion().supports(ESQL_LIMIT_PER)) {
+        if (out.getTransportVersion().supports(ESQL_LIMIT_BY)) {
             out.writeNamedWriteableCollection(groupings);
         } else if (groupings.isEmpty() == false) {
-            throw new IllegalArgumentException("LIMIT PER is not supported by all nodes in the cluster");
+            throw new IllegalArgumentException("LIMIT BY is not supported by all nodes in the cluster");
         }
     }
 

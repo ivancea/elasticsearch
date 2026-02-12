@@ -9632,7 +9632,7 @@ public class PhysicalPlanOptimizerTests extends ESTestCase {
         String query = """
              FROM test
             | SORT salary DESC NULLS LAST
-            | LIMIT 5 PER_🐔 languages
+            | LIMIT 5 BY languages
             | KEEP first_name, last_name, salary, languages""";
         PhysicalPlan plan = physicalPlan(query);
 

@@ -554,9 +554,9 @@ public class LogicalPlanBuilder extends ExpressionBuilder {
         if (val instanceof Integer i && i >= 0) {
             List<Expression> groupings;
 
-            var limitPerGroupKey = ctx.limitPerGroupKey();
-            if (ctx.limitPerGroupKey() != null) {
-                groupings = new ArrayList<>(visitGrouping(limitPerGroupKey.grouping));
+            var limitByGroupKey = ctx.limitByGroupKey();
+            if (ctx.limitByGroupKey() != null) {
+                groupings = new ArrayList<>(visitGrouping(limitByGroupKey.grouping));
                 return input -> new Limit(source, new Literal(source, i, DataType.INTEGER), input, groupings);
             }
 

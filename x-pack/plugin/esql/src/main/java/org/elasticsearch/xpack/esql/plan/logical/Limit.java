@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.Objects;
 
 public class Limit extends UnaryPlan implements TelemetryAware, PipelineBreaker, ExecutesOn {
-    public static final TransportVersion ESQL_LIMIT_PER = TransportVersion.fromName("esql_limit_per");
+    public static final TransportVersion ESQL_LIMIT_BY = TransportVersion.fromName("esql_limit_by");
 
     public static final NamedWriteableRegistry.Entry ENTRY = new NamedWriteableRegistry.Entry(LogicalPlan.class, "Limit", Limit::new);
 
@@ -51,7 +51,7 @@ public class Limit extends UnaryPlan implements TelemetryAware, PipelineBreaker,
     }
 
     /**
-     * Create a new instance with groupings, which are the expressions used in LIMIT PER. This sets {@link Limit#duplicated}
+     * Create a new instance with groupings, which are the expressions used in LIMIT BY. This sets {@link Limit#duplicated}
      * and {@link Limit#local} to {@code false}.
      */
     public Limit(Source source, Expression limit, LogicalPlan child, List<Expression> groupings) {
@@ -83,7 +83,7 @@ public class Limit extends UnaryPlan implements TelemetryAware, PipelineBreaker,
             false
         );
 
-        if (in.getTransportVersion().supports(ESQL_LIMIT_PER)) {
+        if (in.getTransportVersion().supports(ESQL_LIMIT_BY)) {
             this.groupings = in.readNamedWriteableCollectionAsList(Expression.class);
         }
     }
@@ -99,10 +99,10 @@ public class Limit extends UnaryPlan implements TelemetryAware, PipelineBreaker,
         out.writeNamedWriteable(limit());
         out.writeNamedWriteable(child());
 
-        if (out.getTransportVersion().supports(ESQL_LIMIT_PER)) {
+        if (out.getTransportVersion().supports(ESQL_LIMIT_BY)) {
             out.writeNamedWriteableCollection(groupings());
         } else if (groupings.isEmpty() == false) {
-            throw new IllegalArgumentException("LIMIT PER is not supported by all nodes in the cluster");
+            throw new IllegalArgumentException("LIMIT BY is not supported by all nodes in the cluster");
         }
     }
 

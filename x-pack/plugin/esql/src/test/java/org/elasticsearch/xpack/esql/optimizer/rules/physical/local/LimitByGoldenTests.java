@@ -15,14 +15,14 @@ import java.util.Map;
 
 import static org.elasticsearch.xpack.esql.type.EsqlDataTypeConverter.dateTimeToLong;
 
-public class LimitPerGoldenTests extends GoldenTestCase {
+public class LimitByGoldenTests extends GoldenTestCase {
 
-    public void testLimitPer() {
+    public void testLimitBy() {
         runGoldenTest(
             """
                 FROM employees
                 | SORT salary
-                | LIMIT 2 PER_🐔 languages
+                | LIMIT 2 BY languages
                 """,
             EnumSet.of(Stage.ANALYSIS, Stage.LOGICAL_OPTIMIZATION, Stage.PHYSICAL_OPTIMIZATION, Stage.LOCAL_PHYSICAL_OPTIMIZATION),
             STATS

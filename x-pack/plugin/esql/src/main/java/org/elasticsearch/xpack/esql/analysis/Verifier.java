@@ -120,7 +120,7 @@ public class Verifier {
             checkUnsupportedAttributeRenaming(p, failures);
             checkInsist(p, failures);
             checkLimitBeforeInlineStats(p, failures);
-            checkLimitPer(p, failures);
+            checkLimitBy(p, failures);
         });
 
         if (failures.hasFailures() == false) {
@@ -335,16 +335,16 @@ public class Verifier {
         }
     }
 
-    private static void checkLimitPer(LogicalPlan plan, Failures failures) {
+    private static void checkLimitBy(LogicalPlan plan, Failures failures) {
         if (plan instanceof Limit limit && limit.groupings().isEmpty() == false) {
             if (limit.child() instanceof OrderBy == false) {
-                failures.add(fail(limit, "When PER is used in LIMIT, the query needs to have a SORT before the LIMIT"));
+                failures.add(fail(limit, "When BY is used in LIMIT, the query needs to have a SORT before the LIMIT"));
             }
 
             var groupings = limit.groupings();
 
             if (groupings.stream().anyMatch(grouping -> grouping instanceof FieldAttribute == false)) {
-                failures.add(fail(limit, "only index attributes can be used in LIMIT PER"));
+                failures.add(fail(limit, "only index attributes can be used in LIMIT BY"));
             }
         }
     }

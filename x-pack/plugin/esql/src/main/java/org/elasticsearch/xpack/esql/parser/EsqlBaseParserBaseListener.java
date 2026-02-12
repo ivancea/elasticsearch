@@ -505,13 +505,13 @@ public class EsqlBaseParserBaseListener implements EsqlBaseParserListener {
    *
    * <p>The default implementation does nothing.</p>
    */
-  @Override public void enterLimitPerGroupKey(EsqlBaseParser.LimitPerGroupKeyContext ctx) { }
+  @Override public void enterLimitByGroupKey(EsqlBaseParser.LimitByGroupKeyContext ctx) { }
   /**
    * {@inheritDoc}
    *
    * <p>The default implementation does nothing.</p>
    */
-  @Override public void exitLimitPerGroupKey(EsqlBaseParser.LimitPerGroupKeyContext ctx) { }
+  @Override public void exitLimitByGroupKey(EsqlBaseParser.LimitByGroupKeyContext ctx) { }
   /**
    * {@inheritDoc}
    *

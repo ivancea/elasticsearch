@@ -495,7 +495,7 @@ public class LocalExecutionPlanner {
         }).toList();
         List<Integer> groupKeys = topNExec.groupings()
             .stream()
-            .map(grouping -> getAttributeChannel(grouping, layout, "expression in LIMIT PER must be an attribute"))
+            .map(grouping -> getAttributeChannel(grouping, layout, "expression in LIMIT BY must be an attribute"))
             .toList();
 
         int limit;

@@ -1077,11 +1077,11 @@ public class StatementParserTests extends AbstractStatementParserTests {
         assertThat(limit.children().get(0).children().get(0), instanceOf(UnresolvedRelation.class));
     }
 
-    public void testLimitPer() {
+    public void testLimitBy() {
         LogicalPlan plan = query("""
                 FROM foo
                 | SORT @timestamp DESC
-                | LIMIT 10 PER_🐔 hostname
+                | LIMIT 10 BY hostname
             """);
         assertThat(plan, instanceOf(Limit.class));
         Limit limit = (Limit) plan;
@@ -1109,11 +1109,11 @@ public class StatementParserTests extends AbstractStatementParserTests {
         assertThat(((UnresolvedRelation) relation).indexPattern().indexPattern(), equalTo("foo"));
     }
 
-    public void testLimitPerQualifiedName() {
+    public void testLimitByQualifiedName() {
         LogicalPlan plan = query("""
                 FROM foo
                 | SORT @timestamp DESC
-                | LIMIT 10 PER_🐔 [foo].[hostname]
+                | LIMIT 10 BY [foo].[hostname]
             """);
         assertThat(plan, instanceOf(Limit.class));
         Limit limit = (Limit) plan;

@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
-import static org.elasticsearch.xpack.esql.plan.logical.Limit.ESQL_LIMIT_PER;
+import static org.elasticsearch.xpack.esql.plan.logical.Limit.ESQL_LIMIT_BY;
 
 public class TopNExec extends UnaryExec implements EstimatesRowSize {
     private static final TransportVersion ESQL_TOPN_AVOID_RESORTING = TransportVersion.fromName("esql_topn_avoid_resorting");
@@ -112,7 +112,7 @@ public class TopNExec extends UnaryExec implements EstimatesRowSize {
             in.getTransportVersion().supports(ESQL_TOPN_AVOID_RESORTING) ? InputOrdering.valueOf(in.readString()) : InputOrdering.NOT_SORTED
         );
 
-        if (in.getTransportVersion().supports(ESQL_LIMIT_PER)) {
+        if (in.getTransportVersion().supports(ESQL_LIMIT_BY)) {
             this.groupings = in.readNamedWriteableCollectionAsList(Expression.class);
         }
         // docValueAttributes are only used on the data node and never serialized.
@@ -130,10 +130,10 @@ public class TopNExec extends UnaryExec implements EstimatesRowSize {
             out.writeString(inputOrdering.toString());
         }
 
-        if (out.getTransportVersion().supports(ESQL_LIMIT_PER)) {
+        if (out.getTransportVersion().supports(ESQL_LIMIT_BY)) {
             out.writeNamedWriteableCollection(groupings());
         } else if (groupings.isEmpty() == false) {
-            throw new IllegalArgumentException("LIMIT PER is not supported by all nodes in the cluster");
+            throw new IllegalArgumentException("LIMIT BY is not supported by all nodes in the cluster");
         }
 
         // docValueAttributes are only used on the data node and never serialized.

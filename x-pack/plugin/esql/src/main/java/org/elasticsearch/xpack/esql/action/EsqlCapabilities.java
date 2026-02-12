@@ -2051,7 +2051,7 @@ public class EsqlCapabilities {
         /**
          * Enables the bucketing in the LIMIT command (in conjunction with SORT)
          */
-        SORT_PER_LIMIT,
+        SORT_BY_LIMIT,
 
         /**
          * Allow wildcards in FROM METADATA, eg FROM idx METADATA _ind*

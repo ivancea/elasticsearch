@@ -212,11 +212,11 @@ stringOrParameter
     ;
 
 limitCommand
-    : LIMIT constant limitPerGroupKey?
+    : LIMIT constant limitByGroupKey?
     ;
 
-limitPerGroupKey:
-    {this.isDevVersion()}? PER grouping=fields
+limitByGroupKey:
+    {this.isDevVersion()}? BY grouping=fields
     ;
 
 sortCommand
