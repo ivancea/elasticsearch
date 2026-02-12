@@ -33,7 +33,6 @@ import org.elasticsearch.compute.test.TestBlockBuilder;
 import org.elasticsearch.compute.test.TestBlockFactory;
 import org.elasticsearch.compute.test.TestDriverFactory;
 import org.elasticsearch.compute.test.TestDriverRunner;
-import org.elasticsearch.compute.test.TupleLongLongBlockSourceOperator;
 import org.elasticsearch.compute.test.TypedAbstractBlockSourceBuilder;
 import org.elasticsearch.compute.test.operator.blocksource.SequenceLongBlockSourceOperator;
 import org.elasticsearch.compute.test.operator.blocksource.TupleLongLongBlockSourceOperator;

@@ -9,6 +9,7 @@ package org.elasticsearch.compute.test;
 
 import org.elasticsearch.compute.data.BlockFactory;
 import org.elasticsearch.compute.data.ElementType;
+import org.elasticsearch.compute.test.operator.blocksource.AbstractBlockSourceOperator;
 
 import java.util.List;
 
