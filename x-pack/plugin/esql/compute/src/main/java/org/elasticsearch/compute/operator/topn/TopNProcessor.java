@@ -14,7 +14,13 @@ import org.elasticsearch.compute.data.Page;
 import java.util.List;
 
 interface TopNProcessor {
-    RowFiller rowFiller(List<ElementType> elementTypes, List<TopNEncoder> encoders, List<TopNOperator.SortOrder> sortOrders, Page page);
+    RowFiller rowFiller(
+        List<ElementType> elementTypes,
+        List<TopNEncoder> encoders,
+        List<TopNOperator.SortOrder> sortOrders,
+        boolean[] channelInKey,
+        Page page
+    );
 
     Row row(CircuitBreaker breaker, List<TopNOperator.SortOrder> sortOrders, RowFiller rowFiller);
 

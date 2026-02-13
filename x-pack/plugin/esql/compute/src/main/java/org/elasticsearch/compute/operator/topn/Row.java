@@ -12,10 +12,8 @@ import org.elasticsearch.compute.operator.BreakingBytesRefBuilder;
 import org.elasticsearch.core.RefCounted;
 import org.elasticsearch.core.Releasable;
 
-interface Row extends Accountable, Releasable {
+interface Row extends Accountable, Comparable<Row>, Releasable {
     BreakingBytesRefBuilder keys();
-
-    TopNOperator.BytesOrder bytesOrder();
 
     void setShardRefCounted(RefCounted refCounted);
 

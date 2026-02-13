@@ -117,11 +117,12 @@ public class UngroupedQueueTests extends ESTestCase {
             IntBlock keyBlock = blockFactory.newIntBlockBuilder(1).appendInt(value).build();
             IntBlock valueBlock = blockFactory.newIntBlockBuilder(1).appendInt(value * 2).build()
         ) {
-            Row row = new UngroupedRow(breaker, SORT_ORDERS, 32, 64);
+            Row row = new UngroupedRow(breaker, 32, 64);
             var filler = new UngroupedRowFiller(
                 List.of(ElementType.INT, ElementType.INT),
                 List.of(TopNEncoder.DEFAULT_SORTABLE, TopNEncoder.DEFAULT_UNSORTABLE),
                 SORT_ORDERS,
+                new boolean[] { true, false },
                 new Page(keyBlock, valueBlock)
             );
             filler.writeKey(0, row);

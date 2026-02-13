@@ -17,7 +17,6 @@ import org.elasticsearch.compute.data.ElementType;
 import org.elasticsearch.compute.data.Page;
 import org.elasticsearch.compute.operator.DriverContext;
 import org.elasticsearch.compute.operator.Operator;
-import org.elasticsearch.core.Releasable;
 import org.elasticsearch.core.ReleasableIterator;
 import org.elasticsearch.core.Releasables;
 
@@ -44,48 +43,6 @@ public class TopNOperator implements Operator, Accountable {
         NOT_SORTED
     }
 
-    static final class BytesOrder implements Releasable, Accountable {
-        private static final long BASE_RAM_USAGE = RamUsageEstimator.shallowSizeOfInstance(BytesOrder.class);
-        private final CircuitBreaker breaker;
-        final List<SortOrder> sortOrders;
-        final int[] endOffsets;
-
-        BytesOrder(List<SortOrder> sortOrders, CircuitBreaker breaker, String label) {
-            this.breaker = breaker;
-            this.sortOrders = sortOrders;
-            breaker.addEstimateBytesAndMaybeBreak(memoryUsed(sortOrders.size()), label);
-            this.endOffsets = new int[sortOrders.size()];
-        }
-
-        /**
-         * Returns true if the byte at the given position is ordered ascending; otherwise, return false
-         */
-        boolean isByteOrderAscending(int bytePosition) {
-            int index = Arrays.binarySearch(endOffsets, bytePosition);
-            if (index < 0) {
-                index = -1 - index;
-            }
-            return sortOrders.get(index).asc();
-        }
-
-        private long memoryUsed(int numKeys) {
-            // sortOrders is global and its memory is accounted at the top level TopNOperator
-            return BASE_RAM_USAGE + RamUsageEstimator.alignObjectSize(
-                (long) RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + (long) Integer.BYTES * numKeys
-            );
-        }
-
-        @Override
-        public long ramBytesUsed() {
-            return memoryUsed(sortOrders.size());
-        }
-
-        @Override
-        public void close() {
-            breaker.addWithoutBreaking(-ramBytesUsed());
-        }
-    }
-
     public record SortOrder(int channel, boolean asc, boolean nullsFirst) {
 
         private static final long SHALLOW_SIZE = RamUsageEstimator.shallowSizeOfInstance(SortOrder.class);
@@ -96,19 +53,11 @@ public class TopNOperator implements Operator, Accountable {
         }
 
         byte nul() {
-            if (nullsFirst) {
-                return asc ? SMALL_NULL : BIG_NULL;
-            } else {
-                return asc ? BIG_NULL : SMALL_NULL;
-            }
+            return nullsFirst ? SMALL_NULL : BIG_NULL;
         }
 
         byte nonNul() {
-            if (nullsFirst) {
-                return asc ? BIG_NULL : SMALL_NULL;
-            } else {
-                return asc ? SMALL_NULL : BIG_NULL;
-            }
+            return nullsFirst ? BIG_NULL : SMALL_NULL;
         }
     }
 
@@ -171,6 +120,7 @@ public class TopNOperator implements Operator, Accountable {
     private final List<TopNEncoder> encoders;
     private final List<SortOrder> sortOrders;
     private final int[] groupKeys;
+    private final boolean[] channelInKey;
 
     private TopNQueue inputQueue;
     private Row spare;
@@ -224,39 +174,9 @@ public class TopNOperator implements Operator, Accountable {
         this.processor = groupKeys.length == 0 ? new UngroupedTopNProcessor() : new GroupedTopNProcessor(groupKeys);
         this.inputQueue = processor.queue(breaker, topCount);
         this.inputOrdering = inputOrdering;
-    }
-
-    static int compareRows(Row r1, Row r2) {
-        // This is similar to r1.key.compareTo(r2.key) but stopping somewhere in the middle so that
-        // we check the byte that mismatched
-        BytesRef br1 = r1.keys().bytesRefView();
-        BytesRef br2 = r2.keys().bytesRefView();
-        int mismatchedByteIndex = Arrays.mismatch(
-            br1.bytes,
-            br1.offset,
-            br1.offset + br1.length,
-            br2.bytes,
-            br2.offset,
-            br2.offset + br2.length
-        );
-        if (mismatchedByteIndex < 0) {
-            // the two rows are equal
-            return 0;
-        }
-
-        int length = Math.min(br1.length, br2.length);
-        // one value is the prefix of the other
-        if (mismatchedByteIndex == length) {
-            // the value with the greater length is considered greater than the other
-            if (length == br1.length) {// first row is less than the second row
-                return r2.bytesOrder().isByteOrderAscending(length) ? 1 : -1;
-            } else {// second row is less than the first row
-                return r1.bytesOrder().isByteOrderAscending(length) ? -1 : 1;
-            }
-        } else {
-            // compare the byte that mismatched accounting for that respective byte asc/desc ordering
-            int c = Byte.compareUnsigned(br1.bytes[br1.offset + mismatchedByteIndex], br2.bytes[br2.offset + mismatchedByteIndex]);
-            return r1.bytesOrder().isByteOrderAscending(mismatchedByteIndex) ? -c : c;
+        this.channelInKey = new boolean[elementTypes.size()];
+        for (SortOrder so : sortOrders) {
+            channelInKey[so.channel] = true;
         }
     }
 
@@ -284,7 +204,7 @@ public class TopNOperator implements Operator, Accountable {
             if (this.topCount <= 0) {
                 return;
             }
-            RowFiller rowFiller = processor.rowFiller(elementTypes, encoders, sortOrders, page);
+            RowFiller rowFiller = processor.rowFiller(elementTypes, encoders, sortOrders, channelInKey, page);
 
             for (int i = 0; i < page.getPositionCount(); i++) {
                 if (spare == null) {
@@ -326,15 +246,6 @@ public class TopNOperator implements Operator, Accountable {
             output = buildResult();
             emitNanos += System.nanoTime() - start;
         }
-    }
-
-    static boolean channelInKey(List<SortOrder> sortOrders, int channel) {
-        for (SortOrder so : sortOrders) {
-            if (so.channel == channel) {
-                return true;
-            }
-        }
-        return false;
     }
 
     @Override
@@ -478,13 +389,7 @@ public class TopNOperator implements Operator, Accountable {
             ResultBuilder[] builders = new ResultBuilder[elementTypes.size()];
             try {
                 for (int b = 0; b < builders.length; b++) {
-                    builders[b] = ResultBuilder.resultBuilderFor(
-                        blockFactory,
-                        elementTypes.get(b),
-                        encoders.get(b).toUnsortable(),
-                        channelInKey(sortOrders, b),
-                        size
-                    );
+                    builders[b] = ResultBuilder.resultBuilderFor(blockFactory, elementTypes.get(b), encoders.get(b), channelInKey[b], size);
                 }
                 int rEnd = r + size;
                 while (r < rEnd) {
@@ -532,7 +437,7 @@ public class TopNOperator implements Operator, Accountable {
                 keys.offset++;
                 keys.length--;
                 // Read the key. This will modify offset and length for the next iteration.
-                builders[so.channel].decodeKey(keys);
+                builders[so.channel].decodeKey(keys, so.asc);
             }
             if (keys.length != 0) {
                 throw new IllegalArgumentException("didn't read all keys");

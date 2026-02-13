@@ -15,7 +15,8 @@ import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.RefCounted;
 import org.elasticsearch.core.Releasables;
 
-import java.util.List;
+import java.util.Arrays;
+import java.util.Objects;
 
 /**
  * Internal row to be used in the PriorityQueue instead of the full blown Page.
@@ -28,25 +29,13 @@ final class UngroupedRow implements Row {
     final CircuitBreaker breaker;
 
     /**
-     * The sort key.
+     * The sort keys, encoded into bytes so we can sort by calling {@link Arrays#compareUnsigned}.
      */
     private final BreakingBytesRefBuilder keys;
 
     @Override
     public BreakingBytesRefBuilder keys() {
         return keys;
-    }
-
-    /**
-     * A true/false value (bit set/unset) for each byte in the BytesRef above corresponding to an asc/desc ordering.
-     * For ex, if a Long is represented as 8 bytes, each of these bytes will have the same value (set/unset) if the respective Long
-     * value is used for sorting ascending/descending.
-     */
-    private final TopNOperator.BytesOrder bytesOrder;
-
-    @Override
-    public TopNOperator.BytesOrder bytesOrder() {
-        return bytesOrder;
     }
 
     /**
@@ -66,16 +55,15 @@ final class UngroupedRow implements Row {
      * context before we build the final result.
      */
     @Nullable
-    private RefCounted shardRefCounter;
+    RefCounted shardRefCounter;
 
-    UngroupedRow(CircuitBreaker breaker, List<TopNOperator.SortOrder> sortOrders, int preAllocatedKeysSize, int preAllocatedValueSize) {
+    UngroupedRow(CircuitBreaker breaker, int preAllocatedKeysSize, int preAllocatedValueSize) {
         breaker.addEstimateBytesAndMaybeBreak(SHALLOW_SIZE, "topn");
         this.breaker = breaker;
         boolean success = false;
         try {
             keys = new BreakingBytesRefBuilder(breaker, "topn", preAllocatedKeysSize);
             values = new BreakingBytesRefBuilder(breaker, "topn", preAllocatedValueSize);
-            bytesOrder = new TopNOperator.BytesOrder(sortOrders, breaker, "topn");
             success = true;
         } finally {
             if (success == false) {
@@ -86,7 +74,7 @@ final class UngroupedRow implements Row {
 
     @Override
     public long ramBytesUsed() {
-        return SHALLOW_SIZE + keys.ramBytesUsed() + bytesOrder.ramBytesUsed() + values.ramBytesUsed();
+        return SHALLOW_SIZE + keys.ramBytesUsed() + values.ramBytesUsed();
     }
 
     @Override
@@ -99,10 +87,7 @@ final class UngroupedRow implements Row {
     @Override
     public void close() {
         clearRefCounters();
-        breaker.addWithoutBreaking(-SHALLOW_SIZE);
-        Releasables.closeExpectNoException(keys);
-        Releasables.closeExpectNoException(bytesOrder);
-        Releasables.closeExpectNoException(values);
+        Releasables.closeExpectNoException(() -> breaker.addWithoutBreaking(-SHALLOW_SIZE), keys, values);
     }
 
     public void clearRefCounters() {
@@ -119,5 +104,53 @@ final class UngroupedRow implements Row {
         }
         this.shardRefCounter = shardRefCounted;
         this.shardRefCounter.mustIncRef();
+    }
+
+    @Override
+    public int compareTo(Row rhs) {
+        if (rhs instanceof UngroupedRow other) {
+            // TODO if we fill the trailing bytes with 0 we could do a comparison on the entire array
+            // When Nik measured this it was marginally faster. But it's worth a bit of research.
+            return -keys.bytesRefView().compareTo(other.keys.bytesRefView());
+        } else {
+            throw new IllegalArgumentException("rhs should be an UngroupedRow");
+        }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+
+        UngroupedRow row = (UngroupedRow) o;
+        return keys.bytesRefView().equals(row.keys.bytesRefView());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(keys);
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder b = new StringBuilder("Row[key=");
+        b.append(keys.bytesRefView());
+        b.append(", values=");
+
+        if (values.length() < 100) {
+            b.append(values.bytesRefView());
+        } else {
+            b.append('[');
+            assert values.bytesRefView().offset == 0;
+            for (int i = 0; i < 100; i++) {
+                if (i != 0) {
+                    b.append(" ");
+                }
+                b.append(Integer.toHexString(values.bytesRefView().bytes[i] & 255));
+            }
+            b.append("...");
+        }
+        return b.append("]").toString();
     }
 }

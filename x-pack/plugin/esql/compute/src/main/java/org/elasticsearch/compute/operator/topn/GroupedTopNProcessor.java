@@ -25,9 +25,10 @@ class GroupedTopNProcessor implements TopNProcessor {
         List<ElementType> elementTypes,
         List<TopNEncoder> encoders,
         List<TopNOperator.SortOrder> sortOrders,
+        boolean[] channelInKey,
         Page page
     ) {
-        return new GroupedRowFiller(elementTypes, encoders, sortOrders, groupChannels, page);
+        return new GroupedRowFiller(elementTypes, encoders, sortOrders, channelInKey, groupChannels, page);
     }
 
     @Override
@@ -35,7 +36,6 @@ class GroupedTopNProcessor implements TopNProcessor {
         GroupedRowFiller groupedFiller = (GroupedRowFiller) filler;
         return new GroupedRow(
             breaker,
-            sortOrders,
             groupedFiller.preAllocatedKeysSize(),
             groupedFiller.preAllocatedValueSize(),
             groupedFiller.preAllocatedGroupKeySize()

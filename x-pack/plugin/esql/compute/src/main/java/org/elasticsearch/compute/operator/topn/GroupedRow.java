@@ -13,8 +13,6 @@ import org.elasticsearch.compute.operator.BreakingBytesRefBuilder;
 import org.elasticsearch.core.RefCounted;
 import org.elasticsearch.core.Releasables;
 
-import java.util.List;
-
 final class GroupedRow implements Row {
     private static final long SHALLOW_SIZE = RamUsageEstimator.shallowSizeOfInstance(GroupedRow.class);
     private final UngroupedRow row;
@@ -22,18 +20,12 @@ final class GroupedRow implements Row {
     // the hash table later on.
     private final BreakingBytesRefBuilder groupKey;
 
-    GroupedRow(
-        CircuitBreaker breaker,
-        List<TopNOperator.SortOrder> sortOrders,
-        int preAllocatedKeysSize,
-        int preAllocatedValueSize,
-        int preAllocatedGroupKeySize
-    ) {
+    GroupedRow(CircuitBreaker breaker, int preAllocatedKeysSize, int preAllocatedValueSize, int preAllocatedGroupKeySize) {
         breaker.addEstimateBytesAndMaybeBreak(SHALLOW_SIZE, "GroupedRow");
         UngroupedRow row = null;
         boolean success = false;
         try {
-            row = new UngroupedRow(breaker, sortOrders, preAllocatedKeysSize, preAllocatedValueSize);
+            row = new UngroupedRow(breaker, preAllocatedKeysSize, preAllocatedValueSize);
             this.row = row;
             this.groupKey = new BreakingBytesRefBuilder(breaker, "topn", preAllocatedGroupKeySize);
             success = true;
@@ -45,6 +37,16 @@ final class GroupedRow implements Row {
         }
     }
 
+    // TODO Nacho I don't like this
+    @Override
+    public int compareTo(Row rhs) {
+        if (rhs instanceof GroupedRow other) {
+            return this.row.compareTo(other.row);
+        } else {
+            throw new IllegalArgumentException("rhs should be an GroupedRow for the same groupKey");
+        }
+    }
+
     public BreakingBytesRefBuilder groupKey() {
         return groupKey;
     }
@@ -52,11 +54,6 @@ final class GroupedRow implements Row {
     @Override
     public BreakingBytesRefBuilder keys() {
         return row.keys();
-    }
-
-    @Override
-    public TopNOperator.BytesOrder bytesOrder() {
-        return row.bytesOrder();
     }
 
     @Override

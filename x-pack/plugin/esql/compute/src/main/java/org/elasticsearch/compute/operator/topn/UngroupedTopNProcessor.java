@@ -19,15 +19,16 @@ class UngroupedTopNProcessor implements TopNProcessor {
         List<ElementType> elementTypes,
         List<TopNEncoder> encoders,
         List<TopNOperator.SortOrder> sortOrders,
+        boolean[] channelInKey,
         Page page
     ) {
-        return new UngroupedRowFiller(elementTypes, encoders, sortOrders, page);
+        return new UngroupedRowFiller(elementTypes, encoders, sortOrders, channelInKey, page);
     }
 
     @Override
     public UngroupedRow row(CircuitBreaker breaker, List<TopNOperator.SortOrder> sortOrders, RowFiller filler) {
         var ungroupedFiller = (UngroupedRowFiller) filler;
-        return new UngroupedRow(breaker, sortOrders, ungroupedFiller.preAllocatedKeysSize(), ungroupedFiller.preAlocatedValueSize());
+        return new UngroupedRow(breaker, ungroupedFiller.preAllocatedKeysSize(), ungroupedFiller.preAlocatedValueSize());
     }
 
     @Override

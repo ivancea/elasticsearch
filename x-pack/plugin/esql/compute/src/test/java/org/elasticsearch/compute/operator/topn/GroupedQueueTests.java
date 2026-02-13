@@ -184,11 +184,12 @@ public class GroupedQueueTests extends ESTestCase {
             IntBlock keyBlock = blockFactory.newIntBlockBuilder(1).appendInt(sortKey).build();
             IntBlock valueBlock = blockFactory.newIntBlockBuilder(1).appendInt(sortKey * 2).build()
         ) {
-            Row row = new GroupedRow(breaker, SORT_ORDERS, 32, 64, 0);
+            Row row = new GroupedRow(breaker, 32, 64, 0);
             var filler = new GroupedRowFiller(
                 List.of(ElementType.INT, ElementType.INT, ElementType.INT),
                 List.of(TopNEncoder.DEFAULT_SORTABLE, TopNEncoder.DEFAULT_SORTABLE, TopNEncoder.DEFAULT_UNSORTABLE),
                 SORT_ORDERS,
+                new boolean[] { false, true, false },
                 new int[] { 0 },
                 new Page(groupKeyBlock, keyBlock, valueBlock)
             );

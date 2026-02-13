@@ -24,10 +24,11 @@ final class GroupedRowFiller implements RowFiller {
         List<ElementType> elementTypes,
         List<TopNEncoder> encoders,
         List<TopNOperator.SortOrder> sortOrders,
+        boolean[] channelInKey,
         int[] groupChannels,
         Page page
     ) {
-        this.ungroupedRowFiller = new UngroupedRowFiller(elementTypes, encoders, sortOrders, page);
+        this.ungroupedRowFiller = new UngroupedRowFiller(elementTypes, encoders, sortOrders, channelInKey, page);
         this.valueExtractors = new ValueExtractor[groupChannels.length];
         for (int k = 0; k < valueExtractors.length; k++) {
             int channel = groupChannels[k];

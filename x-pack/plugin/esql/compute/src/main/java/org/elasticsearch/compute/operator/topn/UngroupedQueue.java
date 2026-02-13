@@ -36,8 +36,8 @@ final class UngroupedQueue extends PriorityQueue<Row> implements TopNQueue {
     }
 
     @Override
-    protected boolean lessThan(Row r1, Row r2) {
-        return TopNOperator.compareRows(r1, r2) < 0;
+    protected boolean lessThan(Row lhs, Row rhs) {
+        return lhs.compareTo(rhs) < 0;
     }
 
     @Override
@@ -51,7 +51,7 @@ final class UngroupedQueue extends PriorityQueue<Row> implements TopNQueue {
             // Heap not yet full, just add the element.
             add(row);
             return null;
-        } else if (TopNOperator.compareRows(top(), row) < 0) {
+        } else if (lessThan(top(), row)) {
             // Heap full BUT this node fits in it.
             Row evicted = top();
             updateTop(row);

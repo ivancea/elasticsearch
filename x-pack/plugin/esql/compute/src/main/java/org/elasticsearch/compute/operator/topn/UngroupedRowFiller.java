@@ -14,35 +14,38 @@ import java.util.List;
 
 final class UngroupedRowFiller implements RowFiller {
     private final ValueExtractor[] valueExtractors;
-    private final KeyFactory[] keyFactories;
+    private final KeyExtractor[] keyExtractors;
 
     private int keyPreAllocSize = 0;
     private int valuePreAllocSize = 0;
 
-    record KeyFactory(KeyExtractor extractor, boolean ascending) {}
-
-    UngroupedRowFiller(List<ElementType> elementTypes, List<TopNEncoder> encoders, List<TopNOperator.SortOrder> sortOrders, Page page) {
+    UngroupedRowFiller(
+        List<ElementType> elementTypes,
+        List<TopNEncoder> encoders,
+        List<TopNOperator.SortOrder> sortOrders,
+        boolean[] channelInKey,
+        Page page
+    ) {
         valueExtractors = new ValueExtractor[page.getBlockCount()];
         for (int b = 0; b < valueExtractors.length; b++) {
             valueExtractors[b] = ValueExtractor.extractorFor(
                 elementTypes.get(b),
                 encoders.get(b).toUnsortable(),
-                TopNOperator.channelInKey(sortOrders, b),
+                channelInKey[b],
                 page.getBlock(b)
             );
         }
-        keyFactories = new KeyFactory[sortOrders.size()];
-        for (int k = 0; k < keyFactories.length; k++) {
+        keyExtractors = new KeyExtractor[sortOrders.size()];
+        for (int k = 0; k < keyExtractors.length; k++) {
             TopNOperator.SortOrder so = sortOrders.get(k);
-            KeyExtractor extractor = KeyExtractor.extractorFor(
+            keyExtractors[k] = KeyExtractor.extractorFor(
                 elementTypes.get(so.channel()),
-                encoders.get(so.channel()).toSortable(),
+                encoders.get(so.channel()),
                 so.asc(),
                 so.nul(),
                 so.nonNul(),
                 page.getBlock(so.channel())
             );
-            keyFactories[k] = new KeyFactory(extractor, so.asc());
         }
     }
 
@@ -56,14 +59,8 @@ final class UngroupedRowFiller implements RowFiller {
 
     @Override
     public void writeKey(int position, Row row) {
-        int orderByCompositeKeyCurrentPosition = 0;
-        for (int i = 0; i < keyFactories.length; i++) {
-            int valueAsBytesSize = keyFactories[i].extractor().writeKey(row.keys(), position);
-            if (valueAsBytesSize < 0) {
-                throw new IllegalStateException("empty keys to allowed. " + valueAsBytesSize + " must be > 0");
-            }
-            orderByCompositeKeyCurrentPosition += valueAsBytesSize;
-            row.bytesOrder().endOffsets[i] = orderByCompositeKeyCurrentPosition - 1;
+        for (KeyExtractor keyExtractor : keyExtractors) {
+            keyExtractor.writeKey(row.keys(), position);
         }
         keyPreAllocSize = RowFiller.newPreAllocSize(row.keys(), keyPreAllocSize);
     }

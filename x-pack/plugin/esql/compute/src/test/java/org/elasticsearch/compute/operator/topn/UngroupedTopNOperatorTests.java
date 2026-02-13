@@ -186,7 +186,7 @@ public class UngroupedTopNOperatorTests extends TopNOperatorTests {
         };
         int topCount = 10_000;
         // We under-count by a few bytes because of the lists. In that end that's fine, but we need to account for it here.
-        long underCount = 200;
+        long underCount = 250;
         DriverContext context = driverContext();
         try (
             TopNOperator op = new TopNOperator.TopNOperatorFactory(
