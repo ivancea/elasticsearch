@@ -300,7 +300,9 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
         );
         String groupKeysPart = groupKeys().length > 0 ? ", groupKeys=" + Arrays.toString(groupKeys()) : "";
         String count = groupKeys().length > 0 ? "0/0/4" : "0/4";
-        var expectedDescription = "TopNOperator[count=" + count + ", elementTypes=[LONG], encoders=[DefaultUnsortable], "
+        var expectedDescription = "TopNOperator[count="
+            + count
+            + ", elementTypes=[LONG], encoders=[DefaultUnsortable], "
             + "sortOrders=[SortOrder[channel=0, asc=true, nullsFirst=false]]"
             + groupKeysPart
             + ", inputOrdering=SORTED]";
