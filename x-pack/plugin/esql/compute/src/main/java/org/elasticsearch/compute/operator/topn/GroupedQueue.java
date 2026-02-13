@@ -7,44 +7,50 @@
 
 package org.elasticsearch.compute.operator.topn;
 
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.breaker.CircuitBreaker;
+import org.elasticsearch.common.util.BigArrays;
+import org.elasticsearch.common.util.ObjectArray;
 import org.elasticsearch.core.Releasables;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
-import static org.apache.lucene.util.RamUsageEstimator.NUM_BYTES_OBJECT_REF;
-import static org.apache.lucene.util.RamUsageEstimator.alignObjectSize;
 import static org.apache.lucene.util.RamUsageEstimator.shallowSizeOfInstance;
 
-// Note: This is a temporary implementation. The "real" implementation, to be done later, will use a BlockHash instead of a HashMap.
+/**
+ * A {@link TopNQueue} that maintains a separate {@link UngroupedQueue} per group, indexed by
+ * integer group IDs assigned by a {@link org.elasticsearch.compute.aggregation.blockhash.BlockHash}.
+ * Replaces the previous {@code HashMap<BytesRef, UngroupedQueue>} approach with a
+ * {@link BigArrays}-backed {@link ObjectArray} for better performance and circuit breaker integration.
+ */
 class GroupedQueue implements TopNQueue {
-    private static final long SHALLOW_SIZE = shallowSizeOfInstance(GroupedQueue.class) + shallowSizeOfInstance(HashMap.class);
-    public static final long BYTES_REF_HEADER_SIZE = shallowSizeOfInstance(BytesRef.class);
+    private static final long SHALLOW_SIZE = shallowSizeOfInstance(GroupedQueue.class);
 
-    private final Map<BytesRef, UngroupedQueue> queuesByGroupKey = new HashMap<>(0);
     private final CircuitBreaker breaker;
+    private final BigArrays bigArrays;
     private final int topCount;
+    private ObjectArray<UngroupedQueue> queues;
 
-    GroupedQueue(CircuitBreaker breaker, int topCount) {
+    GroupedQueue(CircuitBreaker breaker, BigArrays bigArrays, int topCount) {
         this.breaker = breaker;
+        this.bigArrays = bigArrays;
         this.topCount = topCount;
+        this.queues = bigArrays.newObjectArray(0);
     }
 
     @Override
     public String toString() {
-        return size() + "/" + topCount;
+        return size() + "/" + queues.size() + "/" + topCount;
     }
 
     @Override
     public int size() {
         int totalSize = 0;
-        for (var queue : queuesByGroupKey.values()) {
-            totalSize += queue.size();
+        for (long i = 0; i < queues.size(); i++) {
+            UngroupedQueue queue = queues.get(i);
+            if (queue != null) {
+                totalSize += queue.size();
+            }
         }
         return totalSize;
     }
@@ -52,47 +58,30 @@ class GroupedQueue implements TopNQueue {
     @Override
     public Row addRow(Row row) {
         var groupedRow = (GroupedRow) row;
-        return getQueue(groupedRow).addRow(groupedRow);
+        return getOrCreateQueue(groupedRow.groupId).addRow(groupedRow);
     }
 
-    private UngroupedQueue getQueue(GroupedRow row) {
-        BytesRef keyView = row.groupKey().bytesRefView();
-        var result = queuesByGroupKey.get(keyView);
-        if (result != null) {
-            return result;
+    private UngroupedQueue getOrCreateQueue(int groupId) {
+        if (groupId >= queues.size()) {
+            queues = bigArrays.grow(queues, groupId + 1);
         }
-        boolean success = false;
-        UngroupedQueue newQueue = null;
-        BytesRef key = null;
-        try {
-            newQueue = UngroupedQueue.build(breaker, topCount);
-            breaker.addEstimateBytesAndMaybeBreak(keyView.length, "topn");
-            key = BytesRef.deepCopyOf(keyView);
-            queuesByGroupKey.put(key, newQueue);
-            success = true;
-            return newQueue;
-        } finally {
-            if (success == false) {
-                if (key != null) {
-                    breaker.addWithoutBreaking(-keyView.length);
-                }
-                if (newQueue != null) {
-                    newQueue.close();
-                }
-            }
+        UngroupedQueue queue = queues.get(groupId);
+        if (queue == null) {
+            queue = UngroupedQueue.build(breaker, topCount);
+            queues.set(groupId, queue);
         }
+        return queue;
     }
 
     @Override
     public List<Row> popAll() {
         List<Row> allRows = new ArrayList<>(size());
-        var iterator = queuesByGroupKey.entrySet().iterator();
-        while (iterator.hasNext()) {
-            var next = iterator.next();
-            try (UngroupedQueue queue = next.getValue()) {
+        for (long i = 0; i < queues.size(); i++) {
+            UngroupedQueue queue = queues.get(i);
+            if (queue != null) {
                 queue.popAllInto(allRows);
-                breaker.addWithoutBreaking(-next.getKey().length);
-                iterator.remove();
+                queue.close();
+                queues.set(i, null);
             }
         }
         // TODO this sorts all rows across all groups using the main sort key, ignoring the individual groups. We *might* want to sort only
@@ -101,44 +90,33 @@ class GroupedQueue implements TopNQueue {
         return allRows;
     }
 
-    // Note: This implementation is temporary anyway, so this might not be entirely accurate, but that's fine.
     @Override
     public long ramBytesUsed() {
         long total = SHALLOW_SIZE;
-
-        for (var entry : queuesByGroupKey.entrySet()) {
-            total += entry.getValue().ramBytesUsed();
-            total += alignObjectSize(entry.getKey().length + BYTES_REF_HEADER_SIZE);
-            total += HASH_MAP_NODE_SIZE;
-            // Account for unused entries in the map's table, assuming current load of 0.5.
-            total += 2L * NUM_BYTES_OBJECT_REF;
+        if (queues != null) {
+            total += queues.ramBytesUsed();
+            for (long i = 0; i < queues.size(); i++) {
+                UngroupedQueue queue = queues.get(i);
+                if (queue != null) {
+                    total += queue.ramBytesUsed();
+                }
+            }
         }
-
         return total;
     }
 
     @Override
     public void close() {
-        Releasables.close(
-            () -> breaker.addWithoutBreaking(-sizeOf(queuesByGroupKey.keySet())),
-            Releasables.wrap(queuesByGroupKey.values())
-        );
-    }
-
-    private static long sizeOf(Iterable<BytesRef> bytes) {
-        long total = 0;
-        for (BytesRef b : bytes) {
-            total += b.length;
-        }
-        return total;
-    }
-
-    // Visible for testing.
-    static final long HASH_MAP_NODE_SIZE;
-
-    static {
-        var map = new HashMap<Integer, Integer>();
-        map.put(0, 0);
-        HASH_MAP_NODE_SIZE = RamUsageEstimator.shallowSizeOfInstance(map.entrySet().iterator().next().getClass());
+        Releasables.close(() -> {
+            if (queues != null) {
+                for (long i = 0; i < queues.size(); i++) {
+                    UngroupedQueue queue = queues.get(i);
+                    if (queue != null) {
+                        queue.close();
+                        queues.set(i, null);
+                    }
+                }
+            }
+        }, queues);
     }
 }

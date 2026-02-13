@@ -8,16 +8,34 @@
 package org.elasticsearch.compute.operator.topn;
 
 import org.elasticsearch.common.breaker.CircuitBreaker;
+import org.elasticsearch.compute.aggregation.GroupingAggregatorFunction;
+import org.elasticsearch.compute.aggregation.blockhash.BlockHash;
+import org.elasticsearch.compute.data.BlockFactory;
 import org.elasticsearch.compute.data.ElementType;
+import org.elasticsearch.compute.data.IntArrayBlock;
+import org.elasticsearch.compute.data.IntBigArrayBlock;
+import org.elasticsearch.compute.data.IntVector;
 import org.elasticsearch.compute.data.Page;
 
 import java.util.List;
+import java.util.stream.IntStream;
 
+/**
+ * A {@link TopNProcessor} for grouped top-N operations. Uses a {@link BlockHash} to efficiently
+ * map group key columns to integer group IDs, and routes rows to per-group priority queues.
+ */
 class GroupedTopNProcessor implements TopNProcessor {
     private final int[] groupChannels;
+    private final BlockHash blockHash;
+    private final BlockFactory blockFactory;
 
-    GroupedTopNProcessor(int[] groupChannels) {
+    GroupedTopNProcessor(int[] groupChannels, List<ElementType> elementTypes, BlockFactory blockFactory, int maxPageSize) {
         this.groupChannels = groupChannels;
+        this.blockFactory = blockFactory;
+        List<BlockHash.GroupSpec> groupSpecs = IntStream.of(groupChannels)
+            .mapToObj(ch -> new BlockHash.GroupSpec(ch, elementTypes.get(ch)))
+            .toList();
+        this.blockHash = BlockHash.build(groupSpecs, blockFactory, maxPageSize, false);
     }
 
     @Override
@@ -28,22 +46,62 @@ class GroupedTopNProcessor implements TopNProcessor {
         boolean[] channelInKey,
         Page page
     ) {
-        return new GroupedRowFiller(elementTypes, encoders, sortOrders, channelInKey, groupChannels, page);
+        int[] groupIds = computeGroupIds(page);
+        return new GroupedRowFiller(elementTypes, encoders, sortOrders, channelInKey, groupIds, page);
+    }
+
+    /**
+     * Uses the BlockHash to compute group IDs for all positions in the page.
+     * Each position is assigned a single integer group ID.
+     */
+    private int[] computeGroupIds(Page page) {
+        int positionCount = page.getPositionCount();
+        int[] ids = new int[positionCount];
+        blockHash.add(page, new GroupingAggregatorFunction.AddInput() {
+            @Override
+            public void add(int positionOffset, IntVector groupIds) {
+                for (int i = 0; i < groupIds.getPositionCount(); i++) {
+                    ids[positionOffset + i] = groupIds.getInt(i);
+                }
+            }
+
+            @Override
+            public void add(int positionOffset, IntArrayBlock groupIds) {
+                for (int i = 0; i < groupIds.getPositionCount(); i++) {
+                    // For multivalued group keys, take the first value.
+                    ids[positionOffset + i] = groupIds.getInt(groupIds.getFirstValueIndex(i));
+                }
+            }
+
+            @Override
+            public void add(int positionOffset, IntBigArrayBlock groupIds) {
+                for (int i = 0; i < groupIds.getPositionCount(); i++) {
+                    // For multivalued group keys, take the first value.
+                    ids[positionOffset + i] = groupIds.getInt(groupIds.getFirstValueIndex(i));
+                }
+            }
+
+            @Override
+            public void close() {
+                // Nothing to close
+            }
+        });
+        return ids;
     }
 
     @Override
     public Row row(CircuitBreaker breaker, List<TopNOperator.SortOrder> sortOrders, RowFiller filler) {
         GroupedRowFiller groupedFiller = (GroupedRowFiller) filler;
-        return new GroupedRow(
-            breaker,
-            groupedFiller.preAllocatedKeysSize(),
-            groupedFiller.preAllocatedValueSize(),
-            groupedFiller.preAllocatedGroupKeySize()
-        );
+        return new GroupedRow(breaker, groupedFiller.preAllocatedKeysSize(), groupedFiller.preAllocatedValueSize());
     }
 
     @Override
     public TopNQueue queue(CircuitBreaker breaker, int topCount) {
-        return new GroupedQueue(breaker, topCount);
+        return new GroupedQueue(breaker, blockFactory.bigArrays(), topCount);
+    }
+
+    @Override
+    public void close() {
+        blockHash.close();
     }
 }

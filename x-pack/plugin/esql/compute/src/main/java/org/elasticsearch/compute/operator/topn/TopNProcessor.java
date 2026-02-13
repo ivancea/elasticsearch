@@ -10,10 +10,11 @@ package org.elasticsearch.compute.operator.topn;
 import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.compute.data.ElementType;
 import org.elasticsearch.compute.data.Page;
+import org.elasticsearch.core.Releasable;
 
 import java.util.List;
 
-interface TopNProcessor {
+interface TopNProcessor extends Releasable {
     RowFiller rowFiller(
         List<ElementType> elementTypes,
         List<TopNEncoder> encoders,

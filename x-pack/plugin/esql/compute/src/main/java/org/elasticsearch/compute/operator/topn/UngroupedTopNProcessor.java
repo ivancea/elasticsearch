@@ -35,4 +35,9 @@ class UngroupedTopNProcessor implements TopNProcessor {
     public TopNQueue queue(CircuitBreaker breaker, int topCount) {
         return UngroupedQueue.build(breaker, topCount);
     }
+
+    @Override
+    public void close() {
+        // Nothing to close
+    }
 }

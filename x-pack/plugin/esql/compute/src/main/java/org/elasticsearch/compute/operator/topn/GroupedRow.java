@@ -13,21 +13,26 @@ import org.elasticsearch.compute.operator.BreakingBytesRefBuilder;
 import org.elasticsearch.core.RefCounted;
 import org.elasticsearch.core.Releasables;
 
+/**
+ * A row that belongs to a group, identified by an integer group ID assigned by a BlockHash.
+ * Wraps an {@link UngroupedRow} via composition.
+ */
 final class GroupedRow implements Row {
     private static final long SHALLOW_SIZE = RamUsageEstimator.shallowSizeOfInstance(GroupedRow.class);
     private final UngroupedRow row;
-    // TODO This isn't actually needed, since we already maintain this in the hash table's key. We will optimize it away when we get rid of
-    // the hash table later on.
-    private final BreakingBytesRefBuilder groupKey;
 
-    GroupedRow(CircuitBreaker breaker, int preAllocatedKeysSize, int preAllocatedValueSize, int preAllocatedGroupKeySize) {
+    /**
+     * The group ID assigned by BlockHash. This is used to route the row to the correct per-group queue.
+     */
+    int groupId = -1;
+
+    GroupedRow(CircuitBreaker breaker, int preAllocatedKeysSize, int preAllocatedValueSize) {
         breaker.addEstimateBytesAndMaybeBreak(SHALLOW_SIZE, "GroupedRow");
         UngroupedRow row = null;
         boolean success = false;
         try {
             row = new UngroupedRow(breaker, preAllocatedKeysSize, preAllocatedValueSize);
             this.row = row;
-            this.groupKey = new BreakingBytesRefBuilder(breaker, "topn", preAllocatedGroupKeySize);
             success = true;
         } finally {
             if (success == false) {
@@ -45,10 +50,6 @@ final class GroupedRow implements Row {
         } else {
             throw new IllegalArgumentException("rhs should be an GroupedRow for the same groupKey");
         }
-    }
-
-    public BreakingBytesRefBuilder groupKey() {
-        return groupKey;
     }
 
     @Override
@@ -69,16 +70,16 @@ final class GroupedRow implements Row {
     @Override
     public void clear() {
         row.clear();
-        groupKey.clear();
+        groupId = -1;
     }
 
     @Override
     public long ramBytesUsed() {
-        return SHALLOW_SIZE + row.ramBytesUsed() + groupKey.ramBytesUsed();
+        return SHALLOW_SIZE + row.ramBytesUsed();
     }
 
     @Override
     public void close() {
-        Releasables.closeExpectNoException(() -> row.breaker.addWithoutBreaking(-SHALLOW_SIZE), row, groupKey);
+        Releasables.closeExpectNoException(() -> row.breaker.addWithoutBreaking(-SHALLOW_SIZE), row);
     }
 }

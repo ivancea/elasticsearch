@@ -171,8 +171,18 @@ public class TopNOperator implements Operator, Accountable {
         this.encoders = encoders;
         this.sortOrders = sortOrders;
         this.groupKeys = groupKeys;
-        this.processor = groupKeys.length == 0 ? new UngroupedTopNProcessor() : new GroupedTopNProcessor(groupKeys);
-        this.inputQueue = processor.queue(breaker, topCount);
+        this.processor = groupKeys.length == 0
+            ? new UngroupedTopNProcessor()
+            : new GroupedTopNProcessor(groupKeys, elementTypes, blockFactory, maxPageSize);
+        boolean success = false;
+        try {
+            this.inputQueue = processor.queue(breaker, topCount);
+            success = true;
+        } finally {
+            if (success == false) {
+                processor.close();
+            }
+        }
         this.inputOrdering = inputOrdering;
         this.channelInKey = new boolean[elementTypes.size()];
         for (SortOrder so : sortOrders) {
@@ -287,7 +297,11 @@ public class TopNOperator implements Operator, Accountable {
              * If we're in the process of outputting pages then output will contain all
              * allocated but un-emitted rows.
              */
-            output
+            output,
+            /*
+             * The processor may hold resources (e.g., a BlockHash for grouped top-N).
+             */
+            processor
         );
         // Aggressively null these so they can be GCed more quickly.
         inputQueue = null;

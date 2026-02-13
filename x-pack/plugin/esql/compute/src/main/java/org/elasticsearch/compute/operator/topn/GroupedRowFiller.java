@@ -12,37 +12,28 @@ import org.elasticsearch.compute.data.Page;
 
 import java.util.List;
 
+/**
+ * A {@link RowFiller} for grouped top-N that delegates sort-key and value writing to an
+ * {@link UngroupedRowFiller} and sets the pre-computed group ID (from a {@link
+ * org.elasticsearch.compute.aggregation.blockhash.BlockHash}) on each {@link GroupedRow}.
+ */
 final class GroupedRowFiller implements RowFiller {
     private final UngroupedRowFiller ungroupedRowFiller;
-    private final ValueExtractor[] groupKeyValueExtractors;
+    private final int[] groupIds;
 
     private int keyPreAllocSize = 0;
     private int valuePreAllocSize = 0;
-    private int groupKeyPreAllocSize = 0;
 
     GroupedRowFiller(
         List<ElementType> elementTypes,
         List<TopNEncoder> encoders,
         List<TopNOperator.SortOrder> sortOrders,
         boolean[] channelInKey,
-        int[] groupChannels,
+        int[] groupIds,
         Page page
     ) {
         this.ungroupedRowFiller = new UngroupedRowFiller(elementTypes, encoders, sortOrders, channelInKey, page);
-        this.groupKeyValueExtractors = new ValueExtractor[groupChannels.length];
-        for (int k = 0; k < groupKeyValueExtractors.length; k++) {
-            int channel = groupChannels[k];
-            groupKeyValueExtractors[k] = ValueExtractor.extractorFor(
-                elementTypes.get(channel),
-                encoders.get(channel).toUnsortable(),
-                false,
-                page.getBlock(channel)
-            );
-        }
-    }
-
-    int preAllocatedGroupKeySize() {
-        return groupKeyPreAllocSize;
+        this.groupIds = groupIds;
     }
 
     int preAllocatedValueSize() {
@@ -56,17 +47,13 @@ final class GroupedRowFiller implements RowFiller {
     @Override
     public void writeSortKey(int i, Row row) {
         ungroupedRowFiller.writeSortKey(i, row);
-        GroupedRow groupedRow = (GroupedRow) row;
-        for (ValueExtractor extractor : groupKeyValueExtractors) {
-            extractor.writeValue(groupedRow.groupKey(), i);
-        }
+        ((GroupedRow) row).groupId = groupIds[i];
         keyPreAllocSize = RowFiller.newPreAllocSize(row.keys(), keyPreAllocSize);
-        groupKeyPreAllocSize = RowFiller.newPreAllocSize(groupedRow.groupKey(), groupKeyPreAllocSize);
     }
 
     @Override
     public void writeValues(int i, Row row) {
         ungroupedRowFiller.writeValues(i, row);
-        valuePreAllocSize = RowFiller.newPreAllocSize(row.values(), keyPreAllocSize);
+        valuePreAllocSize = RowFiller.newPreAllocSize(row.values(), valuePreAllocSize);
     }
 }

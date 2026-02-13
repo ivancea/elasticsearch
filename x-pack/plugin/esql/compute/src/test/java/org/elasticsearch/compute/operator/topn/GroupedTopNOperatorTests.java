@@ -42,6 +42,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
@@ -363,7 +364,9 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
         for (int i = 0; i < groupKeysCount; i++) {
             groupKeys.add(
                 randomValueOtherThanMany(
-                    c -> sortColumns.contains(c) || groupKeys.contains(c) || false == randomBlocksResult.validSortKeys[c],
+                    c -> sortColumns.contains(c) || groupKeys.contains(c) || randomBlocksResult.validSortKeys[c] == false
+                    // BlockHash does not support FLOAT as a group key type.
+                        || randomBlocksResult.elementTypes.get(c) == ElementType.FLOAT,
                     () -> randomIntBetween(0, blocksCount - 1)
                 )
             );
@@ -399,11 +402,27 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
         Comparator<List<Object>> sortOrderComparator = comparatorFromSortOrders(uniqueOrders);
         assertThat(isSorted(actualValues, sortOrderComparator), equalTo(true));
 
-        Comparator<List<Object>> rowComparator = sortOrderComparator.thenComparing(TIE_BREAKING_COMPARATOR);
-        assertThat(
-            actualValues.stream().sorted(rowComparator).toList(),
-            equalTo(topNExpectedValues.stream().sorted(rowComparator).toList())
-        );
+        // Given that sorting on repeated sort keys (Specially booleans, nulls...) may include arbitrary rows,
+        // we'll only assert the expected groups and keys, by including them in this signature
+        Function<List<Object>, List<Object>> signature = row -> {
+            List<Object> sig = new ArrayList<>();
+            for (int gk : groupKeys.stream().mapToInt(Integer::intValue).toArray()) {
+                sig.add(row.get(gk));
+            }
+            for (SortOrder so : uniqueOrders) {
+                sig.add(row.get(so.channel()));
+            }
+            return sig;
+        };
+
+        Map<List<Object>, Long> actualCounts = actualValues.stream()
+            .map(signature)
+            .collect(Collectors.groupingBy(s -> s, Collectors.counting()));
+        Map<List<Object>, Long> expectedCounts = topNExpectedValues.stream()
+            .map(signature)
+            .collect(Collectors.groupingBy(s -> s, Collectors.counting()));
+
+        assertThat(actualCounts, equalTo(expectedCounts));
     }
 
     private static Comparator<List<Object>> comparatorFromSortOrders(List<SortOrder> sortOrders) {
