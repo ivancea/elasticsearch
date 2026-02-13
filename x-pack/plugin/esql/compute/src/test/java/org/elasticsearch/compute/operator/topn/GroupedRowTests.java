@@ -70,7 +70,7 @@ public class GroupedRowTests extends ESTestCase {
     private long expectedRamBytesUsed(GroupedRow row) {
         var expected = RamUsageTester.ramUsed(row);
         expected -= RamUsageTester.ramUsed(breaker);
-        expected -= UngroupedRowTests.sharedRowBytes(row);
+        expected -= UngroupedRowTests.sharedRowBytes();
         expected += undercountedBytesForRow(row);
         return expected;
     }

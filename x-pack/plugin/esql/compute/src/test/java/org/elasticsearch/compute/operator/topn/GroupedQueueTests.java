@@ -260,8 +260,7 @@ public class GroupedQueueTests extends ESTestCase {
 
         if (queue.size() > 0) {
             List<Row> allRows = queue.popAll();
-            Row rowSample = allRows.getFirst();
-            expected -= UngroupedRowTests.sharedRowBytes(rowSample);
+            expected -= UngroupedRowTests.sharedRowBytes();
             expected += allRows.stream().map(r -> (GroupedRow) r).mapToLong(GroupedRowTests::undercountedBytesForRow).sum();
             allRows.forEach(queue::addRow);
         }
