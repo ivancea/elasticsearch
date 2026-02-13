@@ -179,8 +179,7 @@ public class UngroupedQueueTests extends ESTestCase {
         expected -= RamUsageTester.ramUsed(breaker);
         if (queue.size() > 0) {
             List<Row> allRows = queue.popAll();
-            Row rowSample = allRows.getFirst();
-            expected -= UngroupedRowTests.sharedRowBytes(rowSample);
+            expected -= UngroupedRowTests.sharedRowBytes();
             expected += allRows.stream().mapToLong(UngroupedRowTests::undercountBytesPerRow).sum();
             allRows.forEach(queue::addRow);
         }
