@@ -125,7 +125,7 @@ public class UngroupedQueueTests extends ESTestCase {
                 new boolean[] { true, false },
                 new Page(keyBlock, valueBlock)
             );
-            filler.writeKey(0, row);
+            filler.writeSortKey(0, row);
             filler.writeValues(0, row);
             return row;
         }

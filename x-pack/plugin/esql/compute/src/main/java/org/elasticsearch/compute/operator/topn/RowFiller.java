@@ -10,7 +10,7 @@ package org.elasticsearch.compute.operator.topn;
 import org.elasticsearch.compute.operator.BreakingBytesRefBuilder;
 
 interface RowFiller {
-    void writeKey(int i, Row row);
+    void writeSortKey(int i, Row row);
 
     void writeValues(int i, Row row);
 

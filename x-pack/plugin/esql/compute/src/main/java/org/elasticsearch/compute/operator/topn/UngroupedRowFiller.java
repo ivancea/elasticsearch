@@ -14,7 +14,7 @@ import java.util.List;
 
 final class UngroupedRowFiller implements RowFiller {
     private final ValueExtractor[] valueExtractors;
-    private final KeyExtractor[] keyExtractors;
+    private final KeyExtractor[] sortKeyExtractors;
 
     private int keyPreAllocSize = 0;
     private int valuePreAllocSize = 0;
@@ -35,10 +35,10 @@ final class UngroupedRowFiller implements RowFiller {
                 page.getBlock(b)
             );
         }
-        keyExtractors = new KeyExtractor[sortOrders.size()];
-        for (int k = 0; k < keyExtractors.length; k++) {
+        sortKeyExtractors = new KeyExtractor[sortOrders.size()];
+        for (int k = 0; k < sortKeyExtractors.length; k++) {
             TopNOperator.SortOrder so = sortOrders.get(k);
-            keyExtractors[k] = KeyExtractor.extractorFor(
+            sortKeyExtractors[k] = KeyExtractor.extractorFor(
                 elementTypes.get(so.channel()),
                 encoders.get(so.channel()),
                 so.asc(),
@@ -58,8 +58,8 @@ final class UngroupedRowFiller implements RowFiller {
     }
 
     @Override
-    public void writeKey(int position, Row row) {
-        for (KeyExtractor keyExtractor : keyExtractors) {
+    public void writeSortKey(int position, Row row) {
+        for (KeyExtractor keyExtractor : sortKeyExtractors) {
             keyExtractor.writeKey(row.keys(), position);
         }
         keyPreAllocSize = RowFiller.newPreAllocSize(row.keys(), keyPreAllocSize);

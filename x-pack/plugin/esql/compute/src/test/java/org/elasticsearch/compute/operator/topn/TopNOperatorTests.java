@@ -741,7 +741,7 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
             page
         );
         Row row = new UngroupedRow(nonBreakingBigArrays().breakerService().getBreaker("request"), 0, 0);
-        rf.writeKey(position, row);
+        rf.writeSortKey(position, row);
         rf.writeValues(position, row);
         return row;
     }

@@ -14,7 +14,7 @@ import java.util.List;
 
 final class GroupedRowFiller implements RowFiller {
     private final UngroupedRowFiller ungroupedRowFiller;
-    private final ValueExtractor[] valueExtractors;
+    private final ValueExtractor[] groupKeyValueExtractors;
 
     private int keyPreAllocSize = 0;
     private int valuePreAllocSize = 0;
@@ -29,10 +29,10 @@ final class GroupedRowFiller implements RowFiller {
         Page page
     ) {
         this.ungroupedRowFiller = new UngroupedRowFiller(elementTypes, encoders, sortOrders, channelInKey, page);
-        this.valueExtractors = new ValueExtractor[groupChannels.length];
-        for (int k = 0; k < valueExtractors.length; k++) {
+        this.groupKeyValueExtractors = new ValueExtractor[groupChannels.length];
+        for (int k = 0; k < groupKeyValueExtractors.length; k++) {
             int channel = groupChannels[k];
-            valueExtractors[k] = ValueExtractor.extractorFor(
+            groupKeyValueExtractors[k] = ValueExtractor.extractorFor(
                 elementTypes.get(channel),
                 encoders.get(channel).toUnsortable(),
                 false,
@@ -54,10 +54,10 @@ final class GroupedRowFiller implements RowFiller {
     }
 
     @Override
-    public void writeKey(int i, Row row) {
-        ungroupedRowFiller.writeKey(i, row);
+    public void writeSortKey(int i, Row row) {
+        ungroupedRowFiller.writeSortKey(i, row);
         GroupedRow groupedRow = (GroupedRow) row;
-        for (ValueExtractor extractor : valueExtractors) {
+        for (ValueExtractor extractor : groupKeyValueExtractors) {
             extractor.writeValue(groupedRow.groupKey(), i);
         }
         keyPreAllocSize = RowFiller.newPreAllocSize(row.keys(), keyPreAllocSize);

@@ -193,7 +193,7 @@ public class GroupedQueueTests extends ESTestCase {
                 new int[] { 0 },
                 new Page(groupKeyBlock, keyBlock, valueBlock)
             );
-            filler.writeKey(0, row);
+            filler.writeSortKey(0, row);
             filler.writeValues(0, row);
             return row;
         }

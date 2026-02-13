@@ -212,7 +212,7 @@ public class TopNOperator implements Operator, Accountable {
                 } else {
                     spare.clear();
                 }
-                rowFiller.writeKey(i, spare);
+                rowFiller.writeSortKey(i, spare);
 
                 var nextSpare = inputQueue.addRow(spare);
                 if (nextSpare != spare) {
