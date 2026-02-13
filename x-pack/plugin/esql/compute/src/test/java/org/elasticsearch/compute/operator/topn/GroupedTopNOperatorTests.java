@@ -138,7 +138,7 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
     @Override
     protected Matcher<String> expectedToStringOfSimple() {
         return equalTo(
-            "TopNOperator[count=0/4, elementTypes=[LONG, LONG], encoders=[DefaultUnsortable, DefaultUnsortable], "
+            "TopNOperator[count=0/0/4, elementTypes=[LONG, LONG], encoders=[DefaultUnsortable, DefaultUnsortable], "
                 + "sortOrders=[SortOrder[channel=0, asc=true, nullsFirst=false]], groupKeys=[1], inputOrdering=NOT_SORTED]"
         );
     }

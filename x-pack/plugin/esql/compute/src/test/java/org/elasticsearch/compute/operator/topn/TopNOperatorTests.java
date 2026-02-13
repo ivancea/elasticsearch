@@ -299,7 +299,8 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
             InputOrdering.SORTED
         );
         String groupKeysPart = groupKeys().length > 0 ? ", groupKeys=" + Arrays.toString(groupKeys()) : "";
-        var expectedDescription = "TopNOperator[count=0/4, elementTypes=[LONG], encoders=[DefaultUnsortable], "
+        String count = groupKeys().length > 0 ? "0/0/4" : "0/4";
+        var expectedDescription = "TopNOperator[count=" + count + ", elementTypes=[LONG], encoders=[DefaultUnsortable], "
             + "sortOrders=[SortOrder[channel=0, asc=true, nullsFirst=false]]"
             + groupKeysPart
             + ", inputOrdering=SORTED]";
@@ -1077,7 +1078,8 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
             + ", inputOrdering=NOT_SORTED]";
         assertThat(factory.describe(), equalTo("TopNOperator[count=10" + tail));
         try (Operator operator = factory.get(driverContext())) {
-            assertThat(operator.toString(), equalTo("TopNOperator[count=0/10" + tail));
+            String count = groupKeys().length > 0 ? "0/0/10" : "0/10";
+            assertThat(operator.toString(), equalTo("TopNOperator[count=" + count + tail));
         }
     }
 
