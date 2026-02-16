@@ -10,10 +10,12 @@ package org.elasticsearch.compute.operator.topn;
 import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.compute.aggregation.GroupingAggregatorFunction;
 import org.elasticsearch.compute.aggregation.blockhash.BlockHash;
+import org.elasticsearch.compute.data.Block;
 import org.elasticsearch.compute.data.BlockFactory;
 import org.elasticsearch.compute.data.ElementType;
 import org.elasticsearch.compute.data.IntArrayBlock;
 import org.elasticsearch.compute.data.IntBigArrayBlock;
+import org.elasticsearch.compute.data.IntBlock;
 import org.elasticsearch.compute.data.IntVector;
 import org.elasticsearch.compute.data.Page;
 
@@ -46,47 +48,38 @@ class GroupedTopNProcessor implements TopNProcessor {
         boolean[] channelInKey,
         Page page
     ) {
-        int[] groupIds = computeGroupIds(page);
+        IntBlock groupIds = computeGroupIds(page);
         return new GroupedRowFiller(elementTypes, encoders, sortOrders, channelInKey, groupIds, page);
     }
 
     /**
      * Uses the BlockHash to compute group IDs for all positions in the page.
-     * Each position is assigned a single integer group ID.
+     * Each position may have one or more group IDs when group keys are multivalued.
+     * The returned {@link IntBlock} must be closed by the caller (via the {@link GroupedRowFiller}).
      */
-    private int[] computeGroupIds(Page page) {
-        int positionCount = page.getPositionCount();
-        int[] ids = new int[positionCount];
-        blockHash.add(page, new GroupingAggregatorFunction.AddInput() {
-            @Override
-            public void add(int positionOffset, IntVector groupIds) {
-                for (int i = 0; i < groupIds.getPositionCount(); i++) {
-                    ids[positionOffset + i] = groupIds.getInt(i);
+    private IntBlock computeGroupIds(Page page) {
+        try (IntBlock.Builder builder = blockFactory.newIntBlockBuilder(page.getPositionCount())) {
+            blockHash.add(page, new GroupingAggregatorFunction.AddInput() {
+                @Override
+                public void add(int positionOffset, IntVector groupIds) {
+                    builder.copyFrom(groupIds.asBlock(), 0, groupIds.getPositionCount());
                 }
-            }
 
-            @Override
-            public void add(int positionOffset, IntArrayBlock groupIds) {
-                for (int i = 0; i < groupIds.getPositionCount(); i++) {
-                    // For multivalued group keys, take the first value.
-                    ids[positionOffset + i] = groupIds.getInt(groupIds.getFirstValueIndex(i));
+                @Override
+                public void add(int positionOffset, IntArrayBlock groupIds) {
+                    builder.copyFrom(groupIds, 0, groupIds.getPositionCount());
                 }
-            }
 
-            @Override
-            public void add(int positionOffset, IntBigArrayBlock groupIds) {
-                for (int i = 0; i < groupIds.getPositionCount(); i++) {
-                    // For multivalued group keys, take the first value.
-                    ids[positionOffset + i] = groupIds.getInt(groupIds.getFirstValueIndex(i));
+                @Override
+                public void add(int positionOffset, IntBigArrayBlock groupIds) {
+                    builder.copyFrom(groupIds, 0, groupIds.getPositionCount());
                 }
-            }
 
-            @Override
-            public void close() {
-                // Nothing to close
-            }
-        });
-        return ids;
+                @Override
+                public void close() {}
+            });
+            return builder.build();
+        }
     }
 
     @Override
@@ -98,6 +91,26 @@ class GroupedTopNProcessor implements TopNProcessor {
     @Override
     public TopNQueue queue(CircuitBreaker breaker, int topCount) {
         return new GroupedQueue(breaker, blockFactory.bigArrays(), topCount);
+    }
+
+    @Override
+    public Block[] getGroupKeyBlocks() {
+        return blockHash.getKeys();
+    }
+
+    @Override
+    public int[] getGroupIdToKeyPosition() {
+        try (IntVector nonEmpty = blockHash.nonEmpty()) {
+            int maxGroupId = 0;
+            for (int i = 0; i < nonEmpty.getPositionCount(); i++) {
+                maxGroupId = Math.max(maxGroupId, nonEmpty.getInt(i));
+            }
+            int[] mapping = new int[maxGroupId + 1];
+            for (int i = 0; i < nonEmpty.getPositionCount(); i++) {
+                mapping[nonEmpty.getInt(i)] = i;
+            }
+            return mapping;
+        }
     }
 
     @Override

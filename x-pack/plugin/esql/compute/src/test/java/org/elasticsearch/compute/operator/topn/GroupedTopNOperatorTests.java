@@ -247,6 +247,154 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
         assertThat(actual.get(1), equalTo(List.of(0, 1, 2)));
     }
 
+    public void testMultivalueGroupKey() {
+        DriverContext driverContext = driverContext();
+        BlockFactory blockFactory = driverContext.blockFactory();
+
+        int topCount = 1;
+        int[] groupKeys = new int[] { 2 }; // group key at channel 2
+        List<ElementType> elementTypes = List.of(LONG, LONG, LONG);
+        List<TopNEncoder> encoders = List.of(TopNEncoder.DEFAULT_SORTABLE, DEFAULT_UNSORTABLE, DEFAULT_UNSORTABLE);
+        List<SortOrder> sortOrders = List.of(new SortOrder(0, true, false));
+
+        Page page = new Page(
+            BlockUtils.fromList(
+                blockFactory,
+                List.of(
+                    // (To keep indentation)
+                    List.of(10L, 100L, List.of(1L, 2L)),
+                    List.of(20L, 200L, 1L),
+                    List.of(30L, 300L, 3L)
+                )
+            )
+        );
+
+        List<List<Object>> actual = new ArrayList<>();
+        try (
+            Driver driver = TestDriverFactory.create(
+                driverContext,
+                new CannedSourceOperator(List.of(page).iterator()),
+                List.of(
+                    new TopNOperator(
+                        blockFactory,
+                        nonBreakingBigArrays().breakerService().getBreaker("request"),
+                        topCount,
+                        elementTypes,
+                        encoders,
+                        sortOrders,
+                        groupKeys,
+                        randomPageSize(),
+                        TopNOperator.InputOrdering.NOT_SORTED
+                    )
+                ),
+                new PageConsumerOperator(p -> readInto(actual, p))
+            )
+        ) {
+            new TestDriverRunner().run(driver);
+        }
+
+        assertThat(actual.get(0), equalTo(List.of(10L, 10L, 30L))); // Sort key
+        assertThat(actual.get(1), equalTo(List.of(100L, 100L, 300L))); // Value
+        assertThat(actual.get(2), equalTo(List.of(1L, 2L, 3L))); // Group key
+    }
+
+    public void testMultivalueGroupKeyDuplicateWinner() {
+        DriverContext driverContext = driverContext();
+        BlockFactory bf = driverContext.blockFactory();
+
+        int topCount = 1;
+        int[] groupKeys = new int[] { 2 };
+        List<ElementType> elementTypes = List.of(LONG, LONG, LONG);
+        List<TopNEncoder> encoders = List.of(TopNEncoder.DEFAULT_SORTABLE, DEFAULT_UNSORTABLE, DEFAULT_UNSORTABLE);
+        List<SortOrder> sortOrders = List.of(new SortOrder(0, true, false));
+
+        Page page = new Page(BlockUtils.fromList(bf, List.of(List.of(5L, 50L, List.of(1L, 2L)), List.of(10L, 100L, 1L))));
+
+        List<List<Object>> actual = new ArrayList<>();
+        try (
+            Driver driver = TestDriverFactory.create(
+                driverContext,
+                new CannedSourceOperator(List.of(page).iterator()),
+                List.of(
+                    new TopNOperator(
+                        bf,
+                        nonBreakingBigArrays().breakerService().getBreaker("request"),
+                        topCount,
+                        elementTypes,
+                        encoders,
+                        sortOrders,
+                        groupKeys,
+                        randomPageSize(),
+                        TopNOperator.InputOrdering.NOT_SORTED
+                    )
+                ),
+                new PageConsumerOperator(p -> readInto(actual, p))
+            )
+        ) {
+            new TestDriverRunner().run(driver);
+        }
+
+        assertThat(actual.get(0), equalTo(List.of(5L, 5L))); // Sort key
+        assertThat(actual.get(1), equalTo(List.of(50L, 50L))); // Value
+        assertThat(actual.get(2), equalTo(List.of(1L, 2L))); // Group key
+    }
+
+    /**
+     * Tests cartesian product expansion with two multivalue group keys:
+     * a row with group_key1=[1, 2] and group_key2=[10, 20] belongs to groups
+     * (1,10), (1,20), (2,10), (2,20), the same way as STATS BY handles
+     * multiple multivalue group keys.
+     *
+     * <p>Without MV fanning, row 0 would only be in one group (the first combination),
+     * so groups (1,20), (2,10), and (2,20) would be empty → output would have fewer rows.
+     */
+    public void testMultipleMultivalueGroupKeys() {
+        DriverContext driverContext = driverContext();
+        BlockFactory bf = driverContext.blockFactory();
+
+        int topCount = 1;
+        int[] groupKeys = new int[] { 2, 3 }; // two group keys at channels 2 and 3
+        List<ElementType> elementTypes = List.of(LONG, LONG, LONG, LONG);
+        List<TopNEncoder> encoders = List.of(TopNEncoder.DEFAULT_SORTABLE, DEFAULT_UNSORTABLE, DEFAULT_UNSORTABLE, DEFAULT_UNSORTABLE);
+        List<SortOrder> sortOrders = List.of(new SortOrder(0, true, false));
+
+        Page page = new Page(
+            BlockUtils.fromList(
+                bf,
+                List.of(List.of(10L, 100L, List.of(1L, 2L), List.of(10L, 20L)), List.of(5L, 50L, 1L, 10L), List.of(15L, 150L, 2L, 20L))
+            )
+        );
+
+        List<List<Object>> actual = new ArrayList<>();
+        try (
+            Driver driver = TestDriverFactory.create(
+                driverContext,
+                new CannedSourceOperator(List.of(page).iterator()),
+                List.of(
+                    new TopNOperator(
+                        bf,
+                        nonBreakingBigArrays().breakerService().getBreaker("request"),
+                        topCount,
+                        elementTypes,
+                        encoders,
+                        sortOrders,
+                        groupKeys,
+                        randomPageSize(),
+                        TopNOperator.InputOrdering.NOT_SORTED
+                    )
+                ),
+                new PageConsumerOperator(p -> readInto(actual, p))
+            )
+        ) {
+            new TestDriverRunner().run(driver);
+        }
+
+        assertThat(actual.get(0), equalTo(List.of(5L, 10L, 10L, 10L))); // Sort key
+        assertThat(actual.get(1), equalTo(List.of(50L, 100L, 100L, 100L))); // Value
+        assertThat(actual.get(2), equalTo(List.of(1L, 1L, 2L, 2L))); // Group key 1
+        assertThat(actual.get(3), equalTo(List.of(10L, 20L, 10L, 20L))); // Group key 2
+    }
+
     public void testEstimateRamBytesUsed() {
         assumeFalse("Ignored because RamUsageTester is not working properly with hashmap and we'll replace these maps anyway.", true);
         RamUsageTester.Accumulator acc = new RamUsageTester.Accumulator() {

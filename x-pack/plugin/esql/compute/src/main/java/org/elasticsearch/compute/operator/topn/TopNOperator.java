@@ -214,31 +214,41 @@ public class TopNOperator implements Operator, Accountable {
             if (this.topCount <= 0) {
                 return;
             }
-            RowFiller rowFiller = processor.rowFiller(elementTypes, encoders, sortOrders, channelInKey, page);
+            boolean shortCircuit = false;
+            try (RowFiller rowFiller = processor.rowFiller(elementTypes, encoders, sortOrders, channelInKey, page)) {
+                for (int i = 0; i < page.getPositionCount() && shortCircuit == false; i++) {
+                    int groupCount = rowFiller.groupIdCount(i);
+                    for (int g = 0; g < groupCount; g++) {
+                        if (spare == null) {
+                            spare = processor.row(breaker, sortOrders, rowFiller);
+                        } else {
+                            spare.clear();
+                        }
+                        rowFiller.writeSortKey(i, spare);
+                        if (g > 0) {
+                            rowFiller.setGroupId(i, g, spare);
+                        }
 
-            for (int i = 0; i < page.getPositionCount(); i++) {
-                if (spare == null) {
-                    spare = processor.row(breaker, sortOrders, rowFiller);
-                } else {
-                    spare.clear();
-                }
-                rowFiller.writeSortKey(i, spare);
+                        var nextSpare = inputQueue.addRow(spare);
+                        if (nextSpare != spare) {
+                            var insertedRow = spare;
+                            spare = nextSpare; // Update spare before writing values in case writing fails
+                            rowFiller.writeValues(i, insertedRow);
+                        } else if (inputOrdering == TopNOperator.InputOrdering.SORTED && groupKeys.length == 0) {
+                            /*
+                             The queue (min-heap) is full and we have sorted input for the input page. Any other element
+                             that comes after the one we just compared will be greater or equal than any other one in the
+                             queue, so we can short circuit the execution here.
 
-                var nextSpare = inputQueue.addRow(spare);
-                if (nextSpare != spare) {
-                    var insertedRow = spare;
-                    spare = nextSpare; // Update spare before writing values in case the writing fails, to avoid releasing spare twice.
-                    rowFiller.writeValues(i, insertedRow);
-                } else if (inputOrdering == TopNOperator.InputOrdering.SORTED && groupKeys.length == 0) {
-                    /*
-                     The queue (min-heap) is full and we have sorted input for the input page. Any other element that comes after the one
-                     we just compared will be greater or equal than any other one in the queue, so we can short circuit the execution here.
-
-                     Note we always need to check whether the min-heap top's is greater or equal than the current element. For example: we
-                     could have processed all the data from a first data node, have a full queue (a partial result), but a page from a
-                     second data node could interleave with our partial result in arbitrary ways.
-                     */
-                    break;
+                             Note we always need to check whether the min-heap top's is greater or equal than the current
+                             element. For example: we could have processed all the data from a first data node, have a
+                             full queue (a partial result), but a page from a second data node could interleave with our
+                             partial result in arbitrary ways.
+                             */
+                            shortCircuit = true;
+                            break;
+                        }
+                    }
                 }
             }
         } finally {
@@ -377,15 +387,42 @@ public class TopNOperator implements Operator, Accountable {
         List<Row> rows = inputQueue.popAll();
         inputQueue.close();
         inputQueue = null;
-        return new Result(rows);
+        Block[] groupKeyBlocks = processor.getGroupKeyBlocks();
+        int[] groupIdToKeyPosition = processor.getGroupIdToKeyPosition();
+        boolean success = false;
+        try {
+            Result result = new Result(rows, groupKeyBlocks, groupIdToKeyPosition);
+            success = true;
+            return result;
+        } finally {
+            if (success == false) {
+                if (groupKeyBlocks != null) {
+                    Releasables.closeExpectNoException(groupKeyBlocks);
+                }
+                Releasables.close(rows);
+            }
+        }
     }
 
     private class Result implements ReleasableIterator<Page> {
         private final List<Row> rows;
+        /**
+         * For grouped top-N, the expanded single-value key blocks from the BlockHash,
+         * one per group key channel. {@code null} for ungrouped top-N.
+         */
+        private final Block[] groupKeyBlocks;
+        /**
+         * Maps group IDs (from {@link GroupedRow#groupId}) to positions in {@link #groupKeyBlocks}.
+         * Group IDs from BlockHash may not be 0-based (e.g., {@code hashOrdToGroupNullReserved}
+         * reserves 0 for null), so this mapping is needed. {@code null} for ungrouped top-N.
+         */
+        private final int[] groupIdToKeyPosition;
         private int r;
 
-        private Result(List<Row> rows) {
+        private Result(List<Row> rows, Block[] groupKeyBlocks, int[] groupIdToKeyPosition) {
             this.rows = rows;
+            this.groupKeyBlocks = groupKeyBlocks;
+            this.groupIdToKeyPosition = groupIdToKeyPosition;
         }
 
         @Override
@@ -400,26 +437,42 @@ public class TopNOperator implements Operator, Accountable {
             if (size <= 0) {
                 throw new IllegalStateException("can't make empty pages. " + size + " must be > 0");
             }
+            int[] rowKeyPositions = groupKeyBlocks != null ? new int[size] : null;
             ResultBuilder[] builders = new ResultBuilder[elementTypes.size()];
             try {
                 for (int b = 0; b < builders.length; b++) {
                     builders[b] = ResultBuilder.resultBuilderFor(blockFactory, elementTypes.get(b), encoders.get(b), channelInKey[b], size);
                 }
                 int rEnd = r + size;
+                int idx = 0;
                 while (r < rEnd) {
                     try (Row row = rows.set(r++, null)) {
+                        if (rowKeyPositions != null) {
+                            rowKeyPositions[idx] = groupIdToKeyPosition[((GroupedRow) row).groupId];
+                        }
                         readKeys(builders, row.keys().bytesRefView());
                         readValues(builders, row.values().bytesRefView());
                     }
+                    idx++;
                 }
 
                 Block[] blocks = new Block[builders.length];
+                boolean blocksBuilt = false;
                 try {
                     for (int b = 0; b < blocks.length; b++) {
                         blocks[b] = builders[b].build();
                     }
+                    if (rowKeyPositions != null) {
+                        for (int k = 0; k < groupKeys.length; k++) {
+                            int channel = groupKeys[k];
+                            Block replacement = groupKeyBlocks[k].filter(true, rowKeyPositions);
+                            blocks[channel].close();
+                            blocks[channel] = replacement;
+                        }
+                    }
+                    blocksBuilt = true;
                 } finally {
-                    if (blocks[blocks.length - 1] == null) {
+                    if (blocksBuilt == false) {
                         Releasables.closeExpectNoException(blocks);
                     }
                 }
@@ -434,6 +487,9 @@ public class TopNOperator implements Operator, Accountable {
         @Override
         public void close() {
             Releasables.close(rows);
+            if (groupKeyBlocks != null) {
+                Releasables.closeExpectNoException(groupKeyBlocks);
+            }
         }
 
         /**

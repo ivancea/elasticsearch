@@ -900,3 +900,147 @@ emp_no:integer | salary:integer | languages:integer | gender:keyword
 10024          | 64675          | null              | F
 10023          | 47896          | null              | F
 ;
+
+sortByLimitMultivalueGroupKeySimple
+required_capability: sort_by_limit
+
+ROW x = 1, g = [10, 20, 30]
+| SORT x DESC
+| LIMIT 1 BY g
+| SORT g ASC
+| KEEP x, g
+;
+
+x:integer | g:integer
+1         | 10
+1         | 20
+1         | 30
+;
+
+sortByLimitMultivalueGroupKeySimpleFiltered
+required_capability: sort_by_limit
+
+ROW x = 1, g = [10, 20, 30]
+| SORT x DESC
+| LIMIT 1 BY g
+| WHERE g == 20
+| KEEP x, g
+;
+
+x:integer | g:integer
+1         | 20
+;
+
+sortByLimitTwoMultivalueGroupKeysSimple
+required_capability: sort_by_limit
+
+ROW x = 1, g1 = [1, 2], g2 = [10, 20]
+| SORT x DESC
+| LIMIT 1 BY g1, g2
+| KEEP x, g1, g2
+| SORT g1 ASC, g2 ASC
+;
+
+x:integer | g1:integer | g2:integer
+1         | 1          | 10
+1         | 1          | 20
+1         | 2          | 10
+1         | 2          | 20
+;
+
+sortByLimitMultivalueGroupKey
+required_capability: sort_by_limit
+
+// 10001 -> [Accountant, Senior Python Developer]
+// 10006 -> [Principal Support Engineer, Senior Team Lead, Tech Lead]
+// 10002 -> [Senior Team Lead]; loses to 10006 (salary 60335 > 56371)
+FROM employees
+| WHERE emp_no IN (10001, 10002, 10006)
+| SORT salary DESC
+| LIMIT 1 BY job_positions
+| SORT emp_no, job_positions ASC
+| KEEP emp_no, first_name, salary, job_positions
+;
+
+emp_no:integer | first_name:keyword | salary:integer | job_positions:keyword
+10001          | Georgi             | 57305          | Accountant
+10001          | Georgi             | 57305          | Senior Python Developer
+10006          | Anneke             | 60335          | Principal Support Engineer
+10006          | Anneke             | 60335          | Senior Team Lead
+10006          | Anneke             | 60335          | Tech Lead
+;
+
+sortByLimitMultivalueGroupKeyFiltered
+required_capability: sort_by_limit
+
+FROM employees
+| WHERE emp_no IN (10001, 10002, 10006)
+| SORT salary DESC
+| LIMIT 1 BY job_positions
+| WHERE job_positions == "Senior Team Lead"
+| KEEP emp_no, first_name, salary, job_positions
+;
+
+emp_no:integer | first_name:keyword | salary:integer | job_positions:keyword
+10006          | Anneke             | 60335          | Senior Team Lead
+;
+
+sortByLimitMultivalueGroupKeyWithCompetition
+required_capability: sort_by_limit
+
+FROM employees
+| WHERE emp_no IN (10001, 10008)
+| SORT salary DESC
+| LIMIT 1 BY job_positions
+| SORT emp_no, job_positions ASC
+| KEEP emp_no, first_name, salary, job_positions
+;
+
+emp_no:integer | first_name:keyword | salary:integer | job_positions:keyword
+10001          | Georgi             | 57305          | Accountant
+10001          | Georgi             | 57305          | Senior Python Developer
+10008          | Saniya             | 43906          | Internship
+10008          | Saniya             | 43906          | Junior Developer
+10008          | Saniya             | 43906          | Purchase Manager
+;
+
+sortByLimitMultipleMultivalueGroupKeys
+required_capability: sort_by_limit
+
+FROM employees
+| WHERE emp_no == 10001
+| SORT salary DESC
+| LIMIT 1 BY job_positions, is_rehired
+| SORT job_positions ASC, is_rehired ASC
+| KEEP emp_no, first_name, salary, job_positions, is_rehired
+;
+
+emp_no:integer | first_name:keyword | salary:integer | job_positions:keyword   | is_rehired:boolean
+10001          | Georgi             | 57305          | Accountant              | false
+10001          | Georgi             | 57305          | Accountant              | true
+10001          | Georgi             | 57305          | Senior Python Developer | false
+10001          | Georgi             | 57305          | Senior Python Developer | true
+;
+
+sortByLimitMultivalueGroupKeyLimit2
+required_capability: sort_by_limit
+
+FROM employees
+| WHERE emp_no IN (10001, 10006, 10008)
+| SORT salary DESC
+| LIMIT 2 BY job_positions
+| SORT job_positions ASC, salary DESC
+| KEEP emp_no, first_name, salary, job_positions
+;
+
+emp_no:integer | first_name:keyword | salary:integer | job_positions:keyword
+10001          | Georgi             | 57305          | Accountant
+10008          | Saniya             | 43906          | Internship
+10008          | Saniya             | 43906          | Junior Developer
+10006          | Anneke             | 60335          | Principal Support Engineer
+10008          | Saniya             | 43906          | Purchase Manager
+10001          | Georgi             | 57305          | Senior Python Developer
+10008          | Saniya             | 43906          | Senior Python Developer
+10006          | Anneke             | 60335          | Senior Team Lead
+10006          | Anneke             | 60335          | Tech Lead
+;

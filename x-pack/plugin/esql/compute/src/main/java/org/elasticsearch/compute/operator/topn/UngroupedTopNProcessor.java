@@ -8,6 +8,7 @@
 package org.elasticsearch.compute.operator.topn;
 
 import org.elasticsearch.common.breaker.CircuitBreaker;
+import org.elasticsearch.compute.data.Block;
 import org.elasticsearch.compute.data.ElementType;
 import org.elasticsearch.compute.data.Page;
 
@@ -34,6 +35,16 @@ class UngroupedTopNProcessor implements TopNProcessor {
     @Override
     public TopNQueue queue(CircuitBreaker breaker, int topCount) {
         return UngroupedQueue.build(breaker, topCount);
+    }
+
+    @Override
+    public Block[] getGroupKeyBlocks() {
+        return null;
+    }
+
+    @Override
+    public int[] getGroupIdToKeyPosition() {
+        return null;
     }
 
     @Override
