@@ -395,6 +395,58 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
         assertThat(actual.get(3), equalTo(List.of(10L, 20L, 10L, 20L))); // Group key 2
     }
 
+    /**
+     * Fails when a single page position has more group IDs (from multivalued group key expansion)
+     * than {@link GroupedTopNProcessor}'s internal emit batch size (10K).
+     * <p>
+     *     In that case BlockHash's AddPage invokes the callback multiple times for the same position;
+     *     the current implementation concatenates those callbacks and produces misaligned group IDs, so we get wrong grouped top-N.
+     *     This test uses one row with two multivalued group keys of 150 values each (150×150 = 22_500 > 10_240).
+     * </p>
+     */
+    public void testSinglePositionExceedsEmitBatchSize() {
+        DriverContext driverContext = driverContext();
+        BlockFactory bf = driverContext.blockFactory();
+
+        int topCount = 1;
+        int[] groupKeys = new int[] { 2, 3 };
+        List<ElementType> elementTypes = List.of(LONG, LONG, LONG, LONG);
+        List<TopNEncoder> encoders = List.of(TopNEncoder.DEFAULT_SORTABLE, DEFAULT_UNSORTABLE, DEFAULT_UNSORTABLE, DEFAULT_UNSORTABLE);
+        List<SortOrder> sortOrders = List.of(new SortOrder(0, true, false));
+
+        List<Long> keys1 = LongStream.range(0, 150).boxed().toList();
+        List<Long> keys2 = LongStream.range(0, 150).boxed().toList();
+        Page page = new Page(BlockUtils.fromList(bf, List.of(List.of(1L, 1L, keys1, keys2))));
+
+        List<List<Object>> actual = new ArrayList<>();
+        try (
+            Driver driver = TestDriverFactory.create(
+                driverContext,
+                new CannedSourceOperator(List.of(page).iterator()),
+                List.of(
+                    new TopNOperator(
+                        bf,
+                        nonBreakingBigArrays().breakerService().getBreaker("request"),
+                        topCount,
+                        elementTypes,
+                        encoders,
+                        sortOrders,
+                        groupKeys,
+                        randomPageSize(),
+                        TopNOperator.InputOrdering.NOT_SORTED
+                    )
+                ),
+                new PageConsumerOperator(p -> readInto(actual, p))
+            )
+        ) {
+            new TestDriverRunner().run(driver);
+        }
+
+        // Expected: 10_404 groups, each with one row (1, 1, g1, g2) for (g1,g2) in [0..101]×[0..101]
+        int expectedRows = 102 * 102;
+        assertThat("Output row count (wrong when one position exceeds emit batch size)", actual.get(0).size(), equalTo(expectedRows));
+    }
+
     public void testEstimateRamBytesUsed() {
         assumeFalse("Ignored because RamUsageTester is not working properly with hashmap and we'll replace these maps anyway.", true);
         RamUsageTester.Accumulator acc = new RamUsageTester.Accumulator() {

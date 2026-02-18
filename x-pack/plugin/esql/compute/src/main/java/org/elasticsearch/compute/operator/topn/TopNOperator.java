@@ -173,7 +173,7 @@ public class TopNOperator implements Operator, Accountable {
         this.groupKeys = groupKeys;
         this.processor = groupKeys.length == 0
             ? new UngroupedTopNProcessor()
-            : new GroupedTopNProcessor(groupKeys, elementTypes, blockFactory, maxPageSize);
+            : new GroupedTopNProcessor(groupKeys, elementTypes, blockFactory);
         boolean success = false;
         try {
             this.inputQueue = processor.queue(breaker, topCount);
