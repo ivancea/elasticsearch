@@ -17,8 +17,8 @@ import org.elasticsearch.common.util.MockBigArrays;
 import org.elasticsearch.common.util.PageCacheRecycler;
 import org.elasticsearch.compute.aggregation.SumLongAggregatorFunction;
 import org.elasticsearch.compute.aggregation.SumLongAggregatorFunctionSupplier;
-import org.elasticsearch.compute.operator.UnknownWarningSourceLocation;
 import org.elasticsearch.compute.operator.DriverContext;
+import org.elasticsearch.compute.operator.UnknownWarningSourceLocation;
 import org.elasticsearch.compute.test.RandomBlock;
 import org.elasticsearch.compute.test.TestBlockFactory;
 import org.elasticsearch.core.Releasables;
@@ -290,7 +290,12 @@ public class BlockSerializationTests extends SerializationTestCase {
                     .forEach(i -> EqualsHashCodeTestUtils.checkEqualsAndHashCode(blocks[i], unused -> deserBlocks[i]));
 
                 var inputChannels = IntStream.range(0, SumLongAggregatorFunction.intermediateStateDesc().size()).boxed().toList();
-                try (var finalAggregator = new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE).aggregator(driverCtx, inputChannels)) {
+                try (
+                    var finalAggregator = new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE).aggregator(
+                        driverCtx,
+                        inputChannels
+                    )
+                ) {
                     finalAggregator.addIntermediateInput(new Page(deserBlocks));
                     Block[] finalBlocks = new Block[1];
                     finalAggregator.evaluateFinal(finalBlocks, 0, driverCtx);

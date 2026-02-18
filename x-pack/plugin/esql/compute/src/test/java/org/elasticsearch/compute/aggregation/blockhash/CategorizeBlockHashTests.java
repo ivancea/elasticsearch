@@ -20,7 +20,6 @@ import org.elasticsearch.compute.aggregation.AggregatorMode;
 import org.elasticsearch.compute.aggregation.GroupingAggregatorFunction;
 import org.elasticsearch.compute.aggregation.MaxLongAggregatorFunctionSupplier;
 import org.elasticsearch.compute.aggregation.SumLongAggregatorFunctionSupplier;
-import org.elasticsearch.compute.operator.UnknownWarningSourceLocation;
 import org.elasticsearch.compute.data.Block;
 import org.elasticsearch.compute.data.BlockFactory;
 import org.elasticsearch.compute.data.BytesRefBlock;
@@ -38,6 +37,7 @@ import org.elasticsearch.compute.operator.DriverContext;
 import org.elasticsearch.compute.operator.HashAggregationOperator;
 import org.elasticsearch.compute.operator.LocalSourceOperator;
 import org.elasticsearch.compute.operator.PageConsumerOperator;
+import org.elasticsearch.compute.operator.UnknownWarningSourceLocation;
 import org.elasticsearch.compute.test.CannedSourceOperator;
 import org.elasticsearch.compute.test.TestDriverFactory;
 import org.elasticsearch.compute.test.TestDriverRunner;
@@ -510,7 +510,10 @@ public class CategorizeBlockHashTests extends BlockHashTestCase {
                     List.of(groupSpec),
                     AggregatorMode.INITIAL,
                     List.of(
-                        new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE).groupingAggregatorFactory(AggregatorMode.INITIAL, List.of(1)),
+                        new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE).groupingAggregatorFactory(
+                            AggregatorMode.INITIAL,
+                            List.of(1)
+                        ),
                         new MaxLongAggregatorFunctionSupplier().groupingAggregatorFactory(AggregatorMode.INITIAL, List.of(1))
                     ),
                     16 * 1024,
@@ -531,7 +534,10 @@ public class CategorizeBlockHashTests extends BlockHashTestCase {
                     List.of(groupSpec),
                     AggregatorMode.INITIAL,
                     List.of(
-                        new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE).groupingAggregatorFactory(AggregatorMode.INITIAL, List.of(1)),
+                        new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE).groupingAggregatorFactory(
+                            AggregatorMode.INITIAL,
+                            List.of(1)
+                        ),
                         new MaxLongAggregatorFunctionSupplier().groupingAggregatorFactory(AggregatorMode.INITIAL, List.of(1))
                     ),
                     16 * 1024,
@@ -554,7 +560,10 @@ public class CategorizeBlockHashTests extends BlockHashTestCase {
                     List.of(groupSpec),
                     AggregatorMode.FINAL,
                     List.of(
-                        new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE).groupingAggregatorFactory(AggregatorMode.FINAL, List.of(1, 2, 3)),
+                        new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE).groupingAggregatorFactory(
+                            AggregatorMode.FINAL,
+                            List.of(1, 2, 3)
+                        ),
                         new MaxLongAggregatorFunctionSupplier().groupingAggregatorFactory(AggregatorMode.FINAL, List.of(4, 5))
                     ),
                     16 * 1024,
