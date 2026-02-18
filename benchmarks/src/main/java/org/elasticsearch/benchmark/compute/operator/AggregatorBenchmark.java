@@ -44,6 +44,7 @@ import org.elasticsearch.compute.operator.DriverContext;
 import org.elasticsearch.compute.operator.EvalOperator;
 import org.elasticsearch.compute.operator.HashAggregationOperator;
 import org.elasticsearch.compute.operator.Operator;
+import org.elasticsearch.xpack.esql.core.tree.Source;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -199,8 +200,11 @@ public class AggregatorBenchmark {
             default -> throw new IllegalArgumentException("unsupported grouping [" + grouping + "]");
         };
         return new HashAggregationOperator(
+            AggregatorMode.SINGLE,
             List.of(supplier(op, dataType, filter).groupingAggregatorFactory(AggregatorMode.SINGLE, List.of(groups.size()))),
             () -> BlockHash.build(groups, driverContext.blockFactory(), 16 * 1024, false),
+            Integer.MAX_VALUE,
+            1.0,
             driverContext
         );
     }
@@ -224,7 +228,7 @@ public class AggregatorBenchmark {
                 default -> throw new IllegalArgumentException("unsupported data type [" + dataType + "]");
             };
             case SUM -> switch (dataType) {
-                case LONGS -> new SumLongAggregatorFunctionSupplier(-1, -2, "");
+                case LONGS -> new SumLongAggregatorFunctionSupplier(Source.EMPTY);
                 case DOUBLES -> new SumDoubleAggregatorFunctionSupplier();
                 default -> throw new IllegalArgumentException("unsupported data type [" + dataType + "]");
             };

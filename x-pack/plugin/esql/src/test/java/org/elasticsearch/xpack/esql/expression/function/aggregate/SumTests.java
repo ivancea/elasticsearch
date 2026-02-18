@@ -21,12 +21,14 @@ import org.elasticsearch.xpack.esql.expression.function.MultiRowTestCaseSupplier
 import org.elasticsearch.xpack.esql.expression.function.TestCaseSupplier;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.elasticsearch.xpack.esql.core.type.DataType.UNSIGNED_LONG;
+import static org.hamcrest.Matchers.closeTo;
 import static org.hamcrest.Matchers.equalTo;
 
 public class SumTests extends AbstractAggregationTestCase {
@@ -43,11 +45,8 @@ public class SumTests extends AbstractAggregationTestCase {
             MultiRowTestCaseSupplier.longCases(1, 1000, Long.MIN_VALUE, Long.MAX_VALUE, true),
             MultiRowTestCaseSupplier.aggregateMetricDoubleCases(1, 1000, -Double.MAX_VALUE, Double.MAX_VALUE),
             MultiRowTestCaseSupplier.exponentialHistogramCases(1, 100),
-            MultiRowTestCaseSupplier.tdigestCases(1, 100)
-
-            // Doubles currently return +/-Infinity on overflow.
-            // Restore after https://github.com/elastic/elasticsearch/issues/111026
-            // MultiRowTestCaseSupplier.doubleCases(1, 1000, -Double.MAX_VALUE, Double.MAX_VALUE, true)
+            MultiRowTestCaseSupplier.tdigestCases(1, 100),
+            MultiRowTestCaseSupplier.doubleCases(1, 1000, -Double.MAX_VALUE, Double.MAX_VALUE, true)
         ).flatMap(List::stream).map(SumTests::makeSupplier).collect(Collectors.toCollection(() -> suppliers));
 
         suppliers.addAll(
@@ -110,50 +109,61 @@ public class SumTests extends AbstractAggregationTestCase {
         return new TestCaseSupplier(fieldSupplier.name(), List.of(fieldSupplier.type()), () -> {
             var fieldTypedData = fieldSupplier.get();
 
-            Object expected;
-            String expectedWarning = null;
-
             DataType type = fieldTypedData.type().widenSmallNumeric();
-            try {
-                expected = switch (type) {
-                    case INTEGER -> fieldTypedData.multiRowData().stream().mapToLong(v -> (int) v).sum();
-                    case LONG -> fieldTypedData.multiRowData().stream().mapToLong(v -> (long) v).reduce(0L, Math::addExact);
-                    case DOUBLE -> {
-                        var value = fieldTypedData.multiRowData().stream().mapToDouble(v -> (double) v).sum();
-
-                        if (Double.isInfinite(value) || Double.isNaN(value)) {
-                            yield null;
+            var data = fieldTypedData.multiRowData();
+            String expectedWarning = null;
+            Object expected = null;
+            if (data.isEmpty() == false) {
+                try {
+                    expected = switch (type) {
+                        case INTEGER -> data.stream().mapToLong(v -> (int) v).sum();
+                        case LONG -> data.stream().mapToLong(v -> (long) v).reduce(0L, Math::addExact);
+                        case DOUBLE -> data.stream().mapToDouble(v -> (double) v).sum();
+                        case AGGREGATE_METRIC_DOUBLE -> data.stream()
+                            .mapToDouble(v -> ((AggregateMetricDoubleBlockBuilder.AggregateMetricDoubleLiteral) v).sum())
+                            .sum();
+                        case EXPONENTIAL_HISTOGRAM -> {
+                            var sums = data.stream()
+                                .map(obj -> (ExponentialHistogram) obj)
+                                .filter(obj -> obj.valueCount() > 0)
+                                .mapToDouble(ExponentialHistogram::sum)
+                                .toArray();
+                            yield sums.length == 0 ? null : Arrays.stream(sums).sum();
                         }
-
-                        yield value;
+                        case TDIGEST -> {
+                            var sums = data.stream()
+                                .map(obj -> (TDigestHolder) obj)
+                                .filter(obj -> obj.getValueCount() > 0)
+                                .mapToDouble(TDigestHolder::getSum)
+                                .toArray();
+                            yield sums.length == 0 ? null : Arrays.stream(sums).sum();
+                        }
+                        default -> throw new IllegalStateException("Unexpected value: " + fieldTypedData.type());
+                    };
+                } catch (ArithmeticException e) {
+                    expected = null;
+                    if (type == DataType.LONG) {
+                        expectedWarning = "java.lang.ArithmeticException: long overflow";
+                    } else {
+                        throw new UnsupportedOperationException("Unsupported exception in test for type " + type + ": " + e);
                     }
-                    case AGGREGATE_METRIC_DOUBLE -> fieldTypedData.multiRowData()
-                        .stream()
-                        .mapToDouble(v -> ((AggregateMetricDoubleBlockBuilder.AggregateMetricDoubleLiteral) v).sum())
-                        .sum();
-                    case EXPONENTIAL_HISTOGRAM -> fieldTypedData.multiRowData()
-                        .stream()
-                        .mapToDouble(obj -> ((ExponentialHistogram) obj).sum())
-                        .sum();
-                    case TDIGEST -> fieldTypedData.multiRowData().stream().mapToDouble(obj -> ((TDigestHolder) obj).getSum()).sum();
-                    default -> throw new IllegalStateException("Unexpected value: " + fieldTypedData.type());
-                };
-            } catch (ArithmeticException e) {
-                expected = null;
-                if (type == DataType.LONG) {
-                    expectedWarning = "java.lang.ArithmeticException: long overflow";
-                } else {
-                    throw new UnsupportedOperationException("Unsupported exception in test for type " + type + ": " + e);
                 }
             }
 
+            // Doubles currently return +/-Infinity on overflow.
+            // After https://github.com/elastic/elasticsearch/issues/111026,
+            // replace it with an "if + expected = null"
+            assumeFalse(
+                "Sums of doubles may return infinity in their current implementation",
+                expected instanceof Double d && Double.isFinite(d) == false
+            );
             var returnType = type.isWholeNumber() == false || type == UNSIGNED_LONG ? DataType.DOUBLE : DataType.LONG;
 
             var testCase = new TestCaseSupplier.TestCase(
                 List.of(fieldTypedData),
                 standardAggregatorName("Sum", fieldSupplier.type()),
                 returnType,
-                equalTo(expected)
+                expected instanceof Double d ? closeTo(d, Math.abs(d * 1e-10)) : equalTo(expected)
             );
 
             if (expectedWarning != null) {

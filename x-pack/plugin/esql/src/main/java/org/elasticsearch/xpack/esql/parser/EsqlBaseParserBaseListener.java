@@ -181,6 +181,18 @@ public class EsqlBaseParserBaseListener implements EsqlBaseParserListener {
    *
    * <p>The default implementation does nothing.</p>
    */
+  @Override public void enterExternalCommand(EsqlBaseParser.ExternalCommandContext ctx) { }
+  /**
+   * {@inheritDoc}
+   *
+   * <p>The default implementation does nothing.</p>
+   */
+  @Override public void exitExternalCommand(EsqlBaseParser.ExternalCommandContext ctx) { }
+  /**
+   * {@inheritDoc}
+   *
+   * <p>The default implementation does nothing.</p>
+   */
   @Override public void enterIndexPatternAndMetadataFields(EsqlBaseParser.IndexPatternAndMetadataFieldsContext ctx) { }
   /**
    * {@inheritDoc}
@@ -913,6 +925,18 @@ public class EsqlBaseParserBaseListener implements EsqlBaseParserListener {
    *
    * <p>The default implementation does nothing.</p>
    */
+  @Override public void enterUriPartsCommand(EsqlBaseParser.UriPartsCommandContext ctx) { }
+  /**
+   * {@inheritDoc}
+   *
+   * <p>The default implementation does nothing.</p>
+   */
+  @Override public void exitUriPartsCommand(EsqlBaseParser.UriPartsCommandContext ctx) { }
+  /**
+   * {@inheritDoc}
+   *
+   * <p>The default implementation does nothing.</p>
+   */
   @Override public void enterSetCommand(EsqlBaseParser.SetCommandContext ctx) { }
   /**
    * {@inheritDoc}
@@ -968,18 +992,6 @@ public class EsqlBaseParserBaseListener implements EsqlBaseParserListener {
    * <p>The default implementation does nothing.</p>
    */
   @Override public void exitMmrQueryVectorExpression(EsqlBaseParser.MmrQueryVectorExpressionContext ctx) { }
-  /**
-   * {@inheritDoc}
-   *
-   * <p>The default implementation does nothing.</p>
-   */
-  @Override public void enterMmrOptionalQueryVector(EsqlBaseParser.MmrOptionalQueryVectorContext ctx) { }
-  /**
-   * {@inheritDoc}
-   *
-   * <p>The default implementation does nothing.</p>
-   */
-  @Override public void exitMmrOptionalQueryVector(EsqlBaseParser.MmrOptionalQueryVectorContext ctx) { }
   /**
    * {@inheritDoc}
    *

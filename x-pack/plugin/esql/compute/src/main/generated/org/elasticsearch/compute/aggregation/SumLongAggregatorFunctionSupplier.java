@@ -9,6 +9,7 @@ import java.lang.Override;
 import java.lang.String;
 import java.util.List;
 import org.elasticsearch.compute.operator.DriverContext;
+import org.elasticsearch.compute.operator.WarningSourceLocation;
 import org.elasticsearch.compute.operator.Warnings;
 
 /**
@@ -16,17 +17,10 @@ import org.elasticsearch.compute.operator.Warnings;
  * This class is generated. Edit {@code AggregatorFunctionSupplierImplementer} instead.
  */
 public final class SumLongAggregatorFunctionSupplier implements AggregatorFunctionSupplier {
-  int warningsLineNumber;
+  WarningSourceLocation warningsSource;
 
-  int warningsColumnNumber;
-
-  String warningsSourceText;
-
-  public SumLongAggregatorFunctionSupplier(int warningsLineNumber, int warningsColumnNumber,
-      String warningsSourceText) {
-    this.warningsLineNumber = warningsLineNumber;
-    this.warningsColumnNumber = warningsColumnNumber;
-    this.warningsSourceText = warningsSourceText;
+  public SumLongAggregatorFunctionSupplier(WarningSourceLocation warningsSource) {
+    this.warningsSource = warningsSource;
   }
 
   @Override
@@ -41,14 +35,14 @@ public final class SumLongAggregatorFunctionSupplier implements AggregatorFuncti
 
   @Override
   public SumLongAggregatorFunction aggregator(DriverContext driverContext, List<Integer> channels) {
-    var warnings = Warnings.createWarnings(driverContext.warningsMode(), warningsLineNumber, warningsColumnNumber, warningsSourceText);
+    var warnings = Warnings.createWarnings(driverContext.warningsMode(), warningsSource);
     return SumLongAggregatorFunction.create(warnings, driverContext, channels);
   }
 
   @Override
   public SumLongGroupingAggregatorFunction groupingAggregator(DriverContext driverContext,
       List<Integer> channels) {
-    var warnings = Warnings.createWarnings(driverContext.warningsMode(), warningsLineNumber, warningsColumnNumber, warningsSourceText);
+    var warnings = Warnings.createWarnings(driverContext.warningsMode(), warningsSource);
     return SumLongGroupingAggregatorFunction.create(warnings, channels, driverContext);
   }
 

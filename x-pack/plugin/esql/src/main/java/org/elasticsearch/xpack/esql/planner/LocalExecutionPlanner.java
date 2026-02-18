@@ -19,10 +19,10 @@ import org.elasticsearch.compute.data.BlockFactory;
 import org.elasticsearch.compute.data.ElementType;
 import org.elasticsearch.compute.data.LocalCircuitBreaker;
 import org.elasticsearch.compute.data.Page;
-import org.elasticsearch.compute.lucene.DataPartitioning;
 import org.elasticsearch.compute.lucene.IndexedByShardId;
-import org.elasticsearch.compute.lucene.LuceneOperator;
-import org.elasticsearch.compute.lucene.TimeSeriesSourceOperator;
+import org.elasticsearch.compute.lucene.query.DataPartitioning;
+import org.elasticsearch.compute.lucene.query.LuceneOperator;
+import org.elasticsearch.compute.lucene.query.TimeSeriesSourceOperator;
 import org.elasticsearch.compute.operator.ChangePointOperator;
 import org.elasticsearch.compute.operator.ColumnExtractOperator;
 import org.elasticsearch.compute.operator.ColumnLoadOperator;
@@ -34,6 +34,7 @@ import org.elasticsearch.compute.operator.FilterOperator.FilterOperatorFactory;
 import org.elasticsearch.compute.operator.LimitOperator;
 import org.elasticsearch.compute.operator.LocalSourceOperator;
 import org.elasticsearch.compute.operator.LocalSourceOperator.LocalSourceFactory;
+import org.elasticsearch.compute.operator.MMROperator;
 import org.elasticsearch.compute.operator.MvExpandOperator;
 import org.elasticsearch.compute.operator.Operator;
 import org.elasticsearch.compute.operator.Operator.OperatorFactory;
@@ -67,10 +68,10 @@ import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.node.Node;
+import org.elasticsearch.search.vectors.VectorData;
 import org.elasticsearch.tasks.CancellableTask;
 import org.elasticsearch.transport.RemoteClusterAware;
 import org.elasticsearch.xpack.esql.EsqlIllegalArgumentException;
-import org.elasticsearch.xpack.esql.action.ColumnInfoImpl;
 import org.elasticsearch.xpack.esql.core.expression.Alias;
 import org.elasticsearch.xpack.esql.core.expression.Attribute;
 import org.elasticsearch.xpack.esql.core.expression.Expression;
@@ -85,23 +86,30 @@ import org.elasticsearch.xpack.esql.core.expression.TypedAttribute;
 import org.elasticsearch.xpack.esql.core.tree.Source;
 import org.elasticsearch.xpack.esql.core.type.DataType;
 import org.elasticsearch.xpack.esql.core.util.Holder;
+import org.elasticsearch.xpack.esql.datasources.ExternalSourceOperatorFactory;
+import org.elasticsearch.xpack.esql.datasources.OperatorFactoryRegistry;
+import org.elasticsearch.xpack.esql.datasources.spi.FormatReader;
+import org.elasticsearch.xpack.esql.datasources.spi.SourceOperatorContext;
+import org.elasticsearch.xpack.esql.datasources.spi.StoragePath;
+import org.elasticsearch.xpack.esql.datasources.spi.StorageProvider;
 import org.elasticsearch.xpack.esql.enrich.EnrichLookupOperator;
 import org.elasticsearch.xpack.esql.enrich.EnrichLookupService;
 import org.elasticsearch.xpack.esql.enrich.LookupFromIndexOperator;
 import org.elasticsearch.xpack.esql.enrich.LookupFromIndexService;
 import org.elasticsearch.xpack.esql.enrich.MatchConfig;
 import org.elasticsearch.xpack.esql.evaluator.EvalMapper;
+import org.elasticsearch.xpack.esql.evaluator.command.CompoundOutputEvaluator;
 import org.elasticsearch.xpack.esql.evaluator.command.GrokEvaluatorExtracter;
 import org.elasticsearch.xpack.esql.expression.Foldables;
 import org.elasticsearch.xpack.esql.expression.Order;
 import org.elasticsearch.xpack.esql.inference.InferenceService;
-import org.elasticsearch.xpack.esql.inference.XContentRowEncoder;
 import org.elasticsearch.xpack.esql.inference.completion.CompletionOperator;
 import org.elasticsearch.xpack.esql.inference.rerank.RerankOperator;
 import org.elasticsearch.xpack.esql.plan.logical.EsRelation;
 import org.elasticsearch.xpack.esql.plan.logical.LogicalPlan;
 import org.elasticsearch.xpack.esql.plan.physical.AggregateExec;
 import org.elasticsearch.xpack.esql.plan.physical.ChangePointExec;
+import org.elasticsearch.xpack.esql.plan.physical.CompoundOutputEvalExec;
 import org.elasticsearch.xpack.esql.plan.physical.DissectExec;
 import org.elasticsearch.xpack.esql.plan.physical.EnrichExec;
 import org.elasticsearch.xpack.esql.plan.physical.EsQueryExec;
@@ -110,6 +118,7 @@ import org.elasticsearch.xpack.esql.plan.physical.EvalExec;
 import org.elasticsearch.xpack.esql.plan.physical.ExchangeExec;
 import org.elasticsearch.xpack.esql.plan.physical.ExchangeSinkExec;
 import org.elasticsearch.xpack.esql.plan.physical.ExchangeSourceExec;
+import org.elasticsearch.xpack.esql.plan.physical.ExternalSourceExec;
 import org.elasticsearch.xpack.esql.plan.physical.FieldExtractExec;
 import org.elasticsearch.xpack.esql.plan.physical.FilterExec;
 import org.elasticsearch.xpack.esql.plan.physical.FragmentExec;
@@ -119,6 +128,7 @@ import org.elasticsearch.xpack.esql.plan.physical.HashJoinExec;
 import org.elasticsearch.xpack.esql.plan.physical.LimitExec;
 import org.elasticsearch.xpack.esql.plan.physical.LocalSourceExec;
 import org.elasticsearch.xpack.esql.plan.physical.LookupJoinExec;
+import org.elasticsearch.xpack.esql.plan.physical.MMRExec;
 import org.elasticsearch.xpack.esql.plan.physical.MvExpandExec;
 import org.elasticsearch.xpack.esql.plan.physical.OutputExec;
 import org.elasticsearch.xpack.esql.plan.physical.PhysicalPlan;
@@ -149,6 +159,7 @@ import java.util.stream.Stream;
 import static java.util.Arrays.asList;
 import static java.util.stream.Collectors.joining;
 import static org.elasticsearch.compute.operator.ProjectOperator.ProjectOperatorFactory;
+import static org.elasticsearch.xpack.esql.plan.logical.MMR.getMMRLimitValue;
 import static org.elasticsearch.xpack.esql.type.EsqlDataTypeConverter.stringToInt;
 
 /**
@@ -171,6 +182,7 @@ public class LocalExecutionPlanner {
     private final LookupFromIndexService lookupFromIndexService;
     private final InferenceService inferenceService;
     private final PhysicalOperationProviders physicalOperationProviders;
+    private final OperatorFactoryRegistry operatorFactoryRegistry;
 
     public LocalExecutionPlanner(
         String sessionId,
@@ -185,7 +197,8 @@ public class LocalExecutionPlanner {
         EnrichLookupService enrichLookupService,
         LookupFromIndexService lookupFromIndexService,
         InferenceService inferenceService,
-        PhysicalOperationProviders physicalOperationProviders
+        PhysicalOperationProviders physicalOperationProviders,
+        OperatorFactoryRegistry operatorFactoryRegistry
     ) {
 
         this.sessionId = sessionId;
@@ -201,6 +214,7 @@ public class LocalExecutionPlanner {
         this.lookupFromIndexService = lookupFromIndexService;
         this.inferenceService = inferenceService;
         this.physicalOperationProviders = physicalOperationProviders;
+        this.operatorFactoryRegistry = operatorFactoryRegistry;
     }
 
     /**
@@ -286,6 +300,8 @@ public class LocalExecutionPlanner {
             return planCompletion(completion, context);
         } else if (node instanceof SampleExec Sample) {
             return planSample(Sample, context);
+        } else if (node instanceof CompoundOutputEvalExec coe) {
+            return planCompoundOutputEval(coe, context);
         }
 
         // source nodes
@@ -299,6 +315,8 @@ public class LocalExecutionPlanner {
             return planShow(show);
         } else if (node instanceof ExchangeSourceExec exchangeSource) {
             return planExchangeSource(exchangeSource, exchangeSourceSupplier);
+        } else if (node instanceof ExternalSourceExec externalSource) {
+            return planExternalSource(externalSource, context);
         }
         // lookups and joins
         else if (node instanceof EnrichExec enrich) {
@@ -315,14 +333,55 @@ public class LocalExecutionPlanner {
             return planExchangeSink(exchangeSink, context);
         } else if (node instanceof FuseScoreEvalExec fuse) {
             return planFuseScoreEvalExec(fuse, context);
+        } else if (node instanceof MMRExec mmr) {
+            return planMMR(mmr, context);
         }
 
         throw new EsqlIllegalArgumentException("unknown physical plan node [" + node.nodeName() + "]");
     }
 
+    private PhysicalOperation planMMR(MMRExec mmr, LocalExecutionPlannerContext context) {
+        PhysicalOperation source = plan(mmr.child(), context);
+
+        assert (mmr.diversifyField() != null) : "diversifyField is required for the MMROperator";
+
+        int limit = getMMRLimitValue(mmr.limit());
+        Float lambdaValue = mmr.lambda();
+        VectorData queryVector = mmr.queryVector();
+
+        int diversifyFieldChannel = source.layout.get(mmr.diversifyField().id()).channel();
+        String diversifyField = mmr.diversifyField().qualifiedName();
+
+        return source.with(new MMROperator.Factory(diversifyField, diversifyFieldChannel, limit, queryVector, lambdaValue), source.layout);
+    }
+
+    private PhysicalOperation planCompoundOutputEval(final CompoundOutputEvalExec coe, LocalExecutionPlannerContext context) {
+        PhysicalOperation source = plan(coe.child(), context);
+        Layout.Builder layoutBuilder = source.layout.builder();
+        layoutBuilder.append(coe.outputFieldAttributes());
+
+        ElementType[] types = new ElementType[coe.outputFieldAttributes().size()];
+        for (int i = 0; i < coe.outputFieldAttributes().size(); i++) {
+            types[i] = PlannerUtils.toElementType(coe.outputFieldAttributes().get(i).dataType());
+        }
+
+        Layout layout = layoutBuilder.build();
+
+        source = source.with(
+            new ColumnExtractOperator.Factory(
+                types,
+                EvalMapper.toEvaluator(context.foldCtx(), coe.input(), layout),
+                new CompoundOutputEvaluator.Factory(coe.input().dataType(), coe.source(), coe)
+            ),
+            layout
+        );
+        return source;
+    }
+
     private PhysicalOperation planCompletion(CompletionExec completion, LocalExecutionPlannerContext context) {
         PhysicalOperation source = plan(completion.child(), context);
         String inferenceId = BytesRefs.toString(completion.inferenceId().fold(context.foldCtx()));
+        Map<String, Object> taskSettings = completion.taskSettings().toFoldedMap(context.foldCtx());
         Layout outputLayout = source.layout.builder().append(completion.targetField()).build();
         EvalOperator.ExpressionEvaluator.Factory promptEvaluatorFactory = EvalMapper.toEvaluator(
             context.foldCtx(),
@@ -330,7 +389,10 @@ public class LocalExecutionPlanner {
             source.layout
         );
 
-        return source.with(new CompletionOperator.Factory(inferenceService, inferenceId, promptEvaluatorFactory), outputLayout);
+        return source.with(
+            new CompletionOperator.Factory(inferenceService, inferenceId, promptEvaluatorFactory, taskSettings),
+            outputLayout
+        );
     }
 
     private PhysicalOperation planFuseScoreEvalExec(FuseScoreEvalExec fuse, LocalExecutionPlannerContext context) {
@@ -342,26 +404,12 @@ public class LocalExecutionPlanner {
 
         if (fuse.fuseConfig() instanceof RrfConfig rrfConfig) {
             return source.with(
-                new RrfScoreEvalOperator.Factory(
-                    discriminatorPosition,
-                    scorePosition,
-                    rrfConfig,
-                    fuse.sourceText(),
-                    fuse.sourceLocation().getLineNumber(),
-                    fuse.sourceLocation().getColumnNumber()
-                ),
+                new RrfScoreEvalOperator.Factory(discriminatorPosition, scorePosition, rrfConfig, fuse.source()),
                 source.layout
             );
         } else if (fuse.fuseConfig() instanceof LinearConfig linearConfig) {
             return source.with(
-                new LinearScoreEvalOperator.Factory(
-                    discriminatorPosition,
-                    scorePosition,
-                    linearConfig,
-                    fuse.sourceText(),
-                    fuse.sourceLocation().getLineNumber(),
-                    fuse.sourceLocation().getColumnNumber()
-                ),
+                new LinearScoreEvalOperator.Factory(discriminatorPosition, scorePosition, linearConfig, fuse.source()),
                 source.layout
             );
         }
@@ -400,7 +448,7 @@ public class LocalExecutionPlanner {
     }
 
     private PhysicalOperation planFieldExtractNode(FieldExtractExec fieldExtractExec, LocalExecutionPlannerContext context) {
-        return physicalOperationProviders.fieldExtractPhysicalOperation(fieldExtractExec, plan(fieldExtractExec.child(), context));
+        return physicalOperationProviders.fieldExtractPhysicalOperation(fieldExtractExec, plan(fieldExtractExec.child(), context), context);
     }
 
     private PhysicalOperation planOutput(OutputExec outputExec, LocalExecutionPlannerContext context) {
@@ -519,7 +567,14 @@ public class LocalExecutionPlanner {
             throw new EsqlIllegalArgumentException("limit only supported with literal values");
         }
         return source.with(
-            new TopNOperatorFactory(limit, asList(elementTypes), asList(encoders), orders, context.pageSize(topNExec, rowSize)),
+            new TopNOperatorFactory(
+                limit,
+                asList(elementTypes),
+                asList(encoders),
+                orders,
+                context.pageSize(topNExec, rowSize),
+                topNExec.inputOrdering()
+            ),
             source.layout
         );
     }
@@ -576,8 +631,8 @@ public class LocalExecutionPlanner {
         Layout.Builder layoutBuilder = source.layout.builder();
         List<Attribute> extractedFields = grok.extractedFields();
         layoutBuilder.append(extractedFields);
-        Map<String, Integer> fieldToPos = Maps.newHashMapWithExpectedSize(extractedFields.size());
-        Map<String, ElementType> fieldToType = Maps.newHashMapWithExpectedSize(extractedFields.size());
+        final Map<String, Integer> fieldToPos = Maps.newHashMapWithExpectedSize(extractedFields.size());
+        final Map<String, ElementType> fieldToType = Maps.newHashMapWithExpectedSize(extractedFields.size());
         ElementType[] types = new ElementType[extractedFields.size()];
         List<Attribute> extractedFieldsFromPattern = grok.pattern().extractedFields();
         for (int i = 0; i < extractedFields.size(); i++) {
@@ -596,7 +651,7 @@ public class LocalExecutionPlanner {
             new ColumnExtractOperator.Factory(
                 types,
                 EvalMapper.toEvaluator(context.foldCtx(), grok.inputExpression(), layout),
-                () -> new GrokEvaluatorExtracter(grok.pattern().grok(), grok.pattern().pattern(), fieldToPos, fieldToType)
+                new GrokEvaluatorExtracter.Factory(grok.pattern().grok(), grok.pattern().pattern(), fieldToPos, fieldToType)
             ),
             layout
         );
@@ -634,28 +689,12 @@ public class LocalExecutionPlanner {
     private PhysicalOperation planRerank(RerankExec rerank, LocalExecutionPlannerContext context) {
         PhysicalOperation source = plan(rerank.child(), context);
 
-        EvalOperator.ExpressionEvaluator.Factory rowEncoderFactory;
-        if (rerank.rerankFields().size() > 1) {
-            // If there is more than one field used for reranking we are encoded the input in a YAML doc, using field names as key.
-            // The input value will looks like
-            // text_field: foo bar
-            // multivalue_text_field:
-            // - value 1
-            // - value 2
-            // integer_field: 132
-            Map<ColumnInfoImpl, EvalOperator.ExpressionEvaluator.Factory> rerankFieldsEvaluatorSuppliers = Maps
-                .newLinkedHashMapWithExpectedSize(rerank.rerankFields().size());
+        List<EvalOperator.ExpressionEvaluator.Factory> rerankFieldsEvaluators = rerank.rerankFields()
+            .stream()
+            .map(rerankField -> EvalMapper.toEvaluator(context.foldCtx(), rerankField.child(), source.layout))
+            .toList();
 
-            for (var rerankField : rerank.rerankFields()) {
-                rerankFieldsEvaluatorSuppliers.put(
-                    new ColumnInfoImpl(rerankField.name(), rerankField.dataType(), null),
-                    EvalMapper.toEvaluator(context.foldCtx(), rerankField.child(), source.layout)
-                );
-            }
-            rowEncoderFactory = XContentRowEncoder.yamlRowEncoderFactory(configuration.zoneId(), rerankFieldsEvaluatorSuppliers);
-        } else {
-            rowEncoderFactory = EvalMapper.toEvaluator(context.foldCtx(), rerank.rerankFields().get(0).child(), source.layout);
-        }
+        assert rerankFieldsEvaluators.size() > 0 : "rerank expression evaluators must not be empty";
 
         String inferenceId = BytesRefs.toString(rerank.inferenceId().fold(context.foldCtx));
         String queryText = BytesRefs.toString(rerank.queryText().fold(context.foldCtx));
@@ -672,7 +711,7 @@ public class LocalExecutionPlanner {
                 inferenceService,
                 inferenceId,
                 queryText,
-                rowEncoderFactory,
+                rerankFieldsEvaluators,
                 scoreChannel,
                 RerankOperator.DEFAULT_BATCH_SIZE
             ),
@@ -855,6 +894,121 @@ public class LocalExecutionPlanner {
         return PhysicalOperation.fromSource(new LocalSourceFactory(() -> operator), layout.build());
     }
 
+    /**
+     * Plans a generic external source using the OperatorFactoryRegistry.
+     *
+     * <p>This method uses the registry to create the appropriate operator factory based on
+     * the source type and path. The registry will:
+     * <ol>
+     *   <li>Check if a plugin has registered a custom factory for the source type</li>
+     *   <li>Fall back to the generic AsyncExternalSourceOperatorFactory using
+     *       storage and format registries</li>
+     * </ol>
+     *
+     * <p>Example usage:
+     * <pre>
+     * // The OperatorFactoryRegistry is injected into LocalExecutionPlanner
+     * // It contains all registered storage providers, format readers, and plugin factories
+     * return planExternalSourceGeneric(externalSource, context);
+     * </pre>
+     *
+     * @param externalSource the external source physical plan node
+     * @param context the planner context
+     * @return the physical operation
+     */
+    private PhysicalOperation planExternalSource(ExternalSourceExec externalSource, LocalExecutionPlannerContext context) {
+        // Create layout with output attributes
+        Layout.Builder layout = new Layout.Builder();
+        layout.append(externalSource.output());
+
+        // Determine page size based on estimated row size
+        Integer estimatedRowSize = externalSource.estimatedRowSize();
+        int pageSize = (estimatedRowSize != null && estimatedRowSize > 0)
+            ? Math.max(SourceOperator.MIN_TARGET_PAGE_SIZE, SourceOperator.TARGET_PAGE_SIZE / estimatedRowSize)
+            : 1000;
+
+        // Parse the storage path
+        StoragePath path = StoragePath.of(externalSource.sourcePath());
+
+        // Extract column names from attributes
+        List<String> projectedColumns = new ArrayList<>();
+        for (Attribute attr : externalSource.output()) {
+            projectedColumns.add(attr.name());
+        }
+
+        // Create the operator factory using the registry
+        SourceOperator.SourceOperatorFactory factory;
+        if (operatorFactoryRegistry != null) {
+            // Build the operator context with all available metadata
+            SourceOperatorContext operatorContext = SourceOperatorContext.builder()
+                .sourceType(externalSource.sourceType())
+                .path(path)
+                .projectedColumns(projectedColumns)
+                .attributes(externalSource.output())
+                .batchSize(pageSize)
+                .maxBufferSize(10)
+                .executor(operatorFactoryRegistry.executor())
+                .config(externalSource.config())
+                .sourceMetadata(externalSource.sourceMetadata())
+                .pushedFilter(externalSource.pushedFilter())
+                .fileSet(externalSource.fileSet())
+                .build();
+
+            factory = operatorFactoryRegistry.factory(operatorContext);
+        } else {
+            throw new IllegalStateException("OperatorFactoryRegistry is required for external sources");
+        }
+
+        // Set driver parallelism to 1 for now (can be optimized later with file splitting)
+        context.driverParallelism(new DriverParallelism(DriverParallelism.Type.DATA_PARALLELISM, 1));
+
+        return PhysicalOperation.fromSource(factory, layout.build());
+    }
+
+    /**
+     * Plans a generic external source using explicit StorageProvider and FormatReader.
+     * This method is kept for backward compatibility and testing.
+     *
+     * @param externalSource the external source physical plan node
+     * @param storageProvider the storage provider for the source
+     * @param formatReader the format reader for the source
+     * @param context the planner context
+     * @return the physical operation
+     */
+    private PhysicalOperation planExternalSourceGeneric(
+        ExternalSourceExec externalSource,
+        StorageProvider storageProvider,
+        FormatReader formatReader,
+        LocalExecutionPlannerContext context
+    ) {
+        // Create layout with output attributes
+        Layout.Builder layout = new Layout.Builder();
+        layout.append(externalSource.output());
+
+        // Determine page size based on estimated row size
+        Integer estimatedRowSize = externalSource.estimatedRowSize();
+        int pageSize = (estimatedRowSize != null && estimatedRowSize > 0)
+            ? Math.max(SourceOperator.MIN_TARGET_PAGE_SIZE, SourceOperator.TARGET_PAGE_SIZE / estimatedRowSize)
+            : 1000;
+
+        // Parse the storage path
+        StoragePath path = StoragePath.of(externalSource.sourcePath());
+
+        // Create the operator factory using the generic abstraction
+        SourceOperator.SourceOperatorFactory factory = new ExternalSourceOperatorFactory(
+            storageProvider,
+            formatReader,
+            path,
+            externalSource.output(),
+            pageSize
+        );
+
+        // Set driver parallelism to 1 for now (can be optimized later with file splitting)
+        context.driverParallelism(new DriverParallelism(DriverParallelism.Type.DATA_PARALLELISM, 1));
+
+        return PhysicalOperation.fromSource(factory, layout.build());
+    }
+
     private PhysicalOperation planShow(ShowExec showExec) {
         Layout.Builder layout = new Layout.Builder();
         layout.append(showExec.output());
@@ -891,19 +1045,19 @@ public class LocalExecutionPlanner {
             new FilterOperatorFactory(EvalMapper.toEvaluator(context.foldCtx(), filter.condition(), source.layout, context.shardContexts)),
             source.layout
         );
-        if (PlannerUtils.usesScoring(filter)) {
+        // Add ScoreOperator only on data nodes. Data nodes are able to calculate scores running queries on the resulting docs.
+        if (context.shardContexts.isEmpty() == false && PlannerUtils.usesScoring(filter)) {
             // Add scorer operator to add the filter expression scores to the overall scores
-            int scoreBlock = 0;
-            for (Attribute attribute : filter.output()) {
-                if (MetadataAttribute.SCORE.equals(attribute.name())) {
-                    break;
-                }
-                scoreBlock++;
-            }
-            if (scoreBlock == filter.output().size()) {
-                throw new IllegalStateException("Couldn't find _score attribute in a WHERE clause");
-            }
+            Attribute scoreAttribute = null;
 
+            for (Attribute attribute : filter.output()) {
+                if (attribute instanceof MetadataAttribute && MetadataAttribute.SCORE.equals(attribute.name())) {
+                    scoreAttribute = attribute;
+                }
+            }
+            assert scoreAttribute != null : "Couldn't find _score attribute in a WHERE clause";
+
+            int scoreBlock = filterOperation.layout.get(scoreAttribute.id()).channel();
             filterOperation = filterOperation.with(
                 new ScoreOperator.ScoreOperatorFactory(ScoreMapper.toScorer(filter.condition(), context.shardContexts), scoreBlock),
                 filterOperation.layout
@@ -931,15 +1085,7 @@ public class LocalExecutionPlanner {
     private PhysicalOperation planChangePoint(ChangePointExec changePoint, LocalExecutionPlannerContext context) {
         PhysicalOperation source = plan(changePoint.child(), context);
         Layout layout = source.layout.builder().append(changePoint.targetType()).append(changePoint.targetPvalue()).build();
-        return source.with(
-            new ChangePointOperator.Factory(
-                layout.get(changePoint.value().id()).channel(),
-                changePoint.sourceText(),
-                changePoint.sourceLocation().getLineNumber(),
-                changePoint.sourceLocation().getColumnNumber()
-            ),
-            layout
-        );
+        return source.with(new ChangePointOperator.Factory(layout.get(changePoint.value().id()).channel(), changePoint.source()), layout);
     }
 
     private PhysicalOperation planSample(SampleExec rsx, LocalExecutionPlannerContext context) {

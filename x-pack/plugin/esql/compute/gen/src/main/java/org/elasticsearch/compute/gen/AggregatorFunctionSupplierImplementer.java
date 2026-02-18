@@ -40,6 +40,7 @@ import static org.elasticsearch.compute.gen.Types.DRIVER_CONTEXT;
 import static org.elasticsearch.compute.gen.Types.LIST_AGG_FUNC_DESC;
 import static org.elasticsearch.compute.gen.Types.LIST_INTEGER;
 import static org.elasticsearch.compute.gen.Types.STRING;
+import static org.elasticsearch.compute.gen.Types.WARNING_SOURCE_LOCATION;
 import static org.elasticsearch.compute.gen.Types.WARNINGS;
 
 /**
@@ -99,9 +100,7 @@ public class AggregatorFunctionSupplierImplementer {
         builder.addSuperinterface(AGGREGATOR_FUNCTION_SUPPLIER);
 
         if (hasWarnings) {
-            builder.addField(TypeName.INT, "warningsLineNumber");
-            builder.addField(TypeName.INT, "warningsColumnNumber");
-            builder.addField(STRING, "warningsSourceText");
+            builder.addField(WARNING_SOURCE_LOCATION, "warningsSource");
         }
         createParameters.stream().forEach(p -> p.declareField(builder));
         builder.addMethod(ctor());
@@ -116,12 +115,8 @@ public class AggregatorFunctionSupplierImplementer {
     private MethodSpec ctor() {
         MethodSpec.Builder builder = MethodSpec.constructorBuilder().addModifiers(Modifier.PUBLIC);
         if (hasWarnings) {
-            builder.addParameter(TypeName.INT, "warningsLineNumber");
-            builder.addParameter(TypeName.INT, "warningsColumnNumber");
-            builder.addParameter(STRING, "warningsSourceText");
-            builder.addStatement("this.warningsLineNumber = warningsLineNumber");
-            builder.addStatement("this.warningsColumnNumber = warningsColumnNumber");
-            builder.addStatement("this.warningsSourceText = warningsSourceText");
+            builder.addParameter(WARNING_SOURCE_LOCATION, "warningsSource");
+            builder.addStatement("this.warningsSource = warningsSource");
         }
         createParameters.stream().forEach(p -> p.buildCtor(builder));
         return builder.build();
@@ -168,8 +163,7 @@ public class AggregatorFunctionSupplierImplementer {
 
         if (hasWarnings) {
             builder.addStatement(
-                "var warnings = $T.createWarnings(driverContext.warningsMode(), "
-                    + "warningsLineNumber, warningsColumnNumber, warningsSourceText)",
+                "var warnings = $T.createWarnings(driverContext.warningsMode(), warningsSource)",
                 WARNINGS
             );
         }
@@ -195,8 +189,7 @@ public class AggregatorFunctionSupplierImplementer {
 
         if (hasWarnings) {
             builder.addStatement(
-                "var warnings = $T.createWarnings(driverContext.warningsMode(), "
-                    + "warningsLineNumber, warningsColumnNumber, warningsSourceText)",
+                "var warnings = $T.createWarnings(driverContext.warningsMode(), warningsSource)",
                 WARNINGS
             );
         }

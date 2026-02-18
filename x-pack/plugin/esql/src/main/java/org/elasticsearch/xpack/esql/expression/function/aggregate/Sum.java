@@ -170,11 +170,7 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
         if (useOverflowingLongSupplier) {
             return new SumOverflowingLongAggregatorFunctionSupplier();
         }
-        return new SumLongAggregatorFunctionSupplier(
-            source().source().getLineNumber(),
-            source().source().getColumnNumber(),
-            source().text()
-        );
+        return new SumLongAggregatorFunctionSupplier(source());
     }
 
     @Override

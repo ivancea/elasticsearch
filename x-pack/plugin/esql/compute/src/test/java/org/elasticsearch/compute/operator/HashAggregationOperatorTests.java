@@ -13,6 +13,7 @@ import org.elasticsearch.compute.aggregation.MaxLongAggregatorFunctionSupplier;
 import org.elasticsearch.compute.aggregation.MaxLongGroupingAggregatorFunctionTests;
 import org.elasticsearch.compute.aggregation.SumLongAggregatorFunction;
 import org.elasticsearch.compute.aggregation.SumLongAggregatorFunctionSupplier;
+import org.elasticsearch.compute.operator.UnknownWarningSourceLocation;
 import org.elasticsearch.compute.aggregation.SumLongGroupingAggregatorFunctionTests;
 import org.elasticsearch.compute.aggregation.blockhash.BlockHash;
 import org.elasticsearch.compute.data.Block;
@@ -22,7 +23,7 @@ import org.elasticsearch.compute.data.ElementType;
 import org.elasticsearch.compute.data.LongBlock;
 import org.elasticsearch.compute.data.Page;
 import org.elasticsearch.compute.test.BlockTestUtils;
-import org.elasticsearch.compute.test.TupleLongLongBlockSourceOperator;
+import org.elasticsearch.compute.test.operator.blocksource.TupleLongLongBlockSourceOperator;
 import org.elasticsearch.core.Tuple;
 import org.hamcrest.Matcher;
 
@@ -62,10 +63,12 @@ public class HashAggregationOperatorTests extends ForkingOperatorTestCase {
             List.of(new BlockHash.GroupSpec(0, ElementType.LONG)),
             mode,
             List.of(
-                new SumLongAggregatorFunctionSupplier(-1, -2, "").groupingAggregatorFactory(mode, sumChannels),
+                new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE).groupingAggregatorFactory(mode, sumChannels),
                 new MaxLongAggregatorFunctionSupplier().groupingAggregatorFactory(mode, maxChannels)
             ),
             randomPageSize(),
+            between(1, 1000),
+            randomDoubleBetween(0.1, 10.0, true),
             null
         );
     }
@@ -118,10 +121,12 @@ public class HashAggregationOperatorTests extends ForkingOperatorTestCase {
                 List.of(new BlockHash.GroupSpec(groupChannel, ElementType.LONG, null, new BlockHash.TopNDef(0, ascOrder, false, 3))),
                 mode,
                 List.of(
-                    new SumLongAggregatorFunctionSupplier(-1, -2, "").groupingAggregatorFactory(mode, aggregatorChannels),
+                    new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE).groupingAggregatorFactory(mode, aggregatorChannels),
                     new MaxLongAggregatorFunctionSupplier().groupingAggregatorFactory(mode, aggregatorChannels)
                 ),
                 randomPageSize(),
+                between(1, 1000),
+                randomDoubleBetween(0.1, 10.0, true),
                 null
             ).get(driverContext())
         ) {
@@ -195,10 +200,12 @@ public class HashAggregationOperatorTests extends ForkingOperatorTestCase {
                 List.of(new BlockHash.GroupSpec(groupChannel, ElementType.LONG, null, new BlockHash.TopNDef(0, ascOrder, true, 3))),
                 mode,
                 List.of(
-                    new SumLongAggregatorFunctionSupplier(-1, -2, "").groupingAggregatorFactory(mode, aggregatorChannels),
+                    new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE).groupingAggregatorFactory(mode, aggregatorChannels),
                     new MaxLongAggregatorFunctionSupplier().groupingAggregatorFactory(mode, aggregatorChannels)
                 ),
                 randomPageSize(),
+                between(1, 1000),
+                randomDoubleBetween(0.1, 10.0, true),
                 null
             ).get(driverContext())
         ) {
@@ -281,10 +288,12 @@ public class HashAggregationOperatorTests extends ForkingOperatorTestCase {
                 List.of(new BlockHash.GroupSpec(groupChannel, ElementType.LONG, null, new BlockHash.TopNDef(0, ascOrder, false, 3))),
                 mode,
                 List.of(
-                    new SumLongAggregatorFunctionSupplier(-1, -2, "").groupingAggregatorFactory(mode, sumAggregatorChannels),
+                    new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE).groupingAggregatorFactory(mode, sumAggregatorChannels),
                     new MaxLongAggregatorFunctionSupplier().groupingAggregatorFactory(mode, maxAggregatorChannels)
                 ),
                 randomPageSize(),
+                between(1, 1000),
+                randomDoubleBetween(0.1, 10.0, true),
                 null
             ).get(driverContext());
         };

@@ -14,7 +14,8 @@ import org.elasticsearch.compute.data.Page;
 import org.elasticsearch.compute.operator.DriverContext;
 import org.elasticsearch.compute.operator.Operator;
 import org.elasticsearch.compute.operator.SourceOperator;
-import org.elasticsearch.compute.test.TupleLongLongBlockSourceOperator;
+import org.elasticsearch.compute.test.TestDriverRunner;
+import org.elasticsearch.compute.test.operator.blocksource.TupleLongLongBlockSourceOperator;
 import org.elasticsearch.core.Tuple;
 
 import java.util.List;
@@ -59,7 +60,7 @@ public class SumOverflowingLongGroupingAggregatorFunctionTests extends GroupingA
                     LongStream.range(0, 10).mapToObj(l -> Tuple.tuple(randomLongBetween(0, 4), Long.MAX_VALUE - 1))
                 )
             );
-            drive(factory.get(driverContext), input.iterator(), driverContext);
+            new TestDriverRunner().builder(driverContext).input(input).run(factory);
         });
 
         assertDriverContext(driverContext);
