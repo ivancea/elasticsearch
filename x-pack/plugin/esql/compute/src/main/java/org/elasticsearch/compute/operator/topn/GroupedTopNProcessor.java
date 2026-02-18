@@ -71,7 +71,7 @@ class GroupedTopNProcessor implements TopNProcessor {
     private IntBlock computeGroupIds(Page page) {
         int positionCount = page.getPositionCount();
         // TODO: Divide TopNOperator in 2 classes (TopN and TopNBy) to not have to do this, and use BLockHash.add() as intended,
-        //       without an intermediate groups list creation
+        // without an intermediate groups list creation
         List<List<Integer>> perPosition = new ArrayList<>(positionCount);
         for (int p = 0; p < positionCount; p++) {
             perPosition.add(new ArrayList<>());
