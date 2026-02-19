@@ -121,10 +121,7 @@ public class HashAggregationOperatorTests extends ForkingOperatorTestCase {
                 List.of(new BlockHash.GroupSpec(groupChannel, ElementType.LONG, null, new BlockHash.TopNDef(0, ascOrder, false, 3))),
                 mode,
                 List.of(
-                    new SumLongAggregatorFunctionSupplier(TestWarningsSource.INSTANCE).groupingAggregatorFactory(
-                        mode,
-                        aggregatorChannels
-                    ),
+                    new SumLongAggregatorFunctionSupplier(TestWarningsSource.INSTANCE).groupingAggregatorFactory(mode, aggregatorChannels),
                     new MaxLongAggregatorFunctionSupplier().groupingAggregatorFactory(mode, aggregatorChannels)
                 ),
                 randomPageSize(),
@@ -203,10 +200,7 @@ public class HashAggregationOperatorTests extends ForkingOperatorTestCase {
                 List.of(new BlockHash.GroupSpec(groupChannel, ElementType.LONG, null, new BlockHash.TopNDef(0, ascOrder, true, 3))),
                 mode,
                 List.of(
-                    new SumLongAggregatorFunctionSupplier(TestWarningsSource.INSTANCE).groupingAggregatorFactory(
-                        mode,
-                        aggregatorChannels
-                    ),
+                    new SumLongAggregatorFunctionSupplier(TestWarningsSource.INSTANCE).groupingAggregatorFactory(mode, aggregatorChannels),
                     new MaxLongAggregatorFunctionSupplier().groupingAggregatorFactory(mode, aggregatorChannels)
                 ),
                 randomPageSize(),
