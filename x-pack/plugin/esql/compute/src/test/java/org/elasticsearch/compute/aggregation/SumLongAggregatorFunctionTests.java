@@ -16,7 +16,7 @@ import org.elasticsearch.compute.operator.Driver;
 import org.elasticsearch.compute.operator.DriverContext;
 import org.elasticsearch.compute.operator.PageConsumerOperator;
 import org.elasticsearch.compute.operator.SourceOperator;
-import org.elasticsearch.compute.operator.UnknownWarningSourceLocation;
+import org.elasticsearch.compute.test.TestWarningsSource;
 import org.elasticsearch.compute.test.CannedSourceOperator;
 import org.elasticsearch.compute.test.TestDriverFactory;
 import org.elasticsearch.compute.test.TestDriverRunner;
@@ -40,7 +40,7 @@ public class SumLongAggregatorFunctionTests extends AggregatorFunctionTestCase {
 
     @Override
     protected AggregatorFunctionSupplier aggregatorFunction() {
-        return new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE);
+        return new SumLongAggregatorFunctionSupplier(TestWarningsSource.INSTANCE);
     }
 
     @Override
@@ -82,8 +82,8 @@ public class SumLongAggregatorFunctionTests extends AggregatorFunctionTestCase {
         assertThat(
             warnings,
             contains(
-                containsString("\"Line -1:-2: evaluation of [] failed, treating result as null. Only first 20 failures recorded.\""),
-                containsString("\"Line -1:-2: java.lang.ArithmeticException: long overflow\"")
+                containsString("\"Line 1:1: evaluation of [source] failed, treating result as null. Only first 20 failures recorded.\""),
+                containsString("\"Line 1:1: java.lang.ArithmeticException: long overflow\"")
             )
         );
     }

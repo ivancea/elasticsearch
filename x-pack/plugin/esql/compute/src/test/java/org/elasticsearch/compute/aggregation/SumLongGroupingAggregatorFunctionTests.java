@@ -14,7 +14,7 @@ import org.elasticsearch.compute.data.Page;
 import org.elasticsearch.compute.operator.Driver;
 import org.elasticsearch.compute.operator.DriverContext;
 import org.elasticsearch.compute.operator.SourceOperator;
-import org.elasticsearch.compute.operator.UnknownWarningSourceLocation;
+import org.elasticsearch.compute.test.TestWarningsSource;
 import org.elasticsearch.compute.test.CannedSourceOperator;
 import org.elasticsearch.compute.test.TestDriverFactory;
 import org.elasticsearch.compute.test.TestDriverRunner;
@@ -33,7 +33,7 @@ import static org.hamcrest.Matchers.hasItem;
 public class SumLongGroupingAggregatorFunctionTests extends GroupingAggregatorFunctionTestCase {
     @Override
     protected AggregatorFunctionSupplier aggregatorFunction() {
-        return new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE);
+        return new SumLongAggregatorFunctionSupplier(TestWarningsSource.INSTANCE);
     }
 
     @Override

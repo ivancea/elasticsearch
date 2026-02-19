@@ -22,6 +22,7 @@ import org.elasticsearch.compute.data.ElementType;
 import org.elasticsearch.compute.data.LongBlock;
 import org.elasticsearch.compute.data.Page;
 import org.elasticsearch.compute.test.BlockTestUtils;
+import org.elasticsearch.compute.test.TestWarningsSource;
 import org.elasticsearch.compute.test.operator.blocksource.TupleLongLongBlockSourceOperator;
 import org.elasticsearch.core.Tuple;
 import org.hamcrest.Matcher;
@@ -62,7 +63,7 @@ public class HashAggregationOperatorTests extends ForkingOperatorTestCase {
             List.of(new BlockHash.GroupSpec(0, ElementType.LONG)),
             mode,
             List.of(
-                new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE).groupingAggregatorFactory(mode, sumChannels),
+                new SumLongAggregatorFunctionSupplier(TestWarningsSource.INSTANCE).groupingAggregatorFactory(mode, sumChannels),
                 new MaxLongAggregatorFunctionSupplier().groupingAggregatorFactory(mode, maxChannels)
             ),
             randomPageSize(),
@@ -120,7 +121,7 @@ public class HashAggregationOperatorTests extends ForkingOperatorTestCase {
                 List.of(new BlockHash.GroupSpec(groupChannel, ElementType.LONG, null, new BlockHash.TopNDef(0, ascOrder, false, 3))),
                 mode,
                 List.of(
-                    new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE).groupingAggregatorFactory(
+                    new SumLongAggregatorFunctionSupplier(TestWarningsSource.INSTANCE).groupingAggregatorFactory(
                         mode,
                         aggregatorChannels
                     ),
@@ -202,7 +203,7 @@ public class HashAggregationOperatorTests extends ForkingOperatorTestCase {
                 List.of(new BlockHash.GroupSpec(groupChannel, ElementType.LONG, null, new BlockHash.TopNDef(0, ascOrder, true, 3))),
                 mode,
                 List.of(
-                    new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE).groupingAggregatorFactory(
+                    new SumLongAggregatorFunctionSupplier(TestWarningsSource.INSTANCE).groupingAggregatorFactory(
                         mode,
                         aggregatorChannels
                     ),
@@ -293,7 +294,7 @@ public class HashAggregationOperatorTests extends ForkingOperatorTestCase {
                 List.of(new BlockHash.GroupSpec(groupChannel, ElementType.LONG, null, new BlockHash.TopNDef(0, ascOrder, false, 3))),
                 mode,
                 List.of(
-                    new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE).groupingAggregatorFactory(
+                    new SumLongAggregatorFunctionSupplier(TestWarningsSource.INSTANCE).groupingAggregatorFactory(
                         mode,
                         sumAggregatorChannels
                     ),

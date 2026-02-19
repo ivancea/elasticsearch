@@ -18,7 +18,7 @@ import org.elasticsearch.common.util.PageCacheRecycler;
 import org.elasticsearch.compute.aggregation.SumLongAggregatorFunction;
 import org.elasticsearch.compute.aggregation.SumLongAggregatorFunctionSupplier;
 import org.elasticsearch.compute.operator.DriverContext;
-import org.elasticsearch.compute.operator.UnknownWarningSourceLocation;
+import org.elasticsearch.compute.test.TestWarningsSource;
 import org.elasticsearch.compute.test.RandomBlock;
 import org.elasticsearch.compute.test.TestBlockFactory;
 import org.elasticsearch.core.Releasables;
@@ -276,7 +276,7 @@ public class BlockSerializationTests extends SerializationTestCase {
     public void testSimulateAggs() {
         DriverContext driverCtx = driverContext();
         Page page = new Page(blockFactory.newLongArrayVector(new long[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, 10).asBlock());
-        var function = new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE).aggregator(driverCtx, List.of(0));
+        var function = new SumLongAggregatorFunctionSupplier(TestWarningsSource.INSTANCE).aggregator(driverCtx, List.of(0));
         try (BooleanVector noMasking = driverContext().blockFactory().newConstantBooleanVector(true, page.getPositionCount())) {
             function.addRawInput(page, noMasking);
         }
@@ -291,7 +291,7 @@ public class BlockSerializationTests extends SerializationTestCase {
 
                 var inputChannels = IntStream.range(0, SumLongAggregatorFunction.intermediateStateDesc().size()).boxed().toList();
                 try (
-                    var finalAggregator = new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE).aggregator(
+                    var finalAggregator = new SumLongAggregatorFunctionSupplier(TestWarningsSource.INSTANCE).aggregator(
                         driverCtx,
                         inputChannels
                     )

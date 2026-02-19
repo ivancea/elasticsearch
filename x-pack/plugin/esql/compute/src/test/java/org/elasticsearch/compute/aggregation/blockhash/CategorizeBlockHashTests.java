@@ -37,7 +37,7 @@ import org.elasticsearch.compute.operator.DriverContext;
 import org.elasticsearch.compute.operator.HashAggregationOperator;
 import org.elasticsearch.compute.operator.LocalSourceOperator;
 import org.elasticsearch.compute.operator.PageConsumerOperator;
-import org.elasticsearch.compute.operator.UnknownWarningSourceLocation;
+import org.elasticsearch.compute.test.TestWarningsSource;
 import org.elasticsearch.compute.test.CannedSourceOperator;
 import org.elasticsearch.compute.test.TestDriverFactory;
 import org.elasticsearch.compute.test.TestDriverRunner;
@@ -510,7 +510,7 @@ public class CategorizeBlockHashTests extends BlockHashTestCase {
                     List.of(groupSpec),
                     AggregatorMode.INITIAL,
                     List.of(
-                        new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE).groupingAggregatorFactory(
+                        new SumLongAggregatorFunctionSupplier(TestWarningsSource.INSTANCE).groupingAggregatorFactory(
                             AggregatorMode.INITIAL,
                             List.of(1)
                         ),
@@ -534,7 +534,7 @@ public class CategorizeBlockHashTests extends BlockHashTestCase {
                     List.of(groupSpec),
                     AggregatorMode.INITIAL,
                     List.of(
-                        new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE).groupingAggregatorFactory(
+                        new SumLongAggregatorFunctionSupplier(TestWarningsSource.INSTANCE).groupingAggregatorFactory(
                             AggregatorMode.INITIAL,
                             List.of(1)
                         ),
@@ -560,7 +560,7 @@ public class CategorizeBlockHashTests extends BlockHashTestCase {
                     List.of(groupSpec),
                     AggregatorMode.FINAL,
                     List.of(
-                        new SumLongAggregatorFunctionSupplier(UnknownWarningSourceLocation.INSTANCE).groupingAggregatorFactory(
+                        new SumLongAggregatorFunctionSupplier(TestWarningsSource.INSTANCE).groupingAggregatorFactory(
                             AggregatorMode.FINAL,
                             List.of(1, 2, 3)
                         ),
