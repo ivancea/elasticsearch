@@ -19,6 +19,8 @@ import org.elasticsearch.xpack.esql.expression.AbstractExpressionSerializationTe
 import org.elasticsearch.xpack.esql.io.stream.PlanStreamInput;
 import org.elasticsearch.xpack.esql.io.stream.PlanStreamOutput;
 
+import org.elasticsearch.TransportVersion;
+
 import java.io.IOException;
 import java.util.List;
 
@@ -105,6 +107,32 @@ public class SumSerializationTests extends AbstractExpressionSerializationTests<
                 assertThat(serialized.source(), equalTo(oldSum.source()));
                 assertThat(serialized.field(), equalTo(oldSum.field()));
                 assertThat(serialized.summationMode(), equalTo(SummationMode.COMPENSATED_LITERAL));
+                assertThat(serialized.useOverflowingLongSupplier(), equalTo(true));
+            }
+        }
+    }
+
+    /**
+     * Round-trip a Sum with {@code useOverflowingLongSupplier=true} on a version that supports the fix.
+     */
+    public void testSerializeSumWithOverflowingLongSupplier() throws IOException {
+        var transportVersion = TransportVersion.current();
+        var sum = new Sum(randomSource(), randomChild(), randomChild(), randomChild(), randomChild(), true);
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+            PlanStreamOutput planOut = new PlanStreamOutput(out, configuration());
+            planOut.setTransportVersion(transportVersion);
+            planOut.writeNamedWriteable(sum);
+            try (StreamInput in = new NamedWriteableAwareStreamInput(out.bytes().streamInput(), getNamedWriteableRegistry())) {
+                PlanStreamInput planIn = new PlanStreamInput(
+                    in,
+                    getNamedWriteableRegistry(),
+                    configuration(),
+                    new SerializationTestUtils.TestNameIdMapper()
+                );
+                planIn.setTransportVersion(transportVersion);
+                Sum serialized = (Sum) planIn.readNamedWriteable(categoryClass());
+                assertThat(serialized.source(), equalTo(sum.source()));
+                assertThat(serialized.field(), equalTo(sum.field()));
                 assertThat(serialized.useOverflowingLongSupplier(), equalTo(true));
             }
         }

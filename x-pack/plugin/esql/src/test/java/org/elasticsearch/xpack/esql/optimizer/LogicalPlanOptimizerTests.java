@@ -10062,4 +10062,40 @@ public class LogicalPlanOptimizerTests extends AbstractLogicalPlanOptimizerTests
         Sum sum = (Sum) Alias.unwrap(aggregate.aggregates().getFirst());
         assertThat(sum.useOverflowingLongSupplier(), is(false));
     }
+
+    /**
+     * With old version, every Sum uses the overflowing supplier.
+     *
+     * <pre>{@code
+     * Limit[1000[INTEGER],false,false]
+     * \_Aggregate[[emp_no{f}#10],[SUM(salary{f}#15,true[BOOLEAN],PT0S[TIME_DURATION],compensated[KEYWORD]) AS sum_a#6, SUM(emp_no
+     * {f}#10,true[BOOLEAN],PT0S[TIME_DURATION],compensated[KEYWORD]) AS sum_b#9, emp_no{f}#10]]
+     *   \_EsRelation[test][_meta_field{f}#16, emp_no{f}#10, first_name{f}#11, ..]
+     * }</pre>
+     */
+    public void testTransportVersionAwareReplacementMultipleAggsAndBy() {
+        LogicalPlanOptimizer optimizerWithOldVersion = new LogicalPlanOptimizer(
+            new LogicalOptimizerContext(EsqlTestUtils.TEST_CFG, FoldContext.small(), EXECUTION_PROFILE_FORMAT_VERSION)
+        );
+        LogicalPlan plan = plan("""
+            FROM test
+            | STATS sum_a=SUM(salary), sum_b=SUM(emp_no) BY emp_no
+            """, optimizerWithOldVersion);
+
+        Limit limit = as(plan, Limit.class);
+        Aggregate aggregate = as(limit.child(), Aggregate.class);
+        List<? extends NamedExpression> aggs = aggregate.aggregates();
+
+        Sum firstSum = (Sum) Alias.unwrap(aggs.get(0));
+        assertThat(Expressions.name(aggs.get(0)), equalTo("sum_a"));
+        assertThat(firstSum.useOverflowingLongSupplier(), is(true));
+
+        Sum secondSum = (Sum) Alias.unwrap(aggs.get(1));
+        assertThat(Expressions.name(aggs.get(1)), equalTo("sum_b"));
+        assertThat(secondSum.useOverflowingLongSupplier(), is(true));
+
+        Expression third = Alias.unwrap(aggs.get(2));
+        assertThat(third, instanceOf(FieldAttribute.class));
+        assertThat(Expressions.name(aggs.get(2)), equalTo("emp_no"));
+    }
 }
