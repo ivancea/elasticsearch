@@ -28,10 +28,7 @@ import static org.elasticsearch.web.UriParts.USER_INFO;
 
 public class UriPartsFunctionBridgeTests extends AbstractCompoundOutputEvaluatorTests {
 
-    private final Warnings WARNINGS = Warnings.createWarnings(
-        DriverContext.WarningsMode.COLLECT,
-        new TestWarningsSource("invalid_input")
-    );
+    private final Warnings WARNINGS = Warnings.createWarnings(DriverContext.WarningsMode.COLLECT, new TestWarningsSource("invalid_input"));
 
     @Override
     protected CompoundOutputEvaluator.OutputFieldsCollector createOutputFieldsCollector(List<String> requestedFields) {
