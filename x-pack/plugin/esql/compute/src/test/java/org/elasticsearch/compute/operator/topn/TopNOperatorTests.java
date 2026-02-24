@@ -53,6 +53,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
@@ -71,6 +72,7 @@ import static org.elasticsearch.compute.data.ElementType.LONG_RANGE;
 import static org.elasticsearch.compute.data.ElementType.TDIGEST;
 import static org.elasticsearch.compute.operator.topn.TopNEncoder.DEFAULT_SORTABLE;
 import static org.elasticsearch.compute.operator.topn.TopNEncoder.DEFAULT_UNSORTABLE;
+import static java.util.Comparator.naturalOrder;
 import static org.elasticsearch.compute.operator.topn.TopNEncoder.UTF8;
 import static org.elasticsearch.compute.operator.topn.TopNEncoderTests.randomPointAsWKB;
 import static org.elasticsearch.compute.test.BlockTestUtils.append;
@@ -83,6 +85,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.lessThan;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 
 public abstract class TopNOperatorTests extends OperatorTestCase {
     private static final int[] NO_GROUP_KEYS = new int[0];
@@ -211,7 +214,8 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
                         List.of(new TopNOperator.SortOrder(layout.dataChannel(0), asc, nullsFirst)),
                         groupKeys(),
                         randomPageSize(),
-                        InputOrdering.SORTED
+                        InputOrdering.SORTED,
+                        null
                     )
                 ),
                 new PageConsumerOperator(p -> readInto(actual, p))
@@ -276,7 +280,8 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
                         ),
                         groupKeys(),
                         randomPageSize(),
-                        InputOrdering.SORTED
+                        InputOrdering.SORTED,
+                        null
                     )
                 ),
                 new PageConsumerOperator(p -> readInto(actual, p))
@@ -296,7 +301,8 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
             List.of(new TopNOperator.SortOrder(0, true, false)),
             IntStream.of(groupKeys()).boxed().toList(),
             pageSize,
-            InputOrdering.SORTED
+            InputOrdering.SORTED,
+            null
         );
         String groupKeysPart = groupKeys().length > 0 ? ", groupKeys=" + Arrays.toString(groupKeys()) : "";
         String count = groupKeys().length > 0 ? "0/0/4" : "0/4";
@@ -840,7 +846,8 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
                         sortOrders,
                         groupKeys(),
                         randomPageSize(),
-                        InputOrdering.NOT_SORTED
+                        InputOrdering.NOT_SORTED,
+                        null
                     )
                 ),
                 new PageConsumerOperator(page -> readInto(actualTop, page))
@@ -947,7 +954,8 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
                         sortOrders,
                         groupKeys(),
                         randomPageSize(),
-                        InputOrdering.NOT_SORTED
+                        InputOrdering.NOT_SORTED,
+                        null
                     )
                 ),
                 new PageConsumerOperator(page -> readInto(actualTop, page))
@@ -1016,7 +1024,8 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
                             sortOrders,
                             groupKeys,
                             randomPageSize(),
-                            InputOrdering.NOT_SORTED
+                            InputOrdering.NOT_SORTED,
+                            null
                         )
                     ),
                     new PageConsumerOperator(pages::add)
@@ -1066,7 +1075,8 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
             List.of(new TopNOperator.SortOrder(0, false, false), new TopNOperator.SortOrder(1, false, true)),
             IntStream.of(groupKeys()).boxed().toList(),
             randomPageSize(),
-            InputOrdering.NOT_SORTED
+            InputOrdering.NOT_SORTED,
+            null
         );
         String sorts = List.of("SortOrder[channel=0, asc=false, nullsFirst=false]", "SortOrder[channel=1, asc=false, nullsFirst=true]")
             .stream()
@@ -1313,7 +1323,8 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
                         List.of(sortOrders),
                         NO_GROUP_KEYS,
                         randomPageSize(),
-                        InputOrdering.NOT_SORTED
+                        InputOrdering.NOT_SORTED,
+                        null
                     )
                 ),
                 new PageConsumerOperator(p -> readInto(actualValues, p))
@@ -1326,21 +1337,16 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
 
     public void testRandomMultiValuesTopN() {
         DriverContext driverContext = driverContext();
-        int rows = randomIntBetween(50, 100);
-        int topCount = randomIntBetween(1, rows);
-        int blocksCount = randomIntBetween(20, 30);
-        int sortingByColumns = randomIntBetween(1, 10);
+        int pageCount = between(1, 100);
+        int rowsPerPage = between(50, 100);
+        int topCount = between(1, rowsPerPage * pageCount);
+        int blocksCount = between(20, 30);
+        int sortingByColumns = between(1, 10);
 
-        Set<TopNOperator.SortOrder> uniqueOrders = new LinkedHashSet<>(sortingByColumns);
-        List<List<List<Object>>> expectedValues = new ArrayList<>(rows);
-        List<Block> blocks = new ArrayList<>(blocksCount);
         boolean[] validSortKeys = new boolean[blocksCount];
         List<ElementType> elementTypes = new ArrayList<>(blocksCount);
         List<TopNEncoder> encoders = new ArrayList<>(blocksCount);
-
-        for (int i = 0; i < rows; i++) {
-            expectedValues.add(new ArrayList<>(blocksCount));
-        }
+        List<Supplier<Object>> randomValueSuppliers = new ArrayList<>(blocksCount);
 
         for (int type = 0; type < blocksCount; type++) {
             ElementType e = randomValueOtherThanMany(
@@ -1355,99 +1361,42 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
             );
             elementTypes.add(e);
             validSortKeys[type] = true;
-            try (Block.Builder builder = e.newBlockBuilder(rows, driverContext().blockFactory())) {
-                List<Object> previousValue = null;
-                Function<ElementType, Object> randomValueSupplier = (blockType) -> randomValue(blockType);
-                if (e == BYTES_REF) {
-                    if (rarely()) {
-                        randomValueSupplier = switch (randomInt(2)) {
-                            case 0 -> {
-                                // Simulate ips
-                                encoders.add(TopNEncoder.IP);
-                                yield (blockType) -> new BytesRef(InetAddressPoint.encode(randomIp(randomBoolean())));
-                            }
-                            case 1 -> {
-                                // Simulate version fields
-                                encoders.add(TopNEncoder.VERSION);
-                                yield (blockType) -> randomVersion().toBytesRef();
-                            }
-                            case 2 -> {
-                                // Simulate geo_shape and geo_point
-                                encoders.add(DEFAULT_UNSORTABLE);
-                                validSortKeys[type] = false;
-                                yield (blockType) -> randomPointAsWKB();
-                            }
-                            default -> throw new UnsupportedOperationException();
-                        };
-                    } else {
-                        encoders.add(UTF8);
-                    }
+            Supplier<Object> randomValueSupplier = () -> randomValue(e);
+            if (e == BYTES_REF) {
+                if (rarely()) {
+                    randomValueSupplier = switch (randomInt(2)) {
+                        case 0 -> {
+                            // Simulate ips
+                            encoders.add(TopNEncoder.IP);
+                            yield () -> new BytesRef(InetAddressPoint.encode(randomIp(randomBoolean())));
+                        }
+                        case 1 -> {
+                            // Simulate version fields
+                            encoders.add(TopNEncoder.VERSION);
+                            yield () -> randomVersion().toBytesRef();
+                        }
+                        case 2 -> {
+                            // Simulate geo_shape and geo_point
+                            encoders.add(DEFAULT_UNSORTABLE);
+                            validSortKeys[type] = false;
+                            yield TopNEncoderTests::randomPointAsWKB;
+                        }
+                        default -> throw new UnsupportedOperationException();
+                    };
                 } else {
-                    encoders.add(DEFAULT_SORTABLE);
+                    encoders.add(UTF8);
                 }
-
-                for (int i = 0; i < rows; i++) {
-                    List<Object> values = new ArrayList<>();
-                    // let's make things a bit more real for this TopN sorting: have some "equal" values in different rows for the same
-                    // block
-                    if (rarely() && previousValue != null) {
-                        values = previousValue;
-                    } else {
-                        if (e != ElementType.NULL && randomBoolean()) {
-                            // generate a multi-value block
-                            int mvCount = randomIntBetween(5, 10);
-                            for (int j = 0; j < mvCount; j++) {
-                                Object value = randomValueSupplier.apply(e);
-                                values.add(value);
-                            }
-                        } else {// null or single-valued value
-                            Object value = randomValueSupplier.apply(e);
-                            values.add(value);
-                        }
-
-                        if (usually() && randomBoolean()) {
-                            // let's remember the "previous" value, maybe we'll use it again in a different row
-                            previousValue = values;
-                        }
-                    }
-
-                    if (values.size() == 1) {
-                        append(builder, values.get(0));
-                    } else {
-                        builder.beginPositionEntry();
-                        for (Object o : values) {
-                            append(builder, o);
-                        }
-                        builder.endPositionEntry();
-                    }
-
-                    expectedValues.get(i).add(values);
-                }
-                blocks.add(builder.build());
+            } else {
+                encoders.add(DEFAULT_SORTABLE);
             }
+            randomValueSuppliers.add(randomValueSupplier);
         }
 
-        // Insert constant-value group key columns at their specified channels
         int[] gk = groupKeys();
         var layout = ChannelLayout.forDataColumns(blocksCount, gk);
         if (gk.length > 0) {
-            // Insert group key blocks, element types, encoders, and expected values at the right channels.
-            // Inserting at sorted positions in ascending order keeps indices consistent.
-            layout.insertGroupKeyEntries(blocks, null); // placeholder, replaced below
-            int[] sortedGk = IntStream.of(gk).sorted().toArray();
-            for (int g : sortedGk) {
-                try (Block.Builder groupCol = INT.newBlockBuilder(rows, driverContext.blockFactory())) {
-                    for (int i = 0; i < rows; i++) {
-                        append(groupCol, 0);
-                    }
-                    blocks.set(g, groupCol.build());
-                }
-            }
             layout.insertGroupKeyEntries(elementTypes, INT);
             layout.insertGroupKeyEntries(encoders, DEFAULT_UNSORTABLE);
-            for (int i = 0; i < rows; i++) {
-                layout.insertGroupKeyEntries(expectedValues.get(i), List.of(0));
-            }
         }
 
         /*
@@ -1458,40 +1407,119 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
          * not to include sort keys that simulate geo objects. Those aren't
          * sortable at all.
          */
+        Set<TopNOperator.SortOrder> uniqueOrders = new LinkedHashSet<>(sortingByColumns);
         for (int i = 0; i < sortingByColumns; i++) {
             int column = randomValueOtherThanMany(c -> false == validSortKeys[c], () -> randomIntBetween(0, blocksCount - 1));
             uniqueOrders.add(new TopNOperator.SortOrder(layout.dataChannel(column), randomBoolean(), randomBoolean()));
         }
+        List<TopNOperator.SortOrder> sortOrders = uniqueOrders.stream().toList();
 
+        List<List<List<Object>>> expectedValues = new ArrayList<>(rowsPerPage * pageCount);
         List<List<List<Object>>> actualValues = new ArrayList<>();
-        List<Page> results = new TestDriverRunner().builder(driverContext)
-            .input(blocks)
-            .run(
-                new TopNOperator(
-                    driverContext.blockFactory(),
-                    nonBreakingBigArrays().breakerService().getBreaker("request"),
-                    topCount,
-                    elementTypes,
-                    encoders,
-                    uniqueOrders.stream().toList(),
-                    gk,
-                    rows,
-                    InputOrdering.NOT_SORTED
-                )
-            );
-        for (Page p : results) {
-            readAsRows(actualValues, p);
-            p.releaseBlocks();
+        try (
+            TopNOperator operator = new TopNOperator(
+                driverContext.blockFactory(),
+                nonBreakingBigArrays().breakerService().getBreaker("request"),
+                topCount,
+                elementTypes,
+                encoders,
+                sortOrders,
+                gk,
+                rowsPerPage,
+                InputOrdering.NOT_SORTED,
+                null
+            )
+        ) {
+            for (int p = 0; p < pageCount; p++) {
+                assertThat(operator.needsInput(), equalTo(true));
+                assertThat(operator.isFinished(), equalTo(false));
+                assertThat(operator.getOutput(), nullValue());
+
+                for (int r = 0; r < rowsPerPage; r++) {
+                    expectedValues.add(new ArrayList<>(blocksCount + gk.length));
+                }
+                Block[] dataBlocks = new Block[blocksCount];
+                for (int b = 0; b < blocksCount; b++) {
+                    ElementType elementType = elementTypes.get(layout.dataChannel(b));
+                    try (Block.Builder builder = elementType.newBlockBuilder(rowsPerPage, driverContext().blockFactory())) {
+                        List<Object> previousValue = null;
+                        for (int r = 0; r < rowsPerPage; r++) {
+                            List<Object> values = new ArrayList<>();
+                            if (rarely() && previousValue != null) {
+                                values = previousValue;
+                            } else {
+                                if (elementType != ElementType.NULL && randomBoolean()) {
+                                    int mvCount = randomIntBetween(5, 10);
+                                    for (int j = 0; j < mvCount; j++) {
+                                        values.add(randomValueSuppliers.get(b).get());
+                                    }
+                                } else {
+                                    values.add(randomValueSuppliers.get(b).get());
+                                }
+                                if (usually() && randomBoolean()) {
+                                    previousValue = values;
+                                }
+                            }
+                            if (values.size() == 1) {
+                                append(builder, values.get(0));
+                            } else {
+                                builder.beginPositionEntry();
+                                for (Object o : values) {
+                                    append(builder, o);
+                                }
+                                builder.endPositionEntry();
+                            }
+                            expectedValues.get(p * rowsPerPage + r).add(values);
+                        }
+                        dataBlocks[b] = builder.build();
+                    }
+                }
+                if (gk.length > 0) {
+                    for (int r = 0; r < rowsPerPage; r++) {
+                        layout.insertGroupKeyEntries(expectedValues.get(p * rowsPerPage + r), List.of(0));
+                    }
+                }
+                Block[] pageBlocks = gk.length > 0 ? layout.buildPageBlocks(rowsPerPage, driverContext.blockFactory(), dataBlocks) : dataBlocks;
+                operator.addInput(new Page(pageBlocks));
+            }
+            operator.finish();
+            assertThat(operator.needsInput(), equalTo(false));
+            assertThat(operator.isFinished(), equalTo(false));
+            while (operator.isFinished() == false) {
+                Page p = operator.getOutput();
+                assertThat(operator.needsInput(), equalTo(false));
+                if (p != null) {
+                    readAsRows(actualValues, p);
+                    p.releaseBlocks();
+                }
+            }
         }
 
         List<List<List<Object>>> topNExpectedValues = expectedValues.stream()
-            .sorted(new NaiveTopNComparator(uniqueOrders))
+            .sorted(new NaiveTopNComparator(sortOrders))
             .limit(topCount)
             .toList();
         List<List<Object>> actualReducedValues = extractAndReduceSortedValues(actualValues, uniqueOrders);
         List<List<Object>> expectedReducedValues = extractAndReduceSortedValues(topNExpectedValues, uniqueOrders);
 
         assertMap(actualReducedValues, matchesList(expectedReducedValues));
+    }
+
+    protected List<SharedMinCompetitive.KeyConfig> keyConfigs(
+        List<ElementType> elementTypes,
+        List<TopNEncoder> encoders,
+        List<TopNOperator.SortOrder> sortOrders
+    ) {
+        return sortOrders.stream()
+            .map(
+                so -> new SharedMinCompetitive.KeyConfig(
+                    elementTypes.get(so.channel()),
+                    encoders.get(so.channel()),
+                    so.asc(),
+                    so.nullsFirst()
+                )
+            )
+            .toList();
     }
 
     public void testIPSortingSingleValue() throws UnknownHostException {
@@ -1519,7 +1547,8 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
                             List.of(new TopNOperator.SortOrder(0, asc, randomBoolean())),
                             NO_GROUP_KEYS,
                             randomPageSize(),
-                            InputOrdering.NOT_SORTED
+                            InputOrdering.NOT_SORTED,
+                            null
                         )
                     ),
                     new PageConsumerOperator(p -> readInto(actual, p))
@@ -1647,7 +1676,8 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
                             List.of(new TopNOperator.SortOrder(0, asc, nullsFirst)),
                             NO_GROUP_KEYS,
                             randomPageSize(),
-                            InputOrdering.NOT_SORTED
+                            InputOrdering.NOT_SORTED,
+                            null
                         )
                     ),
                     new PageConsumerOperator(p -> readInto(actual, p))
@@ -1739,7 +1769,8 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
                         ),
                         NO_GROUP_KEYS,
                         randomPageSize(),
-                        InputOrdering.NOT_SORTED
+                        InputOrdering.NOT_SORTED,
+                        null
                     )
                 ),
                 new PageConsumerOperator(p -> readInto(actual, p))
@@ -1777,7 +1808,8 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
                         List.of(new TopNOperator.SortOrder(0, true, randomBoolean())),
                         NO_GROUP_KEYS,
                         maxPageSize,
-                        InputOrdering.NOT_SORTED
+                        InputOrdering.NOT_SORTED,
+                        null
                     )
                 ),
                 new PageConsumerOperator(p -> {
@@ -1814,7 +1846,8 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
                 List.of(new TopNOperator.SortOrder(0, randomBoolean(), randomBoolean())),
                 NO_GROUP_KEYS,
                 randomPageSize(),
-                InputOrdering.NOT_SORTED
+                InputOrdering.NOT_SORTED,
+                null
             )
         ) {
             op.addInput(new Page(blockFactory().newIntArrayVector(new int[] { 1 }, 1).asBlock()));
@@ -1840,7 +1873,8 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
                 List.of(new TopNOperator.SortOrder(0, asc, randomBoolean())),
                 NO_GROUP_KEYS,
                 randomPageSize(),
-                InputOrdering.NOT_SORTED
+                InputOrdering.NOT_SORTED,
+                null
             )
         ) {
             int[] blockValues = IntStream.range(0, rows).toArray();
@@ -1865,25 +1899,21 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
         if (page.getBlockCount() == 0) {
             fail("No blocks returned!");
         }
-        if (values.isEmpty()) {
-            while (values.size() < page.getPositionCount()) {
-                values.add(new ArrayList<>());
-            }
-        } else {
-            if (values.size() != page.getPositionCount()) {
-                throw new IllegalArgumentException("Can't load values from blocks with different numbers of positions");
-            }
+        int start = values.size();
+        for (int r = 0; r < page.getPositionCount(); r++) {
+            values.add(new ArrayList<>());
         }
 
-        for (int i = 0; i < page.getBlockCount(); i++) {
-            for (int p = 0; p < page.getBlock(i).getPositionCount(); p++) {
-                Object value = toJavaObject(page.getBlock(i), p);
+        for (int b = 0; b < page.getBlockCount(); b++) {
+            for (int r = 0; r < page.getBlock(b).getPositionCount(); r++) {
+                Object value = toJavaObject(page.getBlock(b), r);
+                List<List<Object>> v = values.get(start + r);
                 if (value instanceof List l) {
-                    values.get(p).add(l);
+                    v.add(l);
                 } else {
                     List<Object> valueAsList = new ArrayList<>(1); // list of null is also possible
                     valueAsList.add(value);
-                    values.get(p).add(valueAsList);
+                    v.add(valueAsList);
                 }
             }
         }
@@ -1913,25 +1943,31 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
         for (List<List<Object>> row : rows) {
             List<Object> resultRow = new ArrayList<>(orders.size());
             for (TopNOperator.SortOrder order : orders) {
-                List<Object> valueAt = row.get(order.channel());
-                if (valueAt.size() == 1) {
-                    resultRow.add(valueAt);
-                } else {
-                    Object minMax = order.asc()
-                        ? valueAt.stream().map(element -> (Comparable) element).min(Comparator.<Comparable>naturalOrder()).get()
-                        : valueAt.stream().map(element -> (Comparable) element).max(Comparator.<Comparable>naturalOrder()).get();
-                    resultRow.add(List.of(minMax));
-                }
+                resultRow.add(reduceKey(row.get(order.channel()), order.asc()));
             }
             result.add(resultRow);
         }
         return result;
     }
 
-    protected class NaiveTopNComparator implements Comparator<List<List<Object>>> {
-        private final Set<TopNOperator.SortOrder> orders;
+    static Object reduceKey(List<Object> values, boolean asc) {
+        if (values.size() == 1) {
+            return values.getFirst();
+        }
+        return minMax(values, asc);
+    }
 
-        NaiveTopNComparator(Set<TopNOperator.SortOrder> orders) {
+    @SuppressWarnings({ "rawtypes", "unchecked", "OptionalGetWithoutIsPresent" })
+    static Object minMax(List<Object> values, boolean asc) {
+        return asc
+            ? values.stream().map(element -> (Comparable) element).min(naturalOrder()).get()
+            : values.stream().map(element -> (Comparable) element).max(naturalOrder()).get();
+    }
+
+    protected class NaiveTopNComparator implements Comparator<List<List<Object>>> {
+        private final List<TopNOperator.SortOrder> orders;
+
+        NaiveTopNComparator(List<TopNOperator.SortOrder> orders) {
             this.orders = orders;
         }
 
@@ -1954,15 +1990,8 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
             if (firstIsNull || secondIsNull) {
                 return Boolean.compare(firstIsNull, secondIsNull) * (nullsFirst ? -1 : 1);
             }
-            List<Comparable> v1 = value1.stream().map(element -> (Comparable) element).toList();
-            List<Comparable> v2 = value2.stream().map(element -> (Comparable) element).toList();
-            Comparable minMax1 = (Comparable) (asc
-                ? v1.stream().min(Comparator.<Comparable>naturalOrder()).get()
-                : v1.stream().max(Comparator.<Comparable>naturalOrder()).get());
-            Comparable minMax2 = (Comparable) (asc
-                ? v2.stream().min(Comparator.<Comparable>naturalOrder()).get()
-                : v2.stream().max(Comparator.<Comparable>naturalOrder()).get());
-
+            Comparable minMax1 = (Comparable) minMax(value1, asc);
+            Comparable minMax2 = (Comparable) minMax(value2, asc);
             return (asc ? 1 : -1) * minMax1.compareTo(minMax2);
         }
     }

@@ -17,6 +17,7 @@ import org.elasticsearch.compute.data.ElementType;
 import org.elasticsearch.compute.data.Page;
 import org.elasticsearch.compute.operator.DriverContext;
 import org.elasticsearch.compute.operator.Operator;
+import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.ReleasableIterator;
 import org.elasticsearch.core.Releasables;
 
@@ -35,8 +36,8 @@ import java.util.List;
  * as valid bytes inside a binary value.
  */
 public class TopNOperator implements Operator, Accountable {
-    private static final byte SMALL_NULL = 0x01; // "null" representation for "nulls first"
-    private static final byte BIG_NULL = 0x02; // "null" representation for "nulls last"
+    static final byte SMALL_NULL = 0x01; // "null" representation for "nulls first"
+    static final byte BIG_NULL = 0x02; // "null" representation for "nulls last"
 
     public enum InputOrdering {
         SORTED,
@@ -68,9 +69,12 @@ public class TopNOperator implements Operator, Accountable {
         List<SortOrder> sortOrders,
         List<Integer> groupKeys,
         int maxPageSize,
-        InputOrdering inputOrdering
+        InputOrdering inputOrdering,
+        @Nullable SharedMinCompetitive.Supplier minCompetitive
     ) implements OperatorFactory {
-        public TopNOperatorFactory {
+        public TopNOperatorFactory
+
+        {
             for (ElementType e : elementTypes) {
                 if (e == null) {
                     throw new IllegalArgumentException("ElementType not known");
@@ -89,7 +93,8 @@ public class TopNOperator implements Operator, Accountable {
                 sortOrders,
                 groupKeys.stream().mapToInt(Integer::intValue).toArray(),
                 maxPageSize,
-                inputOrdering
+                inputOrdering,
+                minCompetitive
             );
         }
 
@@ -121,6 +126,17 @@ public class TopNOperator implements Operator, Accountable {
     private final List<SortOrder> sortOrders;
     private final int[] groupKeys;
     private final boolean[] channelInKey;
+
+    /**
+     * Tracker for the minimum competitive value. If this is null no one is listening
+     * for the min competitive so we don't track it.
+     */
+    @Nullable
+    private final SharedMinCompetitive minCompetitive;
+    /**
+     * How many times {@link #minCompetitive} was updated.
+     */
+    private int minCompetitiveUpdates;
 
     private TopNQueue inputQueue;
     private Row spare;
@@ -161,8 +177,28 @@ public class TopNOperator implements Operator, Accountable {
         List<SortOrder> sortOrders,
         int[] groupKeys,
         int maxPageSize,
-        InputOrdering inputOrdering
+        InputOrdering inputOrdering,
+        @Nullable SharedMinCompetitive.Supplier minCompetitiveSupplier
     ) {
+        TopNProcessor processor = null;
+        TopNQueue inputQueue = null;
+        SharedMinCompetitive minCompetitive = null;
+        boolean success = false;
+        try {
+            processor = groupKeys.length == 0
+                ? new UngroupedTopNProcessor()
+                : new GroupedTopNProcessor(groupKeys, elementTypes, blockFactory);
+            inputQueue = processor.queue(breaker, topCount);
+            minCompetitive = minCompetitiveSupplier == null ? null : minCompetitiveSupplier.get();
+            success = true;
+        } finally {
+            if (success == false) {
+                Releasables.close(processor, inputQueue, minCompetitive);
+            }
+        }
+        this.processor = processor;
+        this.inputQueue = inputQueue;
+        this.minCompetitive = minCompetitive;
         this.blockFactory = blockFactory;
         this.breaker = breaker;
         this.maxPageSize = maxPageSize;
@@ -171,18 +207,6 @@ public class TopNOperator implements Operator, Accountable {
         this.encoders = encoders;
         this.sortOrders = sortOrders;
         this.groupKeys = groupKeys;
-        this.processor = groupKeys.length == 0
-            ? new UngroupedTopNProcessor()
-            : new GroupedTopNProcessor(groupKeys, elementTypes, blockFactory);
-        boolean success = false;
-        try {
-            this.inputQueue = processor.queue(breaker, topCount);
-            success = true;
-        } finally {
-            if (success == false) {
-                processor.close();
-            }
-        }
         this.inputOrdering = inputOrdering;
         this.channelInKey = new boolean[elementTypes.size()];
         for (SortOrder so : sortOrders) {
@@ -200,6 +224,7 @@ public class TopNOperator implements Operator, Accountable {
     @Override
     public void addInput(Page page) {
         long start = System.nanoTime();
+        boolean modified = false;
         /*
          * Since row tracks memory we have to be careful to close any unused rows,
          * including any rows that fail while constructing because they allocate
@@ -234,6 +259,7 @@ public class TopNOperator implements Operator, Accountable {
                             var insertedRow = spare;
                             spare = nextSpare; // Update spare before writing values in case writing fails
                             rowFiller.writeValues(i, insertedRow);
+                            modified = true;
                         } else if (inputOrdering == TopNOperator.InputOrdering.SORTED && groupKeys.length == 0) {
                             /*
                              The queue (min-heap) is full and we have sorted input for the input page. Any other element
@@ -251,11 +277,27 @@ public class TopNOperator implements Operator, Accountable {
                     }
                 }
             }
+
+            if (modified) {
+                updateMinCompetitive();
+            }
         } finally {
             page.releaseBlocks();
             pagesReceived++;
             rowsReceived += page.getPositionCount();
             receiveNanos += System.nanoTime() - start;
+        }
+    }
+
+    /**
+     * Offer an update to {@link #minCompetitive} if it is non-null.
+     */
+    private void updateMinCompetitive() {
+        if (minCompetitive == null || inputQueue == null || !(inputQueue instanceof UngroupedQueue ungroupedQueue) || ungroupedQueue.size() < topCount) {
+            return;
+        }
+        if (minCompetitive.offer(ungroupedQueue.top().keys().bytesRefView())) {
+            minCompetitiveUpdates++;
         }
     }
 
@@ -311,7 +353,8 @@ public class TopNOperator implements Operator, Accountable {
             /*
              * The processor may hold resources (e.g., a BlockHash for grouped top-N).
              */
-            processor
+            processor,
+            minCompetitive
         );
         // Aggressively null these so they can be GCed more quickly.
         inputQueue = null;
@@ -349,7 +392,8 @@ public class TopNOperator implements Operator, Accountable {
             pagesReceived,
             pagesEmitted,
             rowsReceived,
-            rowsEmitted
+            rowsEmitted,
+            minCompetitiveUpdates
         );
     }
 
@@ -456,27 +500,15 @@ public class TopNOperator implements Operator, Accountable {
                     idx++;
                 }
 
-                Block[] blocks = new Block[builders.length];
-                boolean blocksBuilt = false;
-                try {
-                    for (int b = 0; b < blocks.length; b++) {
-                        blocks[b] = builders[b].build();
-                    }
-                    if (rowKeyPositions != null) {
-                        for (int k = 0; k < groupKeys.length; k++) {
-                            int channel = groupKeys[k];
-                            Block replacement = groupKeyBlocks[k].filter(true, rowKeyPositions);
-                            blocks[channel].close();
-                            blocks[channel] = replacement;
-                        }
-                    }
-                    blocksBuilt = true;
-                } finally {
-                    if (blocksBuilt == false) {
-                        Releasables.closeExpectNoException(blocks);
+                Block[] blocks = ResultBuilder.buildAll(builders);
+                if (rowKeyPositions != null) {
+                    for (int k = 0; k < groupKeys.length; k++) {
+                        int channel = groupKeys[k];
+                        Block replacement = groupKeyBlocks[k].filter(true, rowKeyPositions);
+                        blocks[channel].close();
+                        blocks[channel] = replacement;
                     }
                 }
-                Releasables.closeExpectNoException(builders);
                 return new Page(blocks);
             } finally {
                 Releasables.close(builders);

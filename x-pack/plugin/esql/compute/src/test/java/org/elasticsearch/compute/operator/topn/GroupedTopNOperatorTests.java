@@ -58,6 +58,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.lessThan;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
+import static org.hamcrest.Matchers.nullValue;
 
 public class GroupedTopNOperatorTests extends TopNOperatorTests {
     private static final int TOP_COUNT = 4;
@@ -123,7 +124,8 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
             List.of(new SortOrder(0, true, false)),
             List.of(1),
             pageSize,
-            TopNOperator.InputOrdering.NOT_SORTED
+            TopNOperator.InputOrdering.NOT_SORTED,
+            null
         );
     }
 
@@ -233,7 +235,8 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
                         sortOrders,
                         groupKeys,
                         randomPageSize(),
-                        TopNOperator.InputOrdering.SORTED
+                        TopNOperator.InputOrdering.SORTED,
+                        null
                     )
                 ),
                 new PageConsumerOperator(p -> readInto(actual, p))
@@ -284,7 +287,8 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
                         sortOrders,
                         groupKeys,
                         randomPageSize(),
-                        TopNOperator.InputOrdering.NOT_SORTED
+                        TopNOperator.InputOrdering.NOT_SORTED,
+                        null
                     )
                 ),
                 new PageConsumerOperator(p -> readInto(actual, p))
@@ -325,7 +329,8 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
                         sortOrders,
                         groupKeys,
                         randomPageSize(),
-                        TopNOperator.InputOrdering.NOT_SORTED
+                        TopNOperator.InputOrdering.NOT_SORTED,
+                        null
                     )
                 ),
                 new PageConsumerOperator(p -> readInto(actual, p))
@@ -380,7 +385,8 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
                         sortOrders,
                         groupKeys,
                         randomPageSize(),
-                        TopNOperator.InputOrdering.NOT_SORTED
+                        TopNOperator.InputOrdering.NOT_SORTED,
+                        null
                     )
                 ),
                 new PageConsumerOperator(p -> readInto(actual, p))
@@ -396,11 +402,12 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
     }
 
     /**
-     * Fails when a single page position has more group IDs (from multivalued group key expansion)
-     * than {@link GroupedTopNProcessor}'s internal emit batch size (10K).
+     * Verifies that a single page position whose group-ID count (from multivalued group key expansion)
+     * exceeds {@link GroupedTopNProcessor}'s internal emit batch size (10K) is handled correctly.
      * <p>
-     *     In that case BlockHash's AddPage invokes the callback multiple times for the same position;
-     *     the current implementation concatenates those callbacks and produces misaligned group IDs, so we get wrong grouped top-N.
+     *     BlockHash's AddPage invokes the callback multiple times for the same position in this case.
+     *     {@link GroupedTopNProcessor#computeGroupIds} must merge all those chunks into one
+     *     position-aligned block so every combination is counted exactly once.
      *     This test uses one row with two multivalued group keys of 150 values each (150×150 = 22_500 > 10_240).
      * </p>
      */
@@ -433,7 +440,8 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
                         sortOrders,
                         groupKeys,
                         randomPageSize(),
-                        TopNOperator.InputOrdering.NOT_SORTED
+                        TopNOperator.InputOrdering.NOT_SORTED,
+                        null
                     )
                 ),
                 new PageConsumerOperator(p -> readInto(actual, p))
@@ -442,9 +450,8 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
             new TestDriverRunner().run(driver);
         }
 
-        // Expected: 10_404 groups, each with one row (1, 1, g1, g2) for (g1,g2) in [0..101]×[0..101]
-        int expectedRows = 102 * 102;
-        assertThat("Output row count (wrong when one position exceeds emit batch size)", actual.get(0).size(), equalTo(expectedRows));
+        int expectedRows = keys1.size() * keys2.size();
+        assertThat(actual.getFirst().size(), equalTo(expectedRows));
     }
 
     public void testEstimateRamBytesUsed() {
@@ -479,7 +486,8 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
                 List.of(new SortOrder(0, true, false)),
                 List.of(1),
                 pageSize,
-                TopNOperator.InputOrdering.NOT_SORTED
+                TopNOperator.InputOrdering.NOT_SORTED,
+                null
             ).get(context)
         ) {
             long actualEmpty = RamUsageTester.ramUsed(op, acc);
@@ -586,7 +594,8 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
                     uniqueOrders.stream().toList(),
                     groupKeys.stream().mapToInt(Integer::intValue).toArray(),
                     rows,
-                    TopNOperator.InputOrdering.NOT_SORTED
+                    TopNOperator.InputOrdering.NOT_SORTED,
+                    null
                 )
             );
         List<List<Object>> actualValues = new ArrayList<>();
@@ -751,5 +760,64 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
             }
             default -> throw new IllegalArgumentException("Unsupported block type: " + block.getClass());
         };
+    }
+
+    /**
+     * Verifies that a non-null {@link SharedMinCompetitive} passed to a grouped {@link TopNOperator}
+     * is never updated, because {@link TopNOperator#updateMinCompetitive()} skips non-ungrouped queues.
+     */
+    public void testMinCompetitiveNeverUpdatedForGrouped() {
+        DriverContext driverContext = driverContext();
+        // Match the layout from simple(): data at channel 0, group key at channel 1
+        List<ElementType> elementTypes = List.of(LONG, LONG);
+        List<TopNEncoder> encoders = List.of(DEFAULT_UNSORTABLE, DEFAULT_UNSORTABLE);
+        List<SortOrder> sortOrders = List.of(new SortOrder(0, true, false));
+        int[] gk = new int[] { 1 };
+
+        SharedMinCompetitive.Supplier minCompetitiveSupplier = new SharedMinCompetitive.Supplier(
+            blockFactory().breaker(),
+            keyConfigs(elementTypes, encoders, sortOrders)
+        );
+        SharedMinCompetitive minCompetitive = minCompetitiveSupplier.get();
+
+        try (
+            TopNOperator operator = new TopNOperator(
+                driverContext.blockFactory(),
+                nonBreakingBigArrays().breakerService().getBreaker("request"),
+                TOP_COUNT,
+                elementTypes,
+                encoders,
+                sortOrders,
+                gk,
+                randomPageSize(),
+                TopNOperator.InputOrdering.NOT_SORTED,
+                minCompetitiveSupplier
+            )
+        ) {
+            // Feed more rows than TOP_COUNT per page so that for an ungrouped operator the heap would fill
+            // and updateMinCompetitive() would be triggered - but for grouped it must remain null.
+            for (int p = 0; p < between(TOP_COUNT + 1, 50); p++) {
+                Page page;
+                try (
+                    Block.Builder dataBuilder = LONG.newBlockBuilder(1, driverContext.blockFactory());
+                    Block.Builder groupBuilder = LONG.newBlockBuilder(1, driverContext.blockFactory())
+                ) {
+                    append(dataBuilder, randomLong());
+                    append(groupBuilder, 0L);
+                    page = new Page(dataBuilder.build(), groupBuilder.build());
+                }
+                operator.addInput(page);
+                assertThat(minCompetitive.get(blockFactory()), nullValue());
+            }
+            operator.finish();
+            while (operator.isFinished() == false) {
+                try (Page p = operator.getOutput()) {
+                    // discard output
+                }
+            }
+            assertThat(minCompetitive.get(blockFactory()), nullValue());
+        } finally {
+            Releasables.close(minCompetitive);
+        }
     }
 }
