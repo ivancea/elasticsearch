@@ -585,6 +585,7 @@ public class LocalExecutionPlanner {
                 asList(elementTypes),
                 asList(encoders),
                 orders,
+                List.of(),
                 context.pageSize(topNExec, rowSize),
                 topNExec.inputOrdering(),
                 topNExec.minCompetitive()
