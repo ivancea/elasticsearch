@@ -816,6 +816,16 @@ public interface EsqlBaseParserListener extends ParseTreeListener {
    */
   void exitUriPartsCommand(EsqlBaseParser.UriPartsCommandContext ctx);
   /**
+   * Enter a parse tree produced by {@link EsqlBaseParser#registeredDomainCommand}.
+   * @param ctx the parse tree
+   */
+  void enterRegisteredDomainCommand(EsqlBaseParser.RegisteredDomainCommandContext ctx);
+  /**
+   * Exit a parse tree produced by {@link EsqlBaseParser#registeredDomainCommand}.
+   * @param ctx the parse tree
+   */
+  void exitRegisteredDomainCommand(EsqlBaseParser.RegisteredDomainCommandContext ctx);
+  /**
    * Enter a parse tree produced by {@link EsqlBaseParser#setCommand}.
    * @param ctx the parse tree
    */
