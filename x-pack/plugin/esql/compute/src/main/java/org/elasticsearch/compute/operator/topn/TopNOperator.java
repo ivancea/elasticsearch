@@ -293,7 +293,10 @@ public class TopNOperator implements Operator, Accountable {
      * Offer an update to {@link #minCompetitive} if it is non-null.
      */
     private void updateMinCompetitive() {
-        if (minCompetitive == null || inputQueue == null || !(inputQueue instanceof UngroupedQueue ungroupedQueue) || ungroupedQueue.size() < topCount) {
+        if (minCompetitive == null
+            || inputQueue == null
+            || !(inputQueue instanceof UngroupedQueue ungroupedQueue)
+            || ungroupedQueue.size() < topCount) {
             return;
         }
         if (minCompetitive.offer(ungroupedQueue.top().keys().bytesRefView())) {

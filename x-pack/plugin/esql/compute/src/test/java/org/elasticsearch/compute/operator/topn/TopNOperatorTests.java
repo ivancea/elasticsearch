@@ -58,6 +58,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 
+import static java.util.Comparator.naturalOrder;
 import static org.elasticsearch.compute.data.BlockUtils.toJavaObject;
 import static org.elasticsearch.compute.data.ElementType.AGGREGATE_METRIC_DOUBLE;
 import static org.elasticsearch.compute.data.ElementType.BOOLEAN;
@@ -72,7 +73,6 @@ import static org.elasticsearch.compute.data.ElementType.LONG_RANGE;
 import static org.elasticsearch.compute.data.ElementType.TDIGEST;
 import static org.elasticsearch.compute.operator.topn.TopNEncoder.DEFAULT_SORTABLE;
 import static org.elasticsearch.compute.operator.topn.TopNEncoder.DEFAULT_UNSORTABLE;
-import static java.util.Comparator.naturalOrder;
 import static org.elasticsearch.compute.operator.topn.TopNEncoder.UTF8;
 import static org.elasticsearch.compute.operator.topn.TopNEncoderTests.randomPointAsWKB;
 import static org.elasticsearch.compute.test.BlockTestUtils.append;
@@ -1479,7 +1479,9 @@ public abstract class TopNOperatorTests extends OperatorTestCase {
                         layout.insertGroupKeyEntries(expectedValues.get(p * rowsPerPage + r), List.of(0));
                     }
                 }
-                Block[] pageBlocks = gk.length > 0 ? layout.buildPageBlocks(rowsPerPage, driverContext.blockFactory(), dataBlocks) : dataBlocks;
+                Block[] pageBlocks = gk.length > 0
+                    ? layout.buildPageBlocks(rowsPerPage, driverContext.blockFactory(), dataBlocks)
+                    : dataBlocks;
                 operator.addInput(new Page(pageBlocks));
             }
             operator.finish();

@@ -174,15 +174,45 @@ public class TopNExec extends UnaryExec implements EstimatesRowSize {
 
     @Override
     public TopNExec replaceChild(PhysicalPlan newChild) {
-        return new TopNExec(source(), newChild, order, limit, estimatedRowSize, groupings, docValuesAttributes, inputOrdering, minCompetitive);
+        return new TopNExec(
+            source(),
+            newChild,
+            order,
+            limit,
+            estimatedRowSize,
+            groupings,
+            docValuesAttributes,
+            inputOrdering,
+            minCompetitive
+        );
     }
 
     public TopNExec withDocValuesAttributes(Set<Attribute> docValuesAttributes) {
-        return new TopNExec(source(), child(), order, limit, estimatedRowSize, groupings, docValuesAttributes, inputOrdering, minCompetitive);
+        return new TopNExec(
+            source(),
+            child(),
+            order,
+            limit,
+            estimatedRowSize,
+            groupings,
+            docValuesAttributes,
+            inputOrdering,
+            minCompetitive
+        );
     }
 
     public TopNExec withSortedInput() {
-        return new TopNExec(source(), child(), order, limit, estimatedRowSize, groupings, docValuesAttributes, InputOrdering.SORTED, minCompetitive);
+        return new TopNExec(
+            source(),
+            child(),
+            order,
+            limit,
+            estimatedRowSize,
+            groupings,
+            docValuesAttributes,
+            InputOrdering.SORTED,
+            minCompetitive
+        );
     }
 
     public TopNExec withNonSortedInput() {
@@ -219,7 +249,17 @@ public class TopNExec extends UnaryExec implements EstimatesRowSize {
     }
 
     public TopNExec withMinCompetitive(SharedMinCompetitive.Supplier minCompetitive) {
-        return new TopNExec(source(), child(), order, limit, estimatedRowSize, groupings, docValuesAttributes, inputOrdering, minCompetitive);
+        return new TopNExec(
+            source(),
+            child(),
+            order,
+            limit,
+            estimatedRowSize,
+            groupings,
+            docValuesAttributes,
+            inputOrdering,
+            minCompetitive
+        );
     }
 
     public Expression limit() {
@@ -260,7 +300,16 @@ public class TopNExec extends UnaryExec implements EstimatesRowSize {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), order, limit, estimatedRowSize, groupings, docValuesAttributes, inputOrdering, minCompetitive);
+        return Objects.hash(
+            super.hashCode(),
+            order,
+            limit,
+            estimatedRowSize,
+            groupings,
+            docValuesAttributes,
+            inputOrdering,
+            minCompetitive
+        );
     }
 
     @Override
