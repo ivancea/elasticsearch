@@ -60,6 +60,7 @@ import org.elasticsearch.compute.operator.fuse.LinearScoreEvalOperator;
 import org.elasticsearch.compute.operator.fuse.RrfConfig;
 import org.elasticsearch.compute.operator.fuse.RrfScoreEvalOperator;
 import org.elasticsearch.compute.operator.topn.DocVectorEncoder;
+import org.elasticsearch.compute.operator.topn.GroupedTopNOperator;
 import org.elasticsearch.compute.operator.topn.TopNEncoder;
 import org.elasticsearch.compute.operator.topn.TopNOperator;
 import org.elasticsearch.compute.operator.topn.TopNOperator.TopNOperatorFactory;
@@ -578,16 +579,28 @@ public class LocalExecutionPlanner {
         } else {
             throw new EsqlIllegalArgumentException("limit only supported with literal values");
         }
+        if (groupKeys.isEmpty()) {
+            return source.with(
+                new TopNOperatorFactory(
+                    limit,
+                    asList(elementTypes),
+                    asList(encoders),
+                    orders,
+                    context.pageSize(topNExec, rowSize),
+                    topNExec.inputOrdering(),
+                    topNExec.minCompetitive()
+                ),
+                source.layout
+            );
+        }
         return source.with(
-            new TopNOperatorFactory(
+            new GroupedTopNOperator.GroupedTopNOperatorFactory(
                 limit,
                 asList(elementTypes),
                 asList(encoders),
                 orders,
                 groupKeys,
-                context.pageSize(topNExec, rowSize),
-                topNExec.inputOrdering(),
-                topNExec.minCompetitive()
+                context.pageSize(topNExec, rowSize)
             ),
             source.layout
         );

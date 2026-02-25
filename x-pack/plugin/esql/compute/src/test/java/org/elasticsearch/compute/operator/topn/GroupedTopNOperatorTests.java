@@ -7,8 +7,6 @@
 
 package org.elasticsearch.compute.operator.topn;
 
-import org.apache.lucene.tests.util.RamUsageTester;
-import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.compute.data.Block;
 import org.elasticsearch.compute.data.BlockFactory;
 import org.elasticsearch.compute.data.BlockUtils;
@@ -19,6 +17,7 @@ import org.elasticsearch.compute.data.Page;
 import org.elasticsearch.compute.lucene.IndexedByShardIdFromList;
 import org.elasticsearch.compute.operator.Driver;
 import org.elasticsearch.compute.operator.DriverContext;
+import org.elasticsearch.compute.operator.Operator;
 import org.elasticsearch.compute.operator.PageConsumerOperator;
 import org.elasticsearch.compute.operator.SourceOperator;
 import org.elasticsearch.compute.operator.topn.TopNOperator.SortOrder;
@@ -35,10 +34,8 @@ import org.elasticsearch.core.Tuple;
 import org.elasticsearch.test.ESTestCase;
 import org.hamcrest.Matcher;
 
-import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -53,12 +50,9 @@ import static org.elasticsearch.compute.data.ElementType.LONG;
 import static org.elasticsearch.compute.operator.topn.TopNEncoder.DEFAULT_UNSORTABLE;
 import static org.elasticsearch.compute.test.BlockTestUtils.append;
 import static org.elasticsearch.compute.test.BlockTestUtils.readInto;
-import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.lessThan;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
-import static org.hamcrest.Matchers.nullValue;
 
 public class GroupedTopNOperatorTests extends TopNOperatorTests {
     private static final int TOP_COUNT = 4;
@@ -116,32 +110,30 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
     }
 
     @Override
-    protected TopNOperator.TopNOperatorFactory simple(SimpleOptions options) {
-        return new TopNOperator.TopNOperatorFactory(
+    protected Operator.OperatorFactory simple(SimpleOptions options) {
+        return new GroupedTopNOperator.GroupedTopNOperatorFactory(
             TOP_COUNT,
             List.of(LONG, LONG),
             List.of(DEFAULT_UNSORTABLE, DEFAULT_UNSORTABLE),
             List.of(new SortOrder(0, true, false)),
             List.of(1),
-            pageSize,
-            TopNOperator.InputOrdering.NOT_SORTED,
-            null
+            pageSize
         );
     }
 
     @Override
     protected Matcher<String> expectedDescriptionOfSimple() {
         return equalTo(
-            "TopNOperator[count=4, elementTypes=[LONG, LONG], encoders=[DefaultUnsortable, DefaultUnsortable], "
-                + "sortOrders=[SortOrder[channel=0, asc=true, nullsFirst=false]], groupKeys=[1], inputOrdering=NOT_SORTED]"
+            "GroupedTopNOperator[count=4, elementTypes=[LONG, LONG], encoders=[DefaultUnsortable, DefaultUnsortable], "
+                + "sortOrders=[SortOrder[channel=0, asc=true, nullsFirst=false]], groupKeys=[1]]"
         );
     }
 
     @Override
     protected Matcher<String> expectedToStringOfSimple() {
         return equalTo(
-            "TopNOperator[count=0/0/4, elementTypes=[LONG, LONG], encoders=[DefaultUnsortable, DefaultUnsortable], "
-                + "sortOrders=[SortOrder[channel=0, asc=true, nullsFirst=false]], groupKeys=[1], inputOrdering=NOT_SORTED]"
+            "GroupedTopNOperator[count=0/0/4, elementTypes=[LONG, LONG], encoders=[DefaultUnsortable, DefaultUnsortable], "
+                + "sortOrders=[SortOrder[channel=0, asc=true, nullsFirst=false]], groupKeys=[1]]"
         );
     }
 
@@ -226,7 +218,7 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
                 driverContext,
                 new CannedSourceOperator(List.of(page1, page2).iterator()),
                 List.of(
-                    new TopNOperator(
+                    new GroupedTopNOperator(
                         driverContext.blockFactory(),
                         nonBreakingBigArrays().breakerService().getBreaker("request"),
                         topCount,
@@ -234,9 +226,7 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
                         encoders,
                         sortOrders,
                         groupKeys,
-                        randomPageSize(),
-                        TopNOperator.InputOrdering.SORTED,
-                        null
+                        randomPageSize()
                     )
                 ),
                 new PageConsumerOperator(p -> readInto(actual, p))
@@ -278,7 +268,7 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
                 driverContext,
                 new CannedSourceOperator(List.of(page).iterator()),
                 List.of(
-                    new TopNOperator(
+                    new GroupedTopNOperator(
                         blockFactory,
                         nonBreakingBigArrays().breakerService().getBreaker("request"),
                         topCount,
@@ -286,9 +276,7 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
                         encoders,
                         sortOrders,
                         groupKeys,
-                        randomPageSize(),
-                        TopNOperator.InputOrdering.NOT_SORTED,
-                        null
+                        randomPageSize()
                     )
                 ),
                 new PageConsumerOperator(p -> readInto(actual, p))
@@ -320,7 +308,7 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
                 driverContext,
                 new CannedSourceOperator(List.of(page).iterator()),
                 List.of(
-                    new TopNOperator(
+                    new GroupedTopNOperator(
                         bf,
                         nonBreakingBigArrays().breakerService().getBreaker("request"),
                         topCount,
@@ -328,9 +316,7 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
                         encoders,
                         sortOrders,
                         groupKeys,
-                        randomPageSize(),
-                        TopNOperator.InputOrdering.NOT_SORTED,
-                        null
+                        randomPageSize()
                     )
                 ),
                 new PageConsumerOperator(p -> readInto(actual, p))
@@ -376,7 +362,7 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
                 driverContext,
                 new CannedSourceOperator(List.of(page).iterator()),
                 List.of(
-                    new TopNOperator(
+                    new GroupedTopNOperator(
                         bf,
                         nonBreakingBigArrays().breakerService().getBreaker("request"),
                         topCount,
@@ -384,9 +370,7 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
                         encoders,
                         sortOrders,
                         groupKeys,
-                        randomPageSize(),
-                        TopNOperator.InputOrdering.NOT_SORTED,
-                        null
+                        randomPageSize()
                     )
                 ),
                 new PageConsumerOperator(p -> readInto(actual, p))
@@ -403,15 +387,22 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
 
     /**
      * Verifies that a single page position whose group-ID count (from multivalued group key expansion)
-     * exceeds {@link GroupedTopNProcessor}'s internal emit batch size (10K) is handled correctly.
+     * exceeds {@link GroupedTopNOperator}'s internal emit batch size (10K) is handled correctly.
      * <p>
      *     BlockHash's AddPage invokes the callback multiple times for the same position in this case.
-     *     {@link GroupedTopNProcessor#computeGroupIds} must merge all those chunks into one
-     *     position-aligned block so every combination is counted exactly once.
+     *     Each {@code (position, groupId)} pair is processed independently in the callback, so
+     *     every combination is counted exactly once.
      *     This test uses one row with two multivalued group keys of 150 values each (150×150 = 22_500 > 10_240).
      * </p>
      */
     public void testSinglePositionExceedsEmitBatchSize() {
+        int elementsPerKey = 150;
+        assertThat(
+            "This test only makes sense if the total groups is bigger than the emit batch size",
+            elementsPerKey * elementsPerKey,
+            greaterThan(GroupedTopNOperator.EMIT_BATCH_SIZE)
+        );
+
         DriverContext driverContext = driverContext();
         BlockFactory bf = driverContext.blockFactory();
 
@@ -431,7 +422,7 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
                 driverContext,
                 new CannedSourceOperator(List.of(page).iterator()),
                 List.of(
-                    new TopNOperator(
+                    new GroupedTopNOperator(
                         bf,
                         nonBreakingBigArrays().breakerService().getBreaker("request"),
                         topCount,
@@ -439,9 +430,7 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
                         encoders,
                         sortOrders,
                         groupKeys,
-                        randomPageSize(),
-                        TopNOperator.InputOrdering.NOT_SORTED,
-                        null
+                        randomPageSize()
                     )
                 ),
                 new PageConsumerOperator(p -> readInto(actual, p))
@@ -452,55 +441,6 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
 
         int expectedRows = keys1.size() * keys2.size();
         assertThat(actual.getFirst().size(), equalTo(expectedRows));
-    }
-
-    public void testEstimateRamBytesUsed() {
-        assumeFalse("Ignored because RamUsageTester is not working properly with hashmap and we'll replace these maps anyway.", true);
-        RamUsageTester.Accumulator acc = new RamUsageTester.Accumulator() {
-            @Override
-            public long accumulateObject(Object o, long shallowSize, Map<Field, Object> fieldValues, Collection<Object> queue) {
-                if (o instanceof ElementType) {
-                    return 0; // shared
-                }
-                if (o instanceof TopNEncoder) {
-                    return 0; // shared
-                }
-                if (o instanceof CircuitBreaker) {
-                    return 0; // shared
-                }
-                if (o instanceof BlockFactory) {
-                    return 0; // shard
-                }
-                return super.accumulateObject(o, shallowSize, fieldValues, queue);
-            }
-        };
-        int topCount = 10_000;
-        // We under-count by a few bytes because of the lists. In that end that's fine, but we need to account for it here.
-        long underCount = 200;
-        DriverContext context = driverContext();
-        try (
-            TopNOperator op = new TopNOperator.TopNOperatorFactory(
-                topCount,
-                List.of(LONG, LONG),
-                List.of(DEFAULT_UNSORTABLE, DEFAULT_UNSORTABLE),
-                List.of(new SortOrder(0, true, false)),
-                List.of(1),
-                pageSize,
-                TopNOperator.InputOrdering.NOT_SORTED,
-                null
-            ).get(context)
-        ) {
-            long actualEmpty = RamUsageTester.ramUsed(op, acc);
-            assertThat(op.ramBytesUsed(), both(greaterThan(actualEmpty - underCount)).and(lessThan(actualEmpty)));
-            // But when we fill it then we're quite close
-            for (Page p : CannedSourceOperator.collectPages(simpleInput(context.blockFactory(), topCount))) {
-                op.addInput(p);
-            }
-            long actualFull = RamUsageTester.ramUsed(op, acc);
-            assertThat(op.ramBytesUsed(), both(greaterThan(actualFull - underCount)).and(lessThan(actualFull)));
-
-            // TODO empty it again and check.
-        }
     }
 
     public void testShardContextManagement_limitEqualToCount_noShardContextIsReleased() {
@@ -585,7 +525,7 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
         List<Page> results = new TestDriverRunner().builder(driverContext)
             .input(List.of(new Page(randomBlocksResult.blocks.toArray(Block[]::new))).iterator())
             .run(
-                new TopNOperator(
+                new GroupedTopNOperator(
                     driverContext.blockFactory(),
                     nonBreakingBigArrays().breakerService().getBreaker("request"),
                     topCount,
@@ -593,9 +533,7 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
                     randomBlocksResult.encoders,
                     uniqueOrders.stream().toList(),
                     groupKeys.stream().mapToInt(Integer::intValue).toArray(),
-                    rows,
-                    TopNOperator.InputOrdering.NOT_SORTED,
-                    null
+                    rows
                 )
             );
         List<List<Object>> actualValues = new ArrayList<>();
@@ -762,62 +700,4 @@ public class GroupedTopNOperatorTests extends TopNOperatorTests {
         };
     }
 
-    /**
-     * Verifies that a non-null {@link SharedMinCompetitive} passed to a grouped {@link TopNOperator}
-     * is never updated, because {@link TopNOperator#updateMinCompetitive()} skips non-ungrouped queues.
-     */
-    public void testMinCompetitiveNeverUpdatedForGrouped() {
-        DriverContext driverContext = driverContext();
-        // Match the layout from simple(): data at channel 0, group key at channel 1
-        List<ElementType> elementTypes = List.of(LONG, LONG);
-        List<TopNEncoder> encoders = List.of(DEFAULT_UNSORTABLE, DEFAULT_UNSORTABLE);
-        List<SortOrder> sortOrders = List.of(new SortOrder(0, true, false));
-        int[] gk = new int[] { 1 };
-
-        SharedMinCompetitive.Supplier minCompetitiveSupplier = new SharedMinCompetitive.Supplier(
-            blockFactory().breaker(),
-            keyConfigs(elementTypes, encoders, sortOrders)
-        );
-        SharedMinCompetitive minCompetitive = minCompetitiveSupplier.get();
-
-        try (
-            TopNOperator operator = new TopNOperator(
-                driverContext.blockFactory(),
-                nonBreakingBigArrays().breakerService().getBreaker("request"),
-                TOP_COUNT,
-                elementTypes,
-                encoders,
-                sortOrders,
-                gk,
-                randomPageSize(),
-                TopNOperator.InputOrdering.NOT_SORTED,
-                minCompetitiveSupplier
-            )
-        ) {
-            // Feed more rows than TOP_COUNT per page so that for an ungrouped operator the heap would fill
-            // and updateMinCompetitive() would be triggered - but for grouped it must remain null.
-            for (int p = 0; p < between(TOP_COUNT + 1, 50); p++) {
-                Page page;
-                try (
-                    Block.Builder dataBuilder = LONG.newBlockBuilder(1, driverContext.blockFactory());
-                    Block.Builder groupBuilder = LONG.newBlockBuilder(1, driverContext.blockFactory())
-                ) {
-                    append(dataBuilder, randomLong());
-                    append(groupBuilder, 0L);
-                    page = new Page(dataBuilder.build(), groupBuilder.build());
-                }
-                operator.addInput(page);
-                assertThat(minCompetitive.get(blockFactory()), nullValue());
-            }
-            operator.finish();
-            while (operator.isFinished() == false) {
-                try (Page p = operator.getOutput()) {
-                    // discard output
-                }
-            }
-            assertThat(minCompetitive.get(blockFactory()), nullValue());
-        } finally {
-            Releasables.close(minCompetitive);
-        }
-    }
 }
