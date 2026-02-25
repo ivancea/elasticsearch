@@ -10382,4 +10382,134 @@ public class LogicalPlanOptimizerTests extends AbstractLogicalPlanOptimizerTests
         var registeredDomain = as(topN.child(), RegisteredDomain.class);
         as(registeredDomain.child(), EsRelation.class);
     }
+
+    /**
+     * <pre>{@code
+     * Limit[10000[INTEGER],[],false,false]
+     * \_Filter[g{r}#5469 == 20[INTEGER]]
+     *   \_TopN[[Order[x{r}#5467,DESC,FIRST]],1[INTEGER],[g{r}#5469],false]
+     *     \_LocalRelation[[x{r}#5467, g{r}#5469],Page{blocks=[IntVectorBlock[vector=ConstantIntVector[positions=1, value=1]],
+     *       IntArrayBlock[positions=1, mvOrdering=DEDUPLICATED_AND_SORTED_ASCENDING, vector=IntArrayVector[positions=3, values=[10, 20, 30]]]]}]
+     * }</pre>
+     */
+    public void testMvConstantLimitByWithWhere() {
+        var plan = plan("""
+            ROW x = 1, g = [10, 20, 30]
+            | SORT x DESC
+            | LIMIT 1 BY g
+            | WHERE g == 20
+            """);
+
+        var limit = as(plan, Limit.class);
+        var filter = as(limit.child(), Filter.class);
+
+        var condition = as(filter.condition(), Equals.class);
+        assertThat(condition.left(), instanceOf(ReferenceAttribute.class));
+        assertThat(Expressions.name(condition.left()), equalTo("g"));
+
+        var topN = as(filter.child(), TopN.class);
+        assertThat(topN.groupings().size(), equalTo(1));
+        as(topN.child(), LocalRelation.class);
+    }
+
+    /**
+     * <pre>{@code
+     * Eval[[g{r}#8808 AS h#8813]]
+     * \_TopN[[Order[x{r}#8806,DESC,FIRST]],1[INTEGER],[g{r}#8808],false]
+     *   \_LocalRelation[[x{r}#8806, g{r}#8808],Page{blocks=[IntVectorBlock[vector=ConstantIntVector[positions=1, value=1]],
+     *     IntArrayBlock[positions=1, mvOrdering=DEDUPLICATED_UNORDERD, vector=IntArrayVector[positions=3, values=[10, 20, 30]]]]}]
+     * }</pre>
+     */
+    public void testMvConstantLimitByGroupByEval() {
+        var plan = plan("""
+            ROW x = 1, g = [10, 20, 30]
+            | SORT x DESC
+            | LIMIT 1 BY g
+            | EVAL h = g
+            """);
+
+        var eval = as(plan, Eval.class);
+        assertThat(eval.fields(), hasSize(1));
+        var alias = as(eval.fields().getFirst(), Alias.class);
+        assertThat(alias.name(), equalTo("h"));
+        assertThat(alias.child(), instanceOf(ReferenceAttribute.class));
+
+        var topN = as(eval.child(), TopN.class);
+        assertThat(topN.groupings().size(), equalTo(1));
+        as(topN.child(), LocalRelation.class);
+    }
+
+    /**
+     * <pre>{@code
+     * TopN[[Order[x{r}#1207,DESC,FIRST]],1[INTEGER],[],false]
+     * \_LocalRelation[[x{r}#1207],Page{blocks=[IntVectorBlock[vector=ConstantIntVector[positions=1, value=1]]]}]
+     * }</pre>
+     */
+    public void testSingleValueConstantLimitByGroupIsPruned() {
+        var plan = plan("""
+            ROW x = 1
+            | SORT x DESC
+            | LIMIT 1 BY 42
+            """);
+
+        var topN = as(plan, TopN.class);
+        assertThat(topN.groupings().size(), equalTo(0));
+        as(topN.child(), LocalRelation.class);
+    }
+
+    /**
+     * <pre>{@code
+     * TopN[[Order[x{r}#7201,DESC,FIRST]],1[INTEGER],[g{r}#7203],false]
+     * \_LocalRelation[[x{r}#7201, g{r}#7203],Page{blocks=[IntVectorBlock[vector=ConstantIntVector[positions=1, value=1]],
+     *   IntArrayBlock[positions=1, mvOrdering=SORTED_ASCENDING, vector=IntArrayVector[positions=3, values=[10, 20, 30]]]]}]
+     * }</pre>
+     */
+    public void testMvConstantLimitByGroupNotPruned() {
+        var plan = plan("""
+            ROW x = 1, g = [10, 20, 30]
+            | SORT x DESC
+            | LIMIT 1 BY g
+            """);
+
+        var topN = as(plan, TopN.class);
+        assertThat(topN.groupings().size(), equalTo(1));
+        as(topN.child(), LocalRelation.class);
+    }
+
+    /**
+     * <pre>{@code
+     * TopN[[Order[x{r}#1703,DESC,FIRST]],1[INTEGER],[g{r}#1705],false]
+     * \_LocalRelation[[x{r}#1703, g{r}#1705],Page{blocks=[IntVectorBlock[vector=ConstantIntVector[positions=1, value=1]], IntArrayBlo
+     *   ck[positions=1, mvOrdering=DEDUPLICATED_AND_SORTED_ASCENDING, vector=IntArrayVector[positions=3, values=[10, 20, 30]]]]}]
+     * }</pre>
+     */
+    public void testMvAndSingleValueFoldableLimitByGroupings() {
+        var plan = plan("""
+            ROW x = 1, g = [10, 20, 30]
+            | SORT x DESC
+            | LIMIT 1 BY g, 42
+            """);
+
+        var topN = as(plan, TopN.class);
+        assertThat(topN.groupings().size(), equalTo(1));
+        as(topN.child(), LocalRelation.class);
+    }
+
+    /**
+     * <pre>{@code
+     * TopN[[Order[x{r}#5520,DESC,FIRST]],1[INTEGER],[],false]
+     * \_LocalRelation[[x{r}#5520],Page{blocks=[IntVectorBlock[vector=ConstantIntVector[positions=1, value=1]]]}]
+     * }</pre>
+     */
+    public void testAllSingleValueFoldableLimitByGroupingsPruned() {
+        var plan = plan("""
+            ROW x = 1
+            | SORT x DESC
+            | LIMIT 1 BY 42, 100
+            """);
+
+        var topN = as(plan, TopN.class);
+        assertThat(topN.groupings().size(), equalTo(0));
+        as(topN.child(), LocalRelation.class);
+    }
 }
