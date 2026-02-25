@@ -36,7 +36,6 @@ import org.elasticsearch.xpack.esql.plan.logical.Insist;
 import org.elasticsearch.xpack.esql.plan.logical.Limit;
 import org.elasticsearch.xpack.esql.plan.logical.LogicalPlan;
 import org.elasticsearch.xpack.esql.plan.logical.Lookup;
-import org.elasticsearch.xpack.esql.plan.logical.OrderBy;
 import org.elasticsearch.xpack.esql.plan.logical.Project;
 import org.elasticsearch.xpack.esql.plan.logical.promql.PromqlCommand;
 import org.elasticsearch.xpack.esql.telemetry.FeatureMetric;
@@ -120,7 +119,6 @@ public class Verifier {
             checkUnsupportedAttributeRenaming(p, failures);
             checkInsist(p, failures);
             checkLimitBeforeInlineStats(p, failures);
-            checkLimitBy(p, failures);
         });
 
         if (failures.hasFailures() == false) {
@@ -330,14 +328,6 @@ public class Verifier {
                         firstLimit.source().source().toString()
                     )
                 );
-            }
-        }
-    }
-
-    private static void checkLimitBy(LogicalPlan plan, Failures failures) {
-        if (plan instanceof Limit limit && limit.groupings().isEmpty() == false) {
-            if (limit.child() instanceof OrderBy == false) {
-                failures.add(fail(limit, "When BY is used in LIMIT, the query needs to have a SORT before the LIMIT"));
             }
         }
     }
