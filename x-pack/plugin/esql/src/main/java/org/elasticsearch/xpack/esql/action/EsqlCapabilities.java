@@ -2198,6 +2198,12 @@ public class EsqlCapabilities {
          */
         EXTERNAL_COMMAND(Build.current().isSnapshot()),
 
+        /**
+         * Enables LIMIT BY without a preceding SORT. When there is no SORT, the operator returns
+         * N arbitrary rows per group rather than the top-N.
+         */
+        LIMIT_BY,
+
         // Last capability should still have a comma for fewer merge conflicts when adding new ones :)
         // This comment prevents the semicolon from being on the previous capability when Spotless formats the file.
         ;
