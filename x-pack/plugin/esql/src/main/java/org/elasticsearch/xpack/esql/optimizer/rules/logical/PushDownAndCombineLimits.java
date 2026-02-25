@@ -8,7 +8,10 @@
 package org.elasticsearch.xpack.esql.optimizer.rules.logical;
 
 import org.elasticsearch.xpack.esql.core.expression.Alias;
+import org.elasticsearch.xpack.esql.core.expression.Attribute;
+import org.elasticsearch.xpack.esql.core.expression.Expression;
 import org.elasticsearch.xpack.esql.core.expression.FoldContext;
+import org.elasticsearch.xpack.esql.core.expression.NameId;
 import org.elasticsearch.xpack.esql.core.util.Holder;
 import org.elasticsearch.xpack.esql.expression.function.fulltext.Score;
 import org.elasticsearch.xpack.esql.optimizer.LogicalOptimizerContext;
@@ -31,7 +34,9 @@ import org.elasticsearch.xpack.esql.plan.logical.join.JoinTypes;
 import org.elasticsearch.xpack.esql.rule.Rule;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public final class PushDownAndCombineLimits extends OptimizerRules.ParameterizedOptimizerRule<Limit, LogicalOptimizerContext>
     implements
@@ -60,6 +65,8 @@ public final class PushDownAndCombineLimits extends OptimizerRules.Parameterized
                 || unary instanceof InferencePlan<?>) {
                 if (false == local && unary instanceof Eval && evalAliasNeedsData((Eval) unary)) {
                     // do not push down the limit through an eval that needs data (e.g. a score function) during initial planning
+                    return limit;
+                } else if (groupingsReferenceAttributeDefinedByChild(limit, unary)) {
                     return limit;
                 } else {
                     return unary.replaceChild(limit.replaceChild(unary.child()));
@@ -176,6 +183,33 @@ public final class PushDownAndCombineLimits extends OptimizerRules.Parameterized
             }
         });
         return hasScore.get();
+    }
+
+    /**
+     * Returns {@code true} if any attribute referenced by the limit's groupings is defined by the child node
+     * (i.e. present in the child's output but absent from the grandchild's output). Pushing a grouped limit
+     * past such a child would leave the grouping attribute unresolved.
+     */
+    private static boolean groupingsReferenceAttributeDefinedByChild(Limit limit, UnaryPlan child) {
+        if (limit.groupings().isEmpty()) {
+            return false;
+        }
+        Set<NameId> grandchildIds = new HashSet<>();
+        for (Attribute a : child.child().output()) {
+            grandchildIds.add(a.id());
+        }
+        for (Expression g : limit.groupings()) {
+            Holder<Boolean> missing = new Holder<>(false);
+            g.forEachDown(e -> {
+                if (e instanceof Attribute a && grandchildIds.contains(a.id()) == false) {
+                    missing.set(true);
+                }
+            });
+            if (missing.get()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
