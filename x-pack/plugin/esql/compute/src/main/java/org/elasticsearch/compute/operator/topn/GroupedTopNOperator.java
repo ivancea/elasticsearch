@@ -281,6 +281,7 @@ public class GroupedTopNOperator implements Operator, Accountable {
         size += RamUsageEstimator.alignObjectSize(arrHeader + ref * encoders.size());
         size += RamUsageEstimator.alignObjectSize(arrHeader + ref * sortOrders.size());
         size += RamUsageEstimator.sizeOf(groupKeys);
+        size += RamUsageEstimator.sizeOf(channelInKey);
         size += sortOrders.size() * SORT_ORDER_SIZE;
         if (inputQueue != null) {
             size += inputQueue.ramBytesUsed();

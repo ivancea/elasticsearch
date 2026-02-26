@@ -9,12 +9,15 @@ package org.elasticsearch.compute.operator.topn;
 
 import org.apache.lucene.document.InetAddressPoint;
 import org.apache.lucene.tests.util.RamUsageTester;
+import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.common.breaker.CircuitBreakingException;
 import org.elasticsearch.common.network.NetworkAddress;
 import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.common.util.MockBigArrays;
+import org.elasticsearch.compute.aggregation.blockhash.BlockHash;
 import org.elasticsearch.compute.data.Block;
 import org.elasticsearch.compute.data.BlockFactory;
 import org.elasticsearch.compute.data.BlockUtils;
@@ -94,6 +97,7 @@ import static org.elasticsearch.compute.test.BlockTestUtils.append;
 import static org.elasticsearch.compute.test.BlockTestUtils.randomValue;
 import static org.elasticsearch.compute.test.BlockTestUtils.readInto;
 import static org.elasticsearch.core.Tuple.tuple;
+import static org.elasticsearch.test.ESTestCase.between;
 import static org.elasticsearch.test.ListMatcher.matchesList;
 import static org.elasticsearch.test.MapMatcher.assertMap;
 import static org.hamcrest.Matchers.both;
@@ -106,6 +110,35 @@ import static org.hamcrest.number.OrderingComparison.lessThanOrEqualTo;
 
 public class TopNOperatorTests extends OperatorTestCase {
     protected final int pageSize = randomPageSize();
+
+    /**
+     * Accumulator for {@link RamUsageTester} that excludes shared objects not owned by the operator.
+     */
+    protected static final RamUsageTester.Accumulator RAM_USAGE_ACCUMULATOR = new RamUsageTester.Accumulator() {
+        @Override
+        public long accumulateObject(Object o, long shallowSize, Map<Field, Object> fieldValues, Collection<Object> queue) {
+            if (o instanceof ElementType) {
+                return 0; // shared
+            }
+            if (o instanceof TopNEncoder) {
+                return 0; // shared
+            }
+            if (o instanceof CircuitBreaker) {
+                return 0; // shared
+            }
+            if (o instanceof BlockFactory) {
+                return 0; // shared
+            }
+            if (o instanceof BigArrays) {
+                return 0; // shared
+            }
+            if (o instanceof BlockHash) {
+                return 0; // TODO: Make it accountable
+            }
+            return super.accumulateObject(o, shallowSize, fieldValues, queue);
+        }
+    };
+
     // versions taken from org.elasticsearch.xpack.versionfield.VersionTests
     private static final List<String> VERSIONS = List.of(
         "1",
@@ -2475,46 +2508,34 @@ public class TopNOperatorTests extends OperatorTestCase {
     }
 
     public void testRamBytesUsed() {
-        assumeTrue("only applies to ungrouped TopN", groupKeys().length == 0);
-        RamUsageTester.Accumulator acc = new RamUsageTester.Accumulator() {
-            @Override
-            public long accumulateObject(Object o, long shallowSize, Map<Field, Object> fieldValues, Collection<Object> queue) {
-                if (o instanceof ElementType) {
-                    return 0; // shared
-                }
-                if (o instanceof TopNEncoder) {
-                    return 0; // shared
-                }
-                if (o instanceof CircuitBreaker) {
-                    return 0; // shared
-                }
-                if (o instanceof BlockFactory) {
-                    return 0; // shard
-                }
-                return super.accumulateObject(o, shallowSize, fieldValues, queue);
-            }
-        };
         int topCount = 10_000;
-        long underCount = 250;
+        long underCount = groupKeys().length > 0 ? 1000 : 250;
         DriverContext context = driverContext();
+        int numColumns = 1 + groupKeys().length;
+        List<ElementType> elementTypes = Collections.nCopies(numColumns, LONG);
+        List<TopNEncoder> encoders = Collections.nCopies(numColumns, DEFAULT_UNSORTABLE);
         try (
-            TopNOperator op = new TopNOperator.TopNOperatorFactory(
+            Operator op = createTopNOperator(
+                context.blockFactory(),
+                context.breaker(),
                 topCount,
-                List.of(LONG),
-                List.of(DEFAULT_UNSORTABLE),
+                elementTypes,
+                encoders,
                 List.of(new TopNOperator.SortOrder(0, true, false)),
+                groupKeys(),
                 pageSize,
                 TopNOperator.InputOrdering.NOT_SORTED,
                 null
-            ).get(context)
+            )
         ) {
-            long actualEmpty = RamUsageTester.ramUsed(op, acc);
-            assertThat(op.ramBytesUsed(), both(greaterThan(actualEmpty - underCount)).and(lessThan(actualEmpty)));
+            Accountable accountable = (Accountable) op;
+            long actualEmpty = RamUsageTester.ramUsed(op, RAM_USAGE_ACCUMULATOR);
+            assertThat(accountable.ramBytesUsed(), both(greaterThan(actualEmpty - underCount)).and(lessThan(actualEmpty)));
             for (Page p : CannedSourceOperator.collectPages(simpleInput(context.blockFactory(), topCount))) {
                 op.addInput(p);
             }
-            long actualFull = RamUsageTester.ramUsed(op, acc);
-            assertThat(op.ramBytesUsed(), both(greaterThan(actualFull - underCount)).and(lessThan(actualFull)));
+            long actualFull = RamUsageTester.ramUsed(op, RAM_USAGE_ACCUMULATOR);
+            assertThat(accountable.ramBytesUsed(), both(greaterThan(actualFull - underCount)).and(lessThan(actualFull)));
         }
     }
 
