@@ -2105,11 +2105,6 @@ public class EsqlCapabilities {
         MMR(Build.current().isSnapshot()),
 
         /**
-         * Enables the bucketing in the LIMIT command (in conjunction with SORT)
-         */
-        SORT_BY_LIMIT,
-
-        /**
          * Allow wildcards in FROM METADATA, eg FROM idx METADATA _ind*
          */
         METADATA_WILDCARDS,
@@ -2199,8 +2194,7 @@ public class EsqlCapabilities {
         EXTERNAL_COMMAND(Build.current().isSnapshot()),
 
         /**
-         * Enables LIMIT BY without a preceding SORT. When there is no SORT, the operator returns
-         * N arbitrary rows per group rather than the top-N.
+         * Enables LIMIT N BY in the LIMIT command, both with and without a preceding SORT.
          */
         LIMIT_BY,
 

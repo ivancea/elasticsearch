@@ -187,7 +187,7 @@ network.bytes_in:long | @timestamp:datetime      | cluster:keyword | pod:keyword
 ;
 
 sortByLimit
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT salary DESC
@@ -230,7 +230,7 @@ Shahaf             | Famili            | 48233          | null
 ;
 
 sortByLimitMultiColumn
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT salary DESC
@@ -259,7 +259,7 @@ Divier             | Reistad           | 73851          | null              | F
 ;
 
 sortByLimitQualifiedName
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT salary DESC
@@ -288,7 +288,7 @@ Divier             | Reistad           | 73851          | null              | F
 ;
 
 sortByLimitIsIdempotent
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT salary DESC
@@ -333,7 +333,7 @@ Shahaf             | Famili            | 48233          | null
 ;
 
 sortByLimitThenSortByLimit
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT salary DESC
@@ -354,7 +354,7 @@ Otmar              | Herbst            | 74999          | null
 ;
 
 sortByLimitZero
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT salary DESC
@@ -366,7 +366,7 @@ first_name:keyword | last_name:keyword | salary:integer | languages:integer
 ;
 
 sortLimitThenSortByLimit
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT salary DESC
@@ -386,7 +386,7 @@ Otmar              | Herbst            | 74999          | null
 ;
 
 sortByLimitThenLimit
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT salary
@@ -410,7 +410,7 @@ null               | Makrucki          | 37691          | 2
 ;
 
 sortByLimitNullsFirst
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT is_rehired ASC NULLS FIRST
@@ -435,7 +435,7 @@ Berni              | Genin             | 5                 | null
 ;
 
 sortByLimitNullsLast
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT is_rehired ASC NULLS LAST
@@ -460,7 +460,7 @@ Shahaf             | Famili            | null              | [false, true]
 ;
 
 sortByLimitNoSortAfter
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT salary DESC
@@ -478,7 +478,7 @@ Arumugam           | Ossenbruggen      | 66817          | 5
 ;
 
 sortByLimitMultiplePerGroupNoSortAfter
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT salary DESC
@@ -502,7 +502,7 @@ Bezalel            | Simmel            | 56371          | 5
 ;
 
 sortByLimitMultiColumnNoSortAfter
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT salary DESC
@@ -530,7 +530,7 @@ Duangkaew          | Piveteau          | 45797          | 4                 | nu
 ;
 
 sortByLimitByGenderNoSortAfter
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT salary DESC
@@ -545,7 +545,7 @@ Lillian            | Haddadi           | 73717          | null
 ;
 
 sortLimitThenSortByLimitNoSortAfter
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT salary DESC
@@ -564,7 +564,7 @@ Valter             | Sullins           | 73578          | 2
 ;
 
 sortByLimitExpression
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT salary DESC
@@ -607,7 +607,7 @@ Shahaf             | Famili            | 48233          | null
 ;
 
 sortByLimitMixed
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT salary DESC
@@ -651,7 +651,7 @@ Ramzi              | Erde              | 60408          | null              | M
 ;
 
 sortByLimitByConstant
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT salary DESC
@@ -668,7 +668,7 @@ Lillian            | Haddadi           | 73717          | 1
 ;
 
 sortByLimitMixedFoldableAndAttribute
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT salary DESC
@@ -711,7 +711,7 @@ Shahaf             | Famili            | 48233          | null
 ;
 
 sortByLimitMixedFoldableAndExpression
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT salary DESC
@@ -754,7 +754,7 @@ Shahaf             | Famili            | 48233          | null
 ;
 
 sortByLimitSeveralSorts
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT emp_no DESC
@@ -798,7 +798,7 @@ Shahaf             | Famili            | 48233          | null
 ;
 
 sortByLimitNonContiguousSorts
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT emp_no DESC
@@ -843,7 +843,7 @@ emp_no:integer | salary:integer | languages:integer
 ;
 
 sortByLimitEvalAndNonEvalGroupings
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | SORT emp_no DESC
@@ -902,7 +902,7 @@ emp_no:integer | salary:integer | languages:integer | gender:keyword
 ;
 
 sortByLimitMultivalueGroupKeySimple
-required_capability: sort_by_limit
+required_capability: limit_by
 
 ROW x = 1, g = [10, 20, 30]
 | SORT x DESC
@@ -918,7 +918,7 @@ x:integer | g:integer
 ;
 
 sortByLimitMultivalueGroupKeySimpleFiltered
-required_capability: sort_by_limit
+required_capability: limit_by
 
 ROW x = 1, g = [10, 20, 30]
 | SORT x DESC
@@ -932,7 +932,7 @@ x:integer | g:integer
 ;
 
 sortByLimitTwoMultivalueGroupKeysSimple
-required_capability: sort_by_limit
+required_capability: limit_by
 
 ROW x = 1, g1 = [1, 2], g2 = [10, 20]
 | SORT x DESC
@@ -949,7 +949,7 @@ x:integer | g1:integer | g2:integer
 ;
 
 sortByLimitMultivalueGroupKey
-required_capability: sort_by_limit
+required_capability: limit_by
 
 // 10001 -> [Accountant, Senior Python Developer]
 // 10006 -> [Principal Support Engineer, Senior Team Lead, Tech Lead]
@@ -971,7 +971,7 @@ emp_no:integer | first_name:keyword | salary:integer | job_positions:keyword
 ;
 
 sortByLimitMultivalueGroupKeyFiltered
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | WHERE emp_no IN (10001, 10002, 10006)
@@ -986,7 +986,7 @@ emp_no:integer | first_name:keyword | salary:integer | job_positions:keyword
 ;
 
 sortByLimitMultivalueGroupKeyWithCompetition
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | WHERE emp_no IN (10001, 10008)
@@ -1005,7 +1005,7 @@ emp_no:integer | first_name:keyword | salary:integer | job_positions:keyword
 ;
 
 sortByLimitMultipleMultivalueGroupKeys
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | WHERE emp_no == 10001
@@ -1023,7 +1023,7 @@ emp_no:integer | first_name:keyword | salary:integer | job_positions:keyword   |
 ;
 
 sortByLimitMultivalueGroupKeyLimit2
-required_capability: sort_by_limit
+required_capability: limit_by
 
 FROM employees
 | WHERE emp_no IN (10001, 10006, 10008)
