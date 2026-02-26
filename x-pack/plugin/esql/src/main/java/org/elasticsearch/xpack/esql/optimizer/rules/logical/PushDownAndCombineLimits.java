@@ -199,13 +199,7 @@ public final class PushDownAndCombineLimits extends OptimizerRules.Parameterized
             grandchildIds.add(a.id());
         }
         for (Expression g : limit.groupings()) {
-            Holder<Boolean> missing = new Holder<>(false);
-            g.forEachDown(e -> {
-                if (e instanceof Attribute a && grandchildIds.contains(a.id()) == false) {
-                    missing.set(true);
-                }
-            });
-            if (missing.get()) {
+            if (g instanceof Attribute a && grandchildIds.contains(a.id()) == false) {
                 return true;
             }
         }
