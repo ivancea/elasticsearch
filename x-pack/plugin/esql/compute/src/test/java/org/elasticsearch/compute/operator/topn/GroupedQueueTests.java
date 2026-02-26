@@ -59,8 +59,8 @@ public class GroupedQueueTests extends ESTestCase {
         int topCount = 5;
         try (GroupedQueue queue = new GroupedQueue(breaker, bigArrays, topCount)) {
             for (int i = 0; i < topCount; i++) {
-                Row row = createRow(breaker, i % 2, i * 10);
-                Row result = queue.addRow(row);
+                GroupedRow row = createRow(breaker, i % 2, i * 10);
+                GroupedRow result = queue.addRow(row);
                 assertThat(result, nullValue());
                 assertThat(queue.size(), equalTo(i + 1));
             }
@@ -72,7 +72,7 @@ public class GroupedQueueTests extends ESTestCase {
         try (GroupedQueue queue = new GroupedQueue(breaker, bigArrays, topCount)) {
             fillQueueToCapacity(queue, topCount);
 
-            try (Row evicted = queue.addRow(createRow(breaker, 0, 5))) {
+            try (GroupedRow evicted = queue.addRow(createRow(breaker, 0, 5))) {
                 assertRowValues(evicted, 0, 20, 40);
             }
         }
@@ -82,8 +82,8 @@ public class GroupedQueueTests extends ESTestCase {
         try (GroupedQueue queue = new GroupedQueue(breaker, bigArrays, 3)) {
             addRows(queue, 0, 30, 40, 50);
 
-            try (Row row = createRow(breaker, 0, 60)) {
-                Row result = queue.addRow(row);
+            try (GroupedRow row = createRow(breaker, 0, 60)) {
+                GroupedRow result = queue.addRow(row);
                 assertThat(result, sameInstance(row));
             }
         }
@@ -97,21 +97,21 @@ public class GroupedQueueTests extends ESTestCase {
             assertThat(queue.addRow(createRow(breaker, 1, 40)), nullValue());
             assertThat(queue.size(), equalTo(4));
 
-            try (Row evicted = queue.addRow(createRow(breaker, 0, 5))) {
+            try (GroupedRow evicted = queue.addRow(createRow(breaker, 0, 5))) {
                 assertThat(evicted, notNullValue());
                 assertRowValues(evicted, 0, 30, 60);
             }
-            try (Row evicted = queue.addRow(createRow(breaker, 1, 15))) {
+            try (GroupedRow evicted = queue.addRow(createRow(breaker, 1, 15))) {
                 assertThat(evicted, notNullValue());
                 assertRowValues(evicted, 1, 40, 80);
             }
             assertThat(queue.size(), equalTo(4));
 
-            try (Row row = queue.addRow(createRow(breaker, 0, 50))) {
+            try (GroupedRow row = queue.addRow(createRow(breaker, 0, 50))) {
                 assertThat(row, notNullValue());
                 assertRowValues(row, 0, 50, 100);
             }
-            try (Row row = queue.addRow(createRow(breaker, 1, 50))) {
+            try (GroupedRow row = queue.addRow(createRow(breaker, 1, 50))) {
                 assertThat(row, notNullValue());
                 assertRowValues(row, 1, 50, 100);
             }
@@ -177,29 +177,30 @@ public class GroupedQueueTests extends ESTestCase {
         }
     }
 
-    private Row createRow(CircuitBreaker breaker, int groupKey, int sortKey) {
-        try (
-            IntBlock groupKeyBlock = blockFactory.newIntBlockBuilder(1).appendInt(groupKey).build();
-            IntBlock keyBlock = blockFactory.newIntBlockBuilder(1).appendInt(sortKey).build();
-            IntBlock valueBlock = blockFactory.newIntBlockBuilder(1).appendInt(sortKey * 2).build()
-        ) {
-            GroupedRow row = new GroupedRow(breaker, 32, 64);
-            row.groupId = groupKey;
-            var filler = new UngroupedRowFiller(
-                List.of(ElementType.INT, ElementType.INT, ElementType.INT),
-                List.of(TopNEncoder.DEFAULT_SORTABLE, TopNEncoder.DEFAULT_SORTABLE, TopNEncoder.DEFAULT_UNSORTABLE),
-                SORT_ORDERS,
-                new boolean[] { false, true, false },
-                new Page(groupKeyBlock, keyBlock, valueBlock)
-            );
+    private GroupedRow createRow(CircuitBreaker breaker, int groupKey, int sortKey) {
+        IntBlock groupKeyBlock = blockFactory.newIntBlockBuilder(1).appendInt(groupKey).build();
+        IntBlock keyBlock = blockFactory.newIntBlockBuilder(1).appendInt(sortKey).build();
+        IntBlock valueBlock = blockFactory.newIntBlockBuilder(1).appendInt(sortKey * 2).build();
+        GroupedRow row = new GroupedRow(breaker, 32, 64);
+        row.groupId = groupKey;
+        var filler = new GroupedRowFiller(
+            List.of(ElementType.INT, ElementType.INT, ElementType.INT),
+            List.of(TopNEncoder.DEFAULT_SORTABLE, TopNEncoder.DEFAULT_SORTABLE, TopNEncoder.DEFAULT_UNSORTABLE),
+            SORT_ORDERS,
+            new boolean[] { false, true, false },
+            new Page(groupKeyBlock, keyBlock, valueBlock)
+        );
+        try {
             filler.writeSortKey(0, row);
             filler.writeValues(0, row);
-            return row;
+        } finally {
+            Releasables.close(groupKeyBlock, keyBlock, valueBlock);
         }
+        return row;
     }
 
-    private static void assertRowValues(Row row, int expectedGroupKey, int expectedSortKey, int expectedValue) {
-        assertThat(((GroupedRow) row).groupId, equalTo(expectedGroupKey));
+    private static void assertRowValues(GroupedRow row, int expectedGroupKey, int expectedSortKey, int expectedValue) {
+        assertThat(row.groupId, equalTo(expectedGroupKey));
 
         BytesRef keys = row.keys().bytesRefView();
         assertThat(
@@ -217,8 +218,7 @@ public class GroupedQueueTests extends ESTestCase {
     }
 
     private void addRow(GroupedQueue queue, int groupKey, int value) {
-        Row row = createRow(breaker, groupKey, value);
-        // This row is either the input or the evicted row, but either way it should be closed.
+        GroupedRow row = createRow(breaker, groupKey, value);
         Releasables.close(queue.addRow(row));
     }
 
@@ -236,7 +236,7 @@ public class GroupedQueueTests extends ESTestCase {
 
     private static void assertQueueContents(GroupedQueue queue, List<Tuple<Integer, Integer>> groupAndSortKeys) {
         assertThat(queue.size(), equalTo(groupAndSortKeys.size()));
-        List<Row> actual = queue.popAll();
+        List<GroupedRow> actual = queue.popAll();
         for (int i = 0; i < groupAndSortKeys.size(); i++) {
             Tuple<Integer, Integer> expectedTuple = groupAndSortKeys.get(i);
             assertRowValues(actual.get(i), expectedTuple.v1(), expectedTuple.v2(), expectedTuple.v2() * 2);

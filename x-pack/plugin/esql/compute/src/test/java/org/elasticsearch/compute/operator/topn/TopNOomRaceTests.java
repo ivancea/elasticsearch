@@ -130,7 +130,6 @@ public class TopNOomRaceTests extends ESTestCase {
                 Collections.nCopies(repeats, ElementType.INT),
                 Collections.nCopies(repeats, TopNEncoder.DEFAULT_SORTABLE),
                 List.of(new TopNOperator.SortOrder(0, false, false)),
-                new int[0],
                 Integer.MAX_VALUE,
                 InputOrdering.NOT_SORTED,
                 null

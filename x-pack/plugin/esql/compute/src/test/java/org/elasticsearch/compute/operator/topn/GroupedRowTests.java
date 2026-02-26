@@ -14,6 +14,7 @@ import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.common.util.MockBigArrays;
 import org.elasticsearch.common.util.PageCacheRecycler;
+import org.elasticsearch.compute.operator.BreakingBytesRefBuilder;
 import org.elasticsearch.test.ESTestCase;
 
 import static org.hamcrest.Matchers.equalTo;
@@ -68,12 +69,20 @@ public class GroupedRowTests extends ESTestCase {
     private long expectedRamBytesUsed(GroupedRow row) {
         var expected = RamUsageTester.ramUsed(row);
         expected -= RamUsageTester.ramUsed(breaker);
-        expected -= UngroupedRowTests.sharedRowBytes();
+        expected -= sharedRowBytes();
         expected += undercountedBytesForRow(row);
         return expected;
     }
 
+    private static long sharedRowBytes() {
+        return RamUsageTester.ramUsed("topn");
+    }
+
     static long undercountedBytesForRow(GroupedRow row) {
-        return UngroupedRowTests.undercountBytesPerRow(row);
+        return emptyByteArrayOverhead(row.values());
+    }
+
+    private static long emptyByteArrayOverhead(BreakingBytesRefBuilder builder) {
+        return builder.bytes().length == 0 ? RamUsageTester.ramUsed(new byte[0]) : 0L;
     }
 }

@@ -8,24 +8,18 @@
 package org.elasticsearch.compute.operator.topn;
 
 import org.elasticsearch.compute.data.ElementType;
-import org.elasticsearch.compute.data.IntBlock;
 import org.elasticsearch.compute.data.Page;
-import org.elasticsearch.core.Releasables;
+import org.elasticsearch.compute.operator.BreakingBytesRefBuilder;
 
 import java.util.List;
 
 /**
- * A {@link RowFiller} for grouped top-N that delegates sort-key and value writing to an
- * {@link UngroupedRowFiller} and sets the pre-computed group ID (from a {@link
- * org.elasticsearch.compute.aggregation.blockhash.BlockHash}) on each {@link GroupedRow}.
- * <p>
- * When group keys are multivalued, a single page position may map to multiple group IDs
- * (one per combination of multivalue key values). The {@link #groupIdCount} and
- * {@link #setGroupId} methods allow the caller to iterate over all groups for a position.
+ * Fills {@link GroupedRow}s from page data for grouped top-N. Handles both sort-key encoding
+ * and value extraction. The group ID is set directly by the caller from the BlockHash callback.
  */
-final class GroupedRowFiller implements RowFiller {
-    private final UngroupedRowFiller ungroupedRowFiller;
-    private final IntBlock groupIds;
+final class GroupedRowFiller {
+    private final ValueExtractor[] valueExtractors;
+    private final KeyExtractor[] sortKeyExtractors;
 
     private int keyPreAllocSize = 0;
     private int valuePreAllocSize = 0;
@@ -35,46 +29,62 @@ final class GroupedRowFiller implements RowFiller {
         List<TopNEncoder> encoders,
         List<TopNOperator.SortOrder> sortOrders,
         boolean[] channelInKey,
-        IntBlock groupIds,
         Page page
     ) {
-        this.ungroupedRowFiller = new UngroupedRowFiller(elementTypes, encoders, sortOrders, channelInKey, page);
-        this.groupIds = groupIds;
-    }
-
-    int preAllocatedValueSize() {
-        return valuePreAllocSize;
+        valueExtractors = new ValueExtractor[page.getBlockCount()];
+        for (int b = 0; b < valueExtractors.length; b++) {
+            valueExtractors[b] = ValueExtractor.extractorFor(
+                elementTypes.get(b),
+                encoders.get(b).toUnsortable(),
+                channelInKey[b],
+                page.getBlock(b)
+            );
+        }
+        sortKeyExtractors = new KeyExtractor[sortOrders.size()];
+        for (int k = 0; k < sortKeyExtractors.length; k++) {
+            TopNOperator.SortOrder so = sortOrders.get(k);
+            sortKeyExtractors[k] = KeyExtractor.extractorFor(
+                elementTypes.get(so.channel()),
+                encoders.get(so.channel()),
+                so.asc(),
+                so.nul(),
+                so.nonNul(),
+                page.getBlock(so.channel())
+            );
+        }
     }
 
     int preAllocatedKeysSize() {
         return keyPreAllocSize;
     }
 
-    @Override
-    public void writeSortKey(int i, Row row) {
-        ungroupedRowFiller.writeSortKey(i, row);
-        ((GroupedRow) row).groupId = groupIds.getInt(groupIds.getFirstValueIndex(i));
-        keyPreAllocSize = RowFiller.newPreAllocSize(row.keys(), keyPreAllocSize);
+    int preAllocatedValueSize() {
+        return valuePreAllocSize;
     }
 
-    @Override
-    public void writeValues(int i, Row row) {
-        ungroupedRowFiller.writeValues(i, row);
-        valuePreAllocSize = RowFiller.newPreAllocSize(row.values(), valuePreAllocSize);
+    void writeSortKey(int position, GroupedRow row) {
+        for (KeyExtractor keyExtractor : sortKeyExtractors) {
+            keyExtractor.writeKey(row.keys(), position);
+        }
+        keyPreAllocSize = newPreAllocSize(row.keys(), keyPreAllocSize);
     }
 
-    @Override
-    public int groupIdCount(int i) {
-        return groupIds.getValueCount(i);
+    void writeValues(int position, GroupedRow row) {
+        for (ValueExtractor e : valueExtractors) {
+            var refCounted = e.getRefCountedForShard(position);
+            if (refCounted != null) {
+                row.setShardRefCounted(refCounted);
+            }
+            e.writeValue(row.values(), position);
+        }
+        valuePreAllocSize = newPreAllocSize(row.values(), valuePreAllocSize);
     }
 
-    @Override
-    public void setGroupId(int i, int groupIndex, Row row) {
-        ((GroupedRow) row).groupId = groupIds.getInt(groupIds.getFirstValueIndex(i) + groupIndex);
-    }
-
-    @Override
-    public void close() {
-        Releasables.closeExpectNoException(groupIds);
+    /**
+     * Pre-allocation size heuristic: use the larger of the current builder length and half
+     * the previous pre-alloc size, so the size decays after a single unusually large row.
+     */
+    private static int newPreAllocSize(BreakingBytesRefBuilder builder, int sparePreAllocSize) {
+        return Math.max(builder.length(), sparePreAllocSize / 2);
     }
 }
