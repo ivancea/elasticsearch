@@ -50,6 +50,7 @@ public class SumOverTime extends TimeSeriesAggregateFunction
     @FunctionInfo(
         returnType = { "double", "long" },
         description = "Calculates the sum over time value of a field.",
+        note = "Requires the TS source command.",
         type = FunctionType.TIME_SERIES_AGGREGATE,
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW, version = "9.2.0") },
         preview = true,

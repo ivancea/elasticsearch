@@ -163,6 +163,7 @@ public class SpatialContains extends SpatialRelatesFunction {
         description = """
             Returns whether the first geometry contains the second geometry.
             This is the inverse of the <<esql-st_within,ST_WITHIN>> function.""",
+        note = "When the second geometry is a MultiPolygon or GeometryCollection, every component must be contained within the first geometry.",
         examples = @Example(file = "spatial_shapes", tag = "st_contains-airport_city_boundaries"),
         depthOffset = 1  // So this appears as a subsection of geospatial predicates
     )

@@ -46,7 +46,8 @@ public class Delta extends TimeSeriesAggregateFunction implements OptionalArgume
     @FunctionInfo(
         type = FunctionType.TIME_SERIES_AGGREGATE,
         returnType = { "double" },
-        description = "Calculates the absolute change of a gauge field in a time window.",
+        description = "Calculates the signed change of a gauge field in a time window (last minus first, with extrapolation).",
+        note = "Requires the TS command. Fewer than 2 data points returns null.",
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW, version = "9.2.0") },
         preview = true,
         examples = { @Example(file = "k8s-timeseries-delta", tag = "delta") }

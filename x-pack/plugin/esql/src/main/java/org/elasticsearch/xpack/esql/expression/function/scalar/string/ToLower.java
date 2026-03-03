@@ -33,7 +33,8 @@ public class ToLower extends ChangeCase {
         description = "Returns a new string representing the input string converted to lower case.",
         examples = {
             @Example(file = "string", tag = "to_lower"),
-            @Example(file = "string", tag = "to_lower_mv", applies_to = "stack: ga 9.1.0") }
+            @Example(file = "string", tag = "to_lower_mv", applies_to = "stack: ga 9.1.0") },
+        note = "Lowercasing uses the session locale; results may differ for locale-sensitive characters (e.g., Turkish \"I\" → \"ı\")."
     )
 
     public ToLower(Source source, @Param(name = "str", type = { "keyword", "text" }, description = """

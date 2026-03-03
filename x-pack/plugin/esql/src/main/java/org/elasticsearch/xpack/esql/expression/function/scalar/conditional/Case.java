@@ -92,6 +92,7 @@ public final class Case extends EsqlScalarFunction {
             If the number of arguments is odd, the last argument is the default value which
             is returned when no condition matches. If the number of arguments is even, and
             no condition matches, the function returns `null`.""",
+        note = "Short-circuit evaluation: unmatched branches are not evaluated.",
         examples = {
             @Example(description = "Determine whether employees are monolingual, bilingual, or polyglot:", file = "docs", tag = "case"),
             @Example(

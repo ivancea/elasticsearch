@@ -106,6 +106,8 @@ public class ToString extends AbstractConvertFunction implements EvaluatorMapper
     @FunctionInfo(
         returnType = "keyword",
         description = "Converts an input value into a string.",
+        note = "Dates are formatted as ISO 8601 using the session timezone; spatial types use WKT format; "
+            + "`date_period` and `time_duration` types are not supported.",
         examples = {
             @Example(file = "string", tag = "to_string"),
             @Example(description = "It also works fine on multivalued fields:", file = "string", tag = "to_string_multivalue") }

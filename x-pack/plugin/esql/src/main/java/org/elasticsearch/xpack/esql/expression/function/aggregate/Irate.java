@@ -48,6 +48,8 @@ public class Irate extends TimeSeriesAggregateFunction implements OptionalArgume
         description = "Calculates the irate of a counter field. irate is the per-second rate of increase between the last two data points ("
             + "it ignores all but the last two data points in each time period). "
             + "This function is very similar to rate, but is more responsive to recent changes in the rate of increase.",
+        note = "On counter reset (last < previous), uses the last value directly. Fewer than 2 data points returns null. "
+            + "Requires the TS source command.",
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW, version = "9.2.0") },
         preview = true,
         examples = { @Example(file = "k8s-timeseries-irate", tag = "irate") }

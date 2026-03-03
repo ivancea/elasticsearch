@@ -50,6 +50,7 @@ public class MinOverTime extends TimeSeriesAggregateFunction
     @FunctionInfo(
         returnType = { "boolean", "double", "integer", "long", "date", "date_nanos", "ip", "keyword", "unsigned_long", "version" },
         description = "Calculates the minimum over time value of a field.",
+        note = "Requires the TS source command.",
         type = FunctionType.TIME_SERIES_AGGREGATE,
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW, version = "9.2.0") },
         preview = true,

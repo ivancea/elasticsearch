@@ -94,7 +94,7 @@ public class CountDistinct extends AggregateFunction implements OptionalArgument
             :::
 
             The `COUNT_DISTINCT` function takes an optional second parameter to configure
-            the precision threshold. The `precision_threshold` options allows to trade memory
+            the precision threshold. The `precision_threshold` option allows to trade memory
             for accuracy, and defines a unique count below which counts are expected to be
             close to accurate. Above this value, counts might become a bit more fuzzy. The
             maximum supported value is `40000`, thresholds above this number will have the

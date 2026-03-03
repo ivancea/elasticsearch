@@ -56,6 +56,7 @@ public class StXMax extends SpatialUnaryDocValuesFunction {
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW) },
         description = "Extracts the maximum value of the `x` coordinates from the supplied geometry.\n"
             + "If the geometry is of type `geo_point` or `geo_shape` this is equivalent to extracting the maximum `longitude` value.",
+        note = "For geometries crossing the antimeridian (dateline), the max-x value is taken from the smallest envelope and may be a negative longitude.",
         examples = @Example(file = "spatial_shapes", tag = "st_x_y_min_max"),
         depthOffset = 1  // So this appears as a subsection of ST_ENVELOPE
     )

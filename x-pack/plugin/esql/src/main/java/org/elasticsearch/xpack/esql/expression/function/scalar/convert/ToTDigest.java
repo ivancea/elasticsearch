@@ -46,6 +46,7 @@ public class ToTDigest extends AbstractConvertFunction {
         returnType = "tdigest",
         description = "Converts an untyped histogram to a TDigest, assuming the values are centroids.",
         examples = { @Example(file = "histogram", tag = "to_tdigest") },
+        note = "The result is limited to 2MB.",
         preview = true,
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW, version = "9.3.0") }
     )

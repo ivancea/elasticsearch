@@ -31,7 +31,8 @@ public class ToUpper extends ChangeCase {
     @FunctionInfo(
         returnType = { "keyword" },
         description = "Returns a new string representing the input string converted to upper case.",
-        examples = @Example(file = "string", tag = "to_upper")
+        examples = @Example(file = "string", tag = "to_upper"),
+        note = "Uppercasing uses the session locale; results may differ for locale-sensitive characters (e.g., Turkish \"i\" → \"İ\")."
     )
     public ToUpper(Source source, @Param(name = "str", type = { "keyword", "text" }, description = """
         String expression. If `null`, the function returns `null`. The input can be a single-valued column or expression,

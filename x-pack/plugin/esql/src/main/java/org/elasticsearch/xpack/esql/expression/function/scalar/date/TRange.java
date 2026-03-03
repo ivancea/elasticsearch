@@ -89,6 +89,7 @@ public class TRange extends EsqlConfigurationFunction
     @FunctionInfo(
         returnType = "boolean",
         description = "Filters data for the given time range using the @timestamp attribute.",
+        note = "The range is exclusive at the start and inclusive at the end.",
         examples = {
             @Example(file = "trange", tag = "docsTRangeOffsetFromNow"),
             @Example(file = "trange", tag = "docsTRangeAbsoluteTimeString"),

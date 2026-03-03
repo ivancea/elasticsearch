@@ -37,7 +37,8 @@ public class StddevOverTime extends TimeSeriesAggregateFunction implements Surro
         type = FunctionType.TIME_SERIES_AGGREGATE,
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW, version = "9.3.0") },
         preview = true,
-        examples = { @Example(file = "k8s-timeseries", tag = "stddev_over_time") }
+        examples = { @Example(file = "k8s-timeseries", tag = "stddev_over_time") },
+        note = "Requires the TS source command."
     )
     public StddevOverTime(
         Source source,

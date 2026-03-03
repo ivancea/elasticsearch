@@ -35,6 +35,7 @@ public class Now extends EsqlConfigurationFunction {
     @FunctionInfo(
         returnType = "date",
         description = "Returns current date and time.",
+        note = "The returned timestamp is fixed at query start and remains constant throughout the entire query execution.",
         examples = {
             @Example(file = "date", tag = "docsNow"),
             @Example(file = "date", tag = "docsNowWhere", description = "To retrieve logs from the last hour:") }

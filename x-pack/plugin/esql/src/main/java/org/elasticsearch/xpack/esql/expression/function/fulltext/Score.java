@@ -49,6 +49,7 @@ public class Score extends Function implements EvaluatorMapper {
         preview = true,
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW, version = "9.3.0") },
         description = "Scores an expression. Only full text functions will be scored. Returns scores for all the resulting docs.",
+        note = "SCORE must appear in EVAL before LIMIT or aggregation; it cannot be used in WHERE or LOOKUP JOIN ON; full-text functions (MATCH, QSTR, KQL) contribute to the score; expressions without full-text functions return 0.0.",
         examples = { @Example(file = "score-function", tag = "score-function") }
     )
     public Score(

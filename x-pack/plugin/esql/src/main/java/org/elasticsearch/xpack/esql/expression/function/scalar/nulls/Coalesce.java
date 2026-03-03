@@ -63,6 +63,7 @@ public class Coalesce extends EsqlScalarFunction implements OptionalArgument {
             "version",
             "exponential_histogram" },
         description = "Returns the first of its arguments that is not null. If all arguments are null, it returns `null`.",
+        note = "Short-circuit evaluation: later arguments are not evaluated when an earlier one is non-null.",
         examples = { @Example(file = "null", tag = "coalesce") }
     )
     public Coalesce(

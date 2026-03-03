@@ -31,6 +31,7 @@ public class Atanh extends AbstractTrigonometricFunction {
     @FunctionInfo(
         returnType = "double",
         description = "Returns the {wikipedia}/Inverse_trigonometric_functions[inverse hyperbolic tangent] of a number.",
+        note = "Domain is open interval (-1, 1).",
         examples = @Example(file = "floats", tag = "atanh")
     )
     public Atanh(

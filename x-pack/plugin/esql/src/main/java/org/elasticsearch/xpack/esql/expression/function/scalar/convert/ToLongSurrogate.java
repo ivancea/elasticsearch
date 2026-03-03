@@ -58,7 +58,6 @@ public class ToLongSurrogate extends EsqlScalarFunction implements SurrogateExpr
             If the input parameter is of a date type, its value will be interpreted as milliseconds
             since the {wikipedia}/Unix_time[Unix epoch], converted to long.
             Boolean `true` will be converted to long `1`, `false` to `0`.""",
-
         detailedDescription = """
             When given two arguments, a string value and a whole number base,
             the string is parsed as a long in the given base.

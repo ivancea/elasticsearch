@@ -32,7 +32,7 @@ import java.util.stream.Stream;
 import static org.elasticsearch.xpack.esql.core.type.DataType.NULL;
 
 /**
- * Clamps the values of all samples to have a lower limit of min and an upper limit of max.
+ * Clamps values to have a lower limit of min and an upper limit of max.
  */
 public class Clamp extends EsqlScalarFunction implements SurrogateExpression {
     private final Expression field;
@@ -41,8 +41,8 @@ public class Clamp extends EsqlScalarFunction implements SurrogateExpression {
     private DataType resolvedType;
 
     @FunctionInfo(
-        returnType = { "double", "integer", "long", "double", "unsigned_long", "keyword", "ip", "boolean", "date", "version" },
-        description = "Limits (or clamps) the values of all samples to have a lower limit of min and an upper limit of max.",
+        returnType = { "double", "integer", "long", "unsigned_long", "keyword", "ip", "boolean", "date", "version" },
+        description = "Limits (or clamps) values to have a lower limit of min and an upper limit of max.",
         examples = { @Example(file = "k8s-timeseries-clamp", tag = "clamp") },
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW, version = "9.3.0") }
     )

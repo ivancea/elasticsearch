@@ -127,7 +127,8 @@ public class In extends EsqlScalarFunction implements TranslationAware.SingleVal
         returnType = "boolean",
         description = "The `IN` operator allows testing whether a field or expression equals an element in a list of literals, "
             + "fields or expressions.",
-        examples = @Example(file = "row", tag = "in-with-expressions")
+        examples = @Example(file = "row", tag = "in-with-expressions"),
+        note = "If a list element is null and no other element matches, the result is null rather than false (three-valued logic)."
     )
     public In(
         Source source,

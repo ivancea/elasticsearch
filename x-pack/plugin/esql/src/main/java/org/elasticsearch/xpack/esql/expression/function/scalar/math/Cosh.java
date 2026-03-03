@@ -30,6 +30,7 @@ public class Cosh extends AbstractTrigonometricFunction {
     @FunctionInfo(
         returnType = "double",
         description = "Returns the {wikipedia}/Hyperbolic_functions[hyperbolic cosine] of a number.",
+        note = "For inputs where |x| > ~710, the result overflows.",
         examples = @Example(file = "floats", tag = "cosh")
     )
     public Cosh(

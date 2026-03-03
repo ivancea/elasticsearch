@@ -70,7 +70,9 @@ public class DateParse extends EsqlConfigurationFunction implements TwoOptionalA
 
     @FunctionInfo(
         returnType = "date",
-        description = "Returns a date by parsing the second argument using the format specified in the first argument.",
+        description = "Returns a date by parsing a string. The format argument defaults to `strict_date_optional_time` (ISO 8601); "
+            + "when omitted, use the single-arg form with just the date string.",
+        note = "Parsing uses the session `time_zone` and `locale` (or values from the options map).",
         examples = @Example(file = "docs", tag = "dateParse")
     )
     public DateParse(

@@ -55,13 +55,14 @@ public class DateFormat extends EsqlConfigurationFunction implements OptionalArg
     @FunctionInfo(
         returnType = "keyword",
         description = "Returns a string representation of a date, in the provided format.",
+        note = "Session time_zone and locale affect the output. "
+            + "For format pattern syntax, refer to {javadoc}/java.base/java/time/format/DateTimeFormatter.html[DateTimeFormatter].",
         examples = @Example(file = "date", tag = "docsDateFormat")
     )
     public DateFormat(
         Source source,
         @Param(optional = true, name = "dateFormat", type = { "keyword", "text" }, description = """
-            Date format (optional).  If no format is specified, the `yyyy-MM-dd'T'HH:mm:ss.SSSZ` format is used.
-            If `null`, the function returns `null`.""") Expression format,
+            Date format (optional). If no format is specified, the `yyyy-MM-dd'T'HH:mm:ss.SSSZ` format is used.""") Expression format,
         @Param(
             name = "date",
             type = { "date", "date_nanos" },

@@ -72,8 +72,6 @@ public class Greatest extends EsqlScalarFunction implements OptionalArgument {
         returnType = { "boolean", "date", "date_nanos", "double", "integer", "ip", "keyword", "long", "version" },
         description = "Returns the maximum value from multiple columns. This is similar to <<esql-mv_max>>\n"
             + "except it is intended to run on multiple columns at once.",
-        note = "When run on `keyword` or `text` fields, this returns the last string in alphabetical order. "
-            + "When run on `boolean` columns this will return `true` if any values are `true`.",
         examples = @Example(file = "math", tag = "greatest")
     )
     public Greatest(

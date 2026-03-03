@@ -31,6 +31,8 @@ public class Atan extends AbstractTrigonometricFunction {
         returnType = "double",
         description = "Returns the {wikipedia}/Inverse_trigonometric_functions[arctangent] of the input\n"
             + "numeric expression as an angle, expressed in radians.",
+        note = "The return value is in the range [-π/2, π/2] (in radians). "
+            + "For ±Infinity inputs, the function returns ±π/2 (atan is defined for all real inputs including infinity).",
         examples = @Example(file = "floats", tag = "atan")
     )
     public Atan(

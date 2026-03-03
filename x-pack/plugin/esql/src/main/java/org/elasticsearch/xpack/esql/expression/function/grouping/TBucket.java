@@ -50,6 +50,17 @@ public class TBucket extends GroupingFunction.EvaluatableGroupingFunction
         returnType = { "date", "date_nanos" },
         description = """
             Creates groups of values - buckets - out of a @timestamp attribute. The size of the buckets must be provided directly.""",
+        note = "Requires the TS (time series) source command; uses the implicit `@timestamp` field.",
+        appendix = """
+            ### Requirements and behavior [esql-tbucket-requirements]
+
+            *TS command*: `TBUCKET` requires the `TS` (time series) source command and uses the implicit `@timestamp` field.
+
+            *Timezone*: The configured timezone affects where bucket boundaries fall.
+
+            *Epoch alignment*: Buckets are aligned to the Unix epoch (1970-01-01T00:00:00Z), not to the data range.
+
+            *_over_time window*: When used with `_OVER_TIME` window functions, the window must be larger than and an exact multiple of the `tbucket` size.""",
         examples = {
             @Example(description = """
                 Provide a bucket size as an argument.""", file = "tbucket", tag = "docsTBucketByOneHourDuration", explanation = """

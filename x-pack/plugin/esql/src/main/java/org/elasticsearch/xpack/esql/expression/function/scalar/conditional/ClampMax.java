@@ -43,8 +43,8 @@ public class ClampMax extends EsqlScalarFunction {
     private DataType resolvedType;
 
     @FunctionInfo(
-        returnType = { "double", "integer", "long", "unsigned_long", "double", "keyword", "ip", "boolean", "date", "version" },
-        description = "Limits (or clamps) all input sample values to an upper bound of max. Any value above max is reduced to max.",
+        returnType = { "double", "integer", "long", "unsigned_long", "keyword", "ip", "boolean", "date", "version" },
+        description = "Clamps values to have an upper limit of max. Any value above max is reduced to max. If the field is null, the result is null.",
         examples = @Example(file = "k8s-timeseries-clamp", tag = "clamp-max"),
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW, version = "9.3.0") }
     )
@@ -52,12 +52,12 @@ public class ClampMax extends EsqlScalarFunction {
         Source source,
         @Param(
             name = "field",
-            type = { "double", "integer", "long", "unsigned_long", "double", "keyword", "ip", "boolean", "date", "version" },
+            type = { "double", "integer", "long", "unsigned_long", "keyword", "ip", "boolean", "date", "version" },
             description = "field to clamp."
         ) Expression field,
         @Param(
             name = "max",
-            type = { "double", "integer", "long", "unsigned_long", "double", "keyword", "ip", "boolean", "date", "version" },
+            type = { "double", "integer", "long", "unsigned_long", "keyword", "ip", "boolean", "date", "version" },
             description = "The max value to clamp data into."
         ) Expression max
     ) {

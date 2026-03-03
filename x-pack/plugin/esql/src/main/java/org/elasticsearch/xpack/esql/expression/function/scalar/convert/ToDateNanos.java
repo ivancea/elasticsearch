@@ -76,9 +76,10 @@ public class ToDateNanos extends AbstractConvertFunction implements Configuratio
     @FunctionInfo(
         returnType = "date_nanos",
         description = "Converts an input to a nanosecond-resolution date value (aka date_nanos).",
-        note = "The range for date nanos is 1970-01-01T00:00:00.000000000Z to 2262-04-11T23:47:16.854775807Z, attempting to convert "
-            + "values outside of that range will result in null with a warning.  Additionally, integers cannot be converted into date "
-            + "nanos, as the range of integer nanoseconds only covers about 2 seconds after epoch.",
+        note = "Numeric inputs (long, double, unsigned_long) are interpreted as epoch nanoseconds, unlike TO_DATETIME which uses epoch "
+            + "milliseconds. String format is ISO 8601 strict_date_optional_time_nanos. The range for date nanos is "
+            + "1970-01-01T00:00:00.000000000Z to 2262-04-11T23:47:16.854775807Z. Integers cannot be converted into date nanos, as the "
+            + "range of integer nanoseconds only covers about 2 seconds after epoch.",
         examples = { @Example(file = "date_nanos", tag = "to_date_nanos") }
     )
     public ToDateNanos(

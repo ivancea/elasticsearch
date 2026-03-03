@@ -53,7 +53,8 @@ public class ToDenseVector extends AbstractConvertFunction {
         description = "Converts a multi-valued input of numbers, or a hexadecimal string, to a dense_vector.",
         preview = true,
         examples = @Example(file = "dense_vector", tag = "to_dense_vector-ints"),
-        appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW, version = "9.2.0") }
+        appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW, version = "9.2.0") },
+        note = "When the input is a hex string, each byte is converted to a float in the range 0–255."
     )
     public ToDenseVector(
         Source source,

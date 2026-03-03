@@ -34,7 +34,8 @@ public class Exp extends UnaryScalarFunction {
     @FunctionInfo(
         returnType = { "double" },
         description = "Returns the value of e raised to the power of the given number.",
-        examples = @Example(file = "math", tag = "exp")
+        examples = @Example(file = "math", tag = "exp"),
+        note = "For large positive inputs (x > ~709), the result overflows to Infinity."
     )
     public Exp(
         Source source,

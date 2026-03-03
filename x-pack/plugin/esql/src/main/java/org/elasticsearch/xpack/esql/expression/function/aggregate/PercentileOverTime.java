@@ -34,7 +34,8 @@ public class PercentileOverTime extends TimeSeriesAggregateFunction implements S
         type = FunctionType.TIME_SERIES_AGGREGATE,
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW, version = "9.3.0") },
         preview = true,
-        examples = { @Example(file = "k8s-timeseries", tag = "percentile_over_time") }
+        examples = { @Example(file = "k8s-timeseries", tag = "percentile_over_time") },
+        note = "Requires the TS source command; approximate and non-deterministic (TDigest)."
     )
     public PercentileOverTime(
         Source source,

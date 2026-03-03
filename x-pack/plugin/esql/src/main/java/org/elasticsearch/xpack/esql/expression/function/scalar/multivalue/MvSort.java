@@ -57,7 +57,9 @@ import static org.elasticsearch.xpack.esql.core.expression.TypeResolutions.isStr
 import static org.elasticsearch.xpack.esql.expression.Validations.isFoldable;
 
 /**
- * Sorts a multivalued field in lexicographical order.
+ * Sorts a multivalued field using natural type-specific ordering: numeric types sort numerically,
+ * dates chronologically, booleans by value, ip/version by their type's natural order; only
+ * keyword/text types sort lexicographically.
  */
 public class MvSort extends EsqlScalarFunction implements OptionalArgument, PostOptimizationVerificationAware {
     public static final NamedWriteableRegistry.Entry ENTRY = new NamedWriteableRegistry.Entry(Expression.class, "MvSort", MvSort::new);
@@ -71,7 +73,7 @@ public class MvSort extends EsqlScalarFunction implements OptionalArgument, Post
 
     @FunctionInfo(
         returnType = { "boolean", "date", "date_nanos", "double", "integer", "ip", "keyword", "long", "version" },
-        description = "Sorts a multivalued field in lexicographical order.",
+        description = "Sorts a multivalued field using natural type-specific ordering (numeric types sort numerically, dates chronologically, booleans by value, ip/version by their type's natural order); only keyword/text types sort lexicographically.",
         examples = @Example(file = "ints", tag = "mv_sort")
     )
     public MvSort(

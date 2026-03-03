@@ -86,6 +86,7 @@ public class Knn extends SingleFieldFullTextFunction implements OptionalArgument
         returnType = "boolean",
         description = "Finds the k nearest vectors to a query vector, as measured by a similarity metric. "
             + "knn function finds nearest vectors through approximate search on indexed dense_vectors or semantic_text fields.",
+        note = "A LIMIT clause is required when using KNN.",
         examples = { @Example(file = "knn-function", tag = "knn-function") },
         appliesTo = {
             @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW, version = "9.2.0"),

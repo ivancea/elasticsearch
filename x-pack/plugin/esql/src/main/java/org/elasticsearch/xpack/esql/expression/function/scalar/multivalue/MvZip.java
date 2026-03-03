@@ -52,6 +52,7 @@ public class MvZip extends EsqlScalarFunction implements OptionalArgument, Evalu
     @FunctionInfo(
         returnType = { "keyword" },
         description = "Combines the values from two multivalued fields with a delimiter that joins them together.",
+        note = "Mismatched-length arguments: the longer side's extras are appended without the delimiter.",
         examples = @Example(file = "string", tag = "mv_zip")
     )
     public MvZip(

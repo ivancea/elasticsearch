@@ -62,7 +62,7 @@ public class MatchOperator extends Match {
                 description = "This example illustrates how to do semantic search using the match operator on `semantic_text` fields. "
                     + "By including the metadata field `_score` and sorting on `_score`, "
                     + "we can retrieve the most relevant results in order."
-            ), }
+            ) }
     )
     public MatchOperator(
         Source source,

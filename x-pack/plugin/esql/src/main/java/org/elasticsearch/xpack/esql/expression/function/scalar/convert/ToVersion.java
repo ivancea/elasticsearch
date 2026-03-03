@@ -43,7 +43,8 @@ public class ToVersion extends AbstractConvertFunction {
 
     @FunctionInfo(
         returnType = "version",
-        description = "Converts an input string to a version value.",
+        description = "Converts an input string or version value to a version type; version inputs pass through unchanged. Expected format is semantic versioning (major.minor.patch with optional -prerelease and +build metadata).",
+        note = "Invalid strings are accepted as opaque sortable values (not rejected).",
         examples = @Example(file = "version", tag = "to_version")
     )
     public ToVersion(

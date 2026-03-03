@@ -54,7 +54,9 @@ public class Increase extends TimeSeriesAggregateFunction implements OptionalArg
         description = "Calculates the absolute increase of a counter field in a time window.",
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW, version = "9.2.0") },
         preview = true,
-        examples = { @Example(file = "k8s-timeseries-increase", tag = "increase") }
+        examples = { @Example(file = "k8s-timeseries-increase", tag = "increase") },
+        note = "Accounts for counter resets (breaks in monotonicity) like rate(). Fewer than 2 data points returns null. "
+            + "Requires the TS source command."
     )
     public Increase(
         Source source,

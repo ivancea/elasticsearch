@@ -31,6 +31,7 @@ public class Asin extends AbstractTrigonometricFunction {
         returnType = "double",
         description = "Returns the {wikipedia}/Inverse_trigonometric_functions[arcsine] of the input\n"
             + "numeric expression as an angle, expressed in radians.",
+        note = "Inputs outside the range [-1, 1] are out of domain.",
         examples = @Example(file = "floats", tag = "asin")
     )
     public Asin(

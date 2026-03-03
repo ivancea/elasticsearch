@@ -53,6 +53,7 @@ public class StartsWith extends EsqlScalarFunction implements TranslationAware.S
     @FunctionInfo(
         returnType = "boolean",
         description = "Returns a boolean that indicates whether a keyword string starts with another string.",
+        note = "Case-sensitive; empty prefix returns true.",
         examples = @Example(file = "docs", tag = "startsWith")
     )
     public StartsWith(

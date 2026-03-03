@@ -24,7 +24,10 @@ public class ToDatePeriod extends FoldablesConvertFunction {
     @FunctionInfo(
         returnType = "date_period",
         description = "Converts an input value into a `date_period` value.",
-        examples = @Example(file = "convert", tag = "castToDatePeriod")
+        examples = @Example(file = "convert", tag = "castToDatePeriod"),
+        note = """
+            String format is `<integer><unit>` (e.g., `3d`, `1w`); valid units are days (d), weeks (w), months (M), years (y).
+            The argument must be a constant or foldable expression."""
     )
     public ToDatePeriod(
         Source source,

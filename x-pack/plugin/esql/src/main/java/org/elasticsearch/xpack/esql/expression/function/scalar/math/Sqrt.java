@@ -33,7 +33,7 @@ public class Sqrt extends UnaryScalarFunction {
 
     @FunctionInfo(returnType = "double", description = """
         Returns the square root of a number. The input can be any numeric value, the return value is always a double.
-        Square roots of negative numbers and infinities are null.""", examples = @Example(file = "math", tag = "sqrt"))
+        Square roots of negative numbers are null. sqrt(+Infinity) returns +Infinity.""", examples = @Example(file = "math", tag = "sqrt"))
     public Sqrt(
         Source source,
         @Param(

@@ -47,7 +47,8 @@ public class GreaterThanOrEqual extends EsqlBinaryComparison implements Negatabl
         returnType = { "boolean" },
         description = "Check if one field is greater than or equal to another. "
             + "If either field is <<esql-multivalued-fields,multivalued>> then the result is `null`.",
-        note = "This is pushed to the underlying search index if one side of the comparison is constant "
+        note = "Comparisons involving `NaN` yield `false` per IEEE 754. "
+            + "This is pushed to the underlying search index if one side of the comparison is constant "
             + "and the other side is a field in the index that has both an <<mapping-index>> and <<doc-values>>."
     )
     public GreaterThanOrEqual(

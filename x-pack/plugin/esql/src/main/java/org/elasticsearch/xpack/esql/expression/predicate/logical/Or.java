@@ -12,6 +12,7 @@ import org.elasticsearch.xpack.esql.core.expression.Expression;
 import org.elasticsearch.xpack.esql.core.expression.predicate.Negatable;
 import org.elasticsearch.xpack.esql.core.tree.NodeInfo;
 import org.elasticsearch.xpack.esql.core.tree.Source;
+import org.elasticsearch.xpack.esql.expression.function.FunctionInfo;
 import org.elasticsearch.xpack.esql.expression.predicate.Predicates;
 
 import java.io.IOException;
@@ -19,6 +20,13 @@ import java.io.IOException;
 public class Or extends BinaryLogic implements Negatable<BinaryLogic> {
     public static final NamedWriteableRegistry.Entry ENTRY = new NamedWriteableRegistry.Entry(Expression.class, "Or", Or::new);
 
+    @FunctionInfo(
+        operator = "OR",
+        returnType = { "boolean" },
+        description = "Returns true if either operand is true. "
+            + "If either field is <<esql-multivalued-fields,multivalued>> then the result is `null`.",
+        note = "Three-valued logic: true OR null = true; false OR null = null."
+    )
     public Or(Source source, Expression left, Expression right) {
         super(source, left, right, BinaryLogicOperation.OR);
     }

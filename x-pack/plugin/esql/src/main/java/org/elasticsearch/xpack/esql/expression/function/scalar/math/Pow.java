@@ -40,7 +40,6 @@ public class Pow extends EsqlScalarFunction {
     @FunctionInfo(
         returnType = "double",
         description = "Returns the value of `base` raised to the power of `exponent`.",
-        note = "It is still possible to overflow a double result here; in that case, null will be returned.",
         examples = { @Example(file = "math", tag = "powDI"), @Example(file = "math", tag = "powID-sqrt", description = """
             The exponent can be a fraction, which is similar to performing a root.
             For example, the exponent of `0.5` will give the square root of the base:"""), }

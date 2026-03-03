@@ -62,7 +62,8 @@ public class MvPercentile extends EsqlScalarFunction {
         returnType = { "double", "integer", "long" },
         description = "Converts a multivalued field into a single valued field containing "
             + "the value at which a certain percentage of observed values occur.",
-        examples = @Example(file = "mv_percentile", tag = "example")
+        examples = @Example(file = "mv_percentile", tag = "example"),
+        note = "Percentile 0=min, 100=max; values between elements use linear interpolation."
     )
     public MvPercentile(
         Source source,

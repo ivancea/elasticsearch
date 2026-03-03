@@ -51,7 +51,8 @@ public class PresentOverTime extends TimeSeriesAggregateFunction
         description = "Calculates the presence of a field in the output result over time range.",
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW, version = "9.2.0") },
         preview = true,
-        examples = { @Example(file = "k8s-timeseries", tag = "present_over_time") }
+        examples = { @Example(file = "k8s-timeseries", tag = "present_over_time") },
+        note = "Requires the TS source command."
     )
     public PresentOverTime(
         Source source,

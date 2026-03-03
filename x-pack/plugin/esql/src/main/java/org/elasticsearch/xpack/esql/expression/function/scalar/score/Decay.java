@@ -138,6 +138,7 @@ public class Decay extends EsqlScalarFunction implements OptionalArgument, PostO
             while cartesian points use numeric values. For date queries, scale and offset use time_duration values.
             For numeric queries you also use numeric values.
             """,
+        note = "Origin and scale must be literal or foldable expressions; default decay type is linear and default decay factor is 0.5.",
         examples = { @Example(file = "decay", tag = "decay") }
     )
     public Decay(

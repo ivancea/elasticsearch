@@ -46,9 +46,10 @@ public class Idelta extends TimeSeriesAggregateFunction implements OptionalArgum
     @FunctionInfo(
         type = FunctionType.TIME_SERIES_AGGREGATE,
         returnType = { "double" },
-        description = "Calculates the idelta of a gauge. idelta is the absolute change between the last two data points ("
-            + "it ignores all but the last two data points in each time period). "
+        description = "Calculates the idelta of a gauge. idelta returns the signed change (last minus second-to-last) between the last two data points "
+            + "(it ignores all but the last two data points in each time period). "
             + "This function is very similar to delta, but is more responsive to recent changes.",
+        note = "Requires TS command and @timestamp. Fewer than 2 data points returns null.",
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW, version = "9.2.0") },
         preview = true,
         examples = { @Example(file = "k8s-timeseries-idelta", tag = "idelta") }

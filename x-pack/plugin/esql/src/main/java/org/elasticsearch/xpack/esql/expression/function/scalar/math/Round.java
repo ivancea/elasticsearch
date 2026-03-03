@@ -47,11 +47,16 @@ public class Round extends EsqlScalarFunction implements OptionalArgument {
 
     private final Expression field, decimals;
 
-    @FunctionInfo(returnType = { "double", "integer", "long", "unsigned_long" }, description = """
-        Rounds a number to the specified number of decimal places.
-        Defaults to 0, which returns the nearest integer. If the
-        precision is a negative number, rounds to the number of digits left
-        of the decimal point.""", examples = @Example(file = "docs", tag = "round"))
+    @FunctionInfo(
+        returnType = { "double", "integer", "long", "unsigned_long" },
+        description = """
+            Rounds a number to the specified number of decimal places.
+            Defaults to 0, which returns the nearest integer. If the
+            precision is a negative number, rounds to the number of digits left
+            of the decimal point.""",
+        note = "For `integer`, `long`, and `unsigned_long` inputs, ROUND is a no-op (returns the value unchanged) when no decimal places are requested. For tie-breaking (e.g., 0.5), the function uses half-up rounding.",
+        examples = @Example(file = "docs", tag = "round")
+    )
     public Round(
         Source source,
         @Param(

@@ -52,7 +52,6 @@ public class MvDedupe extends AbstractMultivalueFunction {
             "unsigned_long",
             "version" },
         description = "Remove duplicate values from a multivalued field.",
-        note = "`MV_DEDUPE` may, but won’t always, sort the values in the column.",
         examples = @Example(file = "string", tag = "mv_dedupe")
     )
     public MvDedupe(

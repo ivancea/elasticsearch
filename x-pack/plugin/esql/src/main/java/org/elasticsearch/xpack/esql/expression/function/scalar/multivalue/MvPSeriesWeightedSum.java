@@ -58,6 +58,7 @@ public class MvPSeriesWeightedSum extends EsqlScalarFunction implements Evaluato
 
         description = "Converts a multivalued expression into a single-valued column by multiplying every "
             + "element on the input list by its corresponding term in P-Series and computing the sum.",
+        note = "Weight is 1/i^p for position i; p must be a constant expression.",
         examples = @Example(file = "mv_pseries_weighted_sum", tag = "example")
     )
     public MvPSeriesWeightedSum(

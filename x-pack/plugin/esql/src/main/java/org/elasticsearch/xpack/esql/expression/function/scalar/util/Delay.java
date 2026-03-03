@@ -40,7 +40,11 @@ import static org.elasticsearch.xpack.esql.core.expression.TypeResolutions.isTyp
 public class Delay extends UnaryScalarFunction {
     public static final NamedWriteableRegistry.Entry ENTRY = new NamedWriteableRegistry.Entry(Expression.class, "Delay", Delay::new);
 
-    @FunctionInfo(returnType = { "boolean" }, description = "Sleeps for a duration for every row. For debug purposes only.")
+    @FunctionInfo(
+        returnType = { "boolean" },
+        description = "Sleeps for a duration for every row. For debug purposes only.",
+        note = "Only available in snapshot builds. The delay parameter must be a constant (foldable) expression."
+    )
     public Delay(Source source, @Param(name = "ms", type = { "time_duration" }, description = "For how long") Expression ms) {
         super(source, ms);
     }

@@ -12,6 +12,8 @@ import org.elasticsearch.xpack.esql.core.expression.Expression;
 import org.elasticsearch.xpack.esql.core.expression.predicate.Negatable;
 import org.elasticsearch.xpack.esql.core.tree.NodeInfo;
 import org.elasticsearch.xpack.esql.core.tree.Source;
+import org.elasticsearch.xpack.esql.expression.function.FunctionInfo;
+import org.elasticsearch.xpack.esql.expression.function.Param;
 import org.elasticsearch.xpack.esql.expression.predicate.Predicates;
 
 import java.io.IOException;
@@ -19,7 +21,17 @@ import java.io.IOException;
 public class And extends BinaryLogic implements Negatable<BinaryLogic> {
     public static final NamedWriteableRegistry.Entry ENTRY = new NamedWriteableRegistry.Entry(Expression.class, "And", And::new);
 
-    public And(Source source, Expression left, Expression right) {
+    @FunctionInfo(
+        operator = "AND",
+        returnType = { "boolean" },
+        description = "Logical conjunction of two boolean values. Uses three-valued logic: "
+            + "`true AND null` = `null`, `false AND null` = `false`."
+    )
+    public And(
+        Source source,
+        @Param(name = "left", type = { "boolean" }, description = "Left-hand boolean expression.") Expression left,
+        @Param(name = "right", type = { "boolean" }, description = "Right-hand boolean expression.") Expression right
+    ) {
         super(source, left, right, BinaryLogicOperation.AND);
     }
 

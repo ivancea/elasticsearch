@@ -78,12 +78,13 @@ public class MatchPhrase extends SingleFieldFullTextFunction implements Optional
             specified field.
             Using `MATCH_PHRASE` is equivalent to using the `match_phrase` query in the Elasticsearch Query DSL.""",
         detailedDescription = """
-            MatchPhrase can be used on <<text, text>> fields, as well as other field types like keyword, boolean, or date types.
-            MatchPhrase is not supported for <<semantic-text, semantic_text>> or numeric types.
+            MatchPhrase can be used on <<keyword, keyword>> and <<text, text>> fields only.
+            The field must be a mapped field in the index.
 
             MatchPhrase can use <<esql-function-named-params,function named parameters>> to specify additional options for the
             match_phrase query.
             All [`match_phrase`](/reference/query-languages/query-dsl/query-dsl-match-query-phrase.md) query parameters are supported.
+            Non-STANDARD analyzer modes are not supported.
 
             `MATCH_PHRASE` returns true if the provided query matches the row.""",
         examples = { @Example(file = "match-phrase-function", tag = "match-phrase-with-field", applies_to = "stack: ga 9.1.0") }

@@ -32,6 +32,7 @@ public class Signum extends UnaryScalarFunction {
         returnType = { "double" },
         description = "Returns the sign of the given number.\n"
             + "It returns `-1` for negative numbers, `0` for `0` and `1` for positive numbers.",
+        note = "-0.0 returns -0.0; ±Infinity returns ±1.0.",
         examples = @Example(file = "math", tag = "signum")
     )
     public Signum(

@@ -41,7 +41,8 @@ public class ToBase64 extends UnaryScalarFunction {
     @FunctionInfo(
         returnType = "keyword",
         description = "Encode a string to a base64 string.",
-        examples = @Example(file = "string", tag = "to_base64")
+        examples = @Example(file = "string", tag = "to_base64"),
+        note = "Input is encoded as UTF-8 bytes; output uses standard RFC 4648 base64 with padding (not URL-safe)."
     )
     public ToBase64(
         Source source,

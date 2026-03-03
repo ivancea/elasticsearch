@@ -157,6 +157,7 @@ public class DateDiff extends EsqlConfigurationFunction {
             interchangeable. Similarly, the supported abbreviations are conveniently shared
             with implementations of this function in other established products and not
             necessarily common with the date-time nomenclature used by {{es}}.""",
+        note = "Session timezone affects the result for calendar units.",
         examples = { @Example(file = "date", tag = "docsDateDiff"), @Example(description = """
             When subtracting in calendar units - like year, month a.s.o. - only the fully elapsed units are counted.
             To avoid this and obtain also remainders, simply switch to the next smaller unit and do the date math accordingly.

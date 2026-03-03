@@ -53,6 +53,7 @@ public class Replace extends EsqlScalarFunction {
         description = """
             The function substitutes in the string `str` any match of the regular expression `regex`
             with the replacement string `newStr`.""",
+        note = "Capture group references ($1, $2) are supported in the replacement string.",
         examples = {
             @Example(
                 file = "string",

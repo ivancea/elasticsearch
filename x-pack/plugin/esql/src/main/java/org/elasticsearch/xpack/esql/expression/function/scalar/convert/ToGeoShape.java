@@ -57,7 +57,8 @@ public class ToGeoShape extends AbstractConvertFunction {
             Converts an input value to a `geo_shape` value.
             A string will only be successfully converted if it respects the
             {wikipedia}/Well-known_text_representation_of_geometry[WKT] format.""",
-        examples = @Example(file = "spatial_shapes", tag = "to_geoshape-str")
+        examples = @Example(file = "spatial_shapes", tag = "to_geoshape-str"),
+        note = "Geo_point and geo_shape inputs pass through unchanged; geohash, geohex, and geotile inputs are converted to their bounding polygon."
     )
     public ToGeoShape(
         Source source,

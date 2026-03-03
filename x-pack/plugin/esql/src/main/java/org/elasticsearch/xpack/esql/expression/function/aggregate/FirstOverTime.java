@@ -56,7 +56,8 @@ public class FirstOverTime extends TimeSeriesAggregateFunction implements Option
         description = "Calculates the earliest value of a field, where recency determined by the `@timestamp` field.",
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW, version = "9.2.0") },
         preview = true,
-        examples = { @Example(file = "k8s-timeseries", tag = "first_over_time") }
+        examples = { @Example(file = "k8s-timeseries", tag = "first_over_time") },
+        note = "Requires the TS source command."
     )
     public FirstOverTime(
         Source source,

@@ -62,7 +62,9 @@ public class DateTrunc extends EsqlConfigurationFunction {
 
     @FunctionInfo(
         returnType = { "date", "date_nanos" },
-        description = "Rounds down a date to the closest interval since epoch, which starts at `0001-01-01T00:00:00Z`.",
+        description = "Rounds down a date to the closest interval boundary.",
+        note = "Duration-based truncation uses the Unix epoch (1970-01-01T00:00:00Z); "
+            + "calendar-based truncation uses timezone-dependent boundaries.",
         examples = {
             @Example(file = "date_trunc", tag = "docsDateTrunc"),
             @Example(

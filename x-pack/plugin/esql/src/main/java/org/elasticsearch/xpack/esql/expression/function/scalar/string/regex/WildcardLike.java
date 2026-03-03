@@ -48,7 +48,6 @@ public class WildcardLike extends RegexMatch<WildcardPattern> {
 
             * `*` matches zero or more characters.
             * `?` matches one character.""",
-
         // we use an inline example here because ?pattern not supported in csv-spec test
         detailedDescription = """
             When used on `text` fields, `LIKE` treats the field as a `keyword` and does not use the analyzer.

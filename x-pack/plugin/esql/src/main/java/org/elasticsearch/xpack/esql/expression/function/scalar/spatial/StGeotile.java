@@ -125,6 +125,7 @@ public class StGeotile extends SpatialGridFunction implements EvaluatorMapper {
 
             These functions are related to the [`geo_grid` query](/reference/query-languages/query-dsl/query-dsl-geo-grid-query.md)
             and the [`geotile_grid` aggregation](/reference/aggregations/search-aggregations-bucket-geotilegrid-aggregation.md).""",
+        note = "The `precision` and `bounds` arguments must be constant (foldable) expressions.",
         examples = @Example(file = "spatial-grid", tag = "st_geotile-grid"),
         depthOffset = 1  // So this appears as a subsection of spatial grid functions
     )

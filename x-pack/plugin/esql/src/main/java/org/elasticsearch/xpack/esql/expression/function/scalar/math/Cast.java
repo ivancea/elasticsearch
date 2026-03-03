@@ -11,8 +11,12 @@ import org.elasticsearch.compute.ann.Evaluator;
 import org.elasticsearch.compute.operator.EvalOperator;
 import org.elasticsearch.compute.operator.EvalOperator.ExpressionEvaluator;
 import org.elasticsearch.xpack.esql.EsqlIllegalArgumentException;
+import org.elasticsearch.xpack.esql.core.expression.Expression;
 import org.elasticsearch.xpack.esql.core.tree.Source;
 import org.elasticsearch.xpack.esql.core.type.DataType;
+import org.elasticsearch.xpack.esql.expression.function.Example;
+import org.elasticsearch.xpack.esql.expression.function.FunctionInfo;
+import org.elasticsearch.xpack.esql.expression.function.Param;
 
 import static org.elasticsearch.xpack.esql.type.EsqlDataTypeConverter.intToUnsignedLong;
 import static org.elasticsearch.xpack.esql.type.EsqlDataTypeConverter.longToUnsignedLong;
@@ -91,5 +95,46 @@ public class Cast {
     // TODO: catch-to-null in evaluator?
     static long castLongToUnsignedLong(long v) {
         return longToUnsignedLong(v, false);
+    }
+
+    /**
+     * Documentation for the ESQL {@code ::} cast operator. This class exists only to provide
+     * {@link FunctionInfo} for generated documentation; the operator rewrites to TO_* functions at parse time.
+     */
+    @SuppressWarnings("unused")
+    public static final class OperatorDocs {
+        @FunctionInfo(
+            operator = "::",
+            returnType = {},
+            description = "The `::` operator provides a convenient alternative syntax to the TO_<type> "
+                + "[conversion functions](/reference/query-languages/esql/functions-operators/type-conversion-functions.md).",
+            note = "CAST delegates to the corresponding TO_* type conversion function.",
+            examples = { @Example(file = "convert", tag = "docsCastOperator") }
+        )
+        public OperatorDocs(
+            @Param(
+                name = "field",
+                type = {
+                    "boolean",
+                    "cartesian_point",
+                    "cartesian_shape",
+                    "date",
+                    "date_nanos",
+                    "double",
+                    "geo_point",
+                    "geo_shape",
+                    "geohash",
+                    "geotile",
+                    "geohex",
+                    "integer",
+                    "ip",
+                    "keyword",
+                    "long",
+                    "text",
+                    "unsigned_long",
+                    "version" },
+                description = "Input value. The input can be a single- or multi-valued column or an expression."
+            ) Expression v
+        ) {}
     }
 }

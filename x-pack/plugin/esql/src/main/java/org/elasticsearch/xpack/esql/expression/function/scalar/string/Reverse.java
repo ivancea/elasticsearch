@@ -45,7 +45,8 @@ public class Reverse extends UnaryScalarFunction {
                 file = "string",
                 tag = "reverseEmoji",
                 description = "`REVERSE` works with unicode, too! It keeps unicode grapheme clusters together during reversal."
-            ) }
+            ) },
+        note = "Grapheme-cluster-aware reversal handles Unicode characters and emojis correctly."
     )
     public Reverse(
         Source source,

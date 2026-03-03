@@ -40,7 +40,7 @@ public class Hypot extends EsqlScalarFunction {
 
     @FunctionInfo(returnType = "double", description = """
         Returns the hypotenuse of two numbers. The input can be any numeric values, the return value is always a double.
-        Hypotenuses of infinities are null.""", examples = @Example(file = "math", tag = "hypot"))
+        ±Infinity inputs return +Infinity.""", examples = @Example(file = "math", tag = "hypot"))
     public Hypot(
         Source source,
         @Param(

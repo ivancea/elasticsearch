@@ -43,8 +43,8 @@ public class ClampMin extends EsqlScalarFunction {
     private DataType resolvedType;
 
     @FunctionInfo(
-        returnType = { "double", "integer", "long", "double", "unsigned_long", "keyword", "ip", "boolean", "date", "version" },
-        description = "Limits (or clamps) all input sample values to a lower bound of min. Any value below min is set to min.",
+        returnType = { "double", "integer", "long", "unsigned_long", "keyword", "ip", "boolean", "date", "version" },
+        description = "Clamps values to have a lower limit of min. Any value below min is set to min. If the field is null, the result is null.",
         examples = @Example(file = "k8s-timeseries-clamp", tag = "clamp-min"),
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW, version = "9.3.0") }
     )
@@ -52,12 +52,12 @@ public class ClampMin extends EsqlScalarFunction {
         Source source,
         @Param(
             name = "field",
-            type = { "double", "integer", "long", "double", "unsigned_long", "keyword", "ip", "boolean", "date", "version" },
+            type = { "double", "integer", "long", "unsigned_long", "keyword", "ip", "boolean", "date", "version" },
             description = "field to clamp."
         ) Expression field,
         @Param(
             name = "min",
-            type = { "double", "integer", "long", "double", "unsigned_long", "keyword", "ip", "boolean", "date", "version" },
+            type = { "double", "integer", "long", "unsigned_long", "keyword", "ip", "boolean", "date", "version" },
             description = "The min value to clamp data into."
         ) Expression min
     ) {

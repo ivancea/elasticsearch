@@ -123,7 +123,8 @@ public class QueryString extends FullTextFunction implements OptionalArgument, C
             + "Returns true if the provided query string matches the row.",
         examples = {
             @Example(file = "qstr-function", tag = "qstr-with-field"),
-            @Example(file = "qstr-function", tag = "qstr-with-options", applies_to = "stack: ga 9.1.0") }
+            @Example(file = "qstr-function", tag = "qstr-with-options", applies_to = "stack: ga 9.1.0") },
+        note = "Query must be constant (foldable)."
     )
 
     public QueryString(

@@ -46,7 +46,8 @@ public class CountDistinctOverTime extends TimeSeriesAggregateFunction implement
         description = "Calculates the count of distinct values over time for a field.",
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW, version = "9.2.0") },
         preview = true,
-        examples = { @Example(file = "k8s-timeseries", tag = "count_distinct_over_time") }
+        examples = { @Example(file = "k8s-timeseries", tag = "count_distinct_over_time") },
+        note = "Requires the TS source command; count is approximate (HyperLogLog)."
     )
     public CountDistinctOverTime(
         Source source,

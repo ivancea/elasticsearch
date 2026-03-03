@@ -71,6 +71,7 @@ public class ToAggregateMetricDouble extends AbstractConvertFunction {
         preview = true,
         returnType = "aggregate_metric_double",
         description = "Encode a numeric to an aggregate_metric_double.",
+        note = "The result contains min, max, sum, and value_count sub-fields. Designed for time-series metrics.",
         examples = {
             @Example(file = "convert", tag = "toAggregateMetricDouble"),
             @Example(description = "The expression also accepts multi-values", file = "convert", tag = "toAggregateMetricDoubleMv") },

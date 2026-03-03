@@ -37,7 +37,7 @@ public class ToDateRange extends AbstractConvertFunction {
         returnType = "date_range",
         preview = true,
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW) },
-        description = "Converts an input value to a `date_range` value."
+        description = "Passes through a `date_range` input unchanged (identity only; does not convert from other types)."
     )
     public ToDateRange(
         Source source,

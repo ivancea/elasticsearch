@@ -44,6 +44,7 @@ public final class UrlDecode extends UnaryScalarFunction {
     @FunctionInfo(
         returnType = "keyword",
         description = "URL-decodes the input, or returns `null` and adds a warning header to the response if the input cannot be decoded.",
+        note = "`+` characters are decoded as spaces (application/x-www-form-urlencoded format), enabling round-trip encoding with `URL_ENCODE`.",
         examples = { @Example(file = "string", tag = "url_decode") },
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.GA, version = "9.2.0") }
     )

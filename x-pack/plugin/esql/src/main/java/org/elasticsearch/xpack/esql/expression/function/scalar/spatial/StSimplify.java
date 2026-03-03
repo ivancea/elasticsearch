@@ -61,6 +61,7 @@ public class StSimplify extends SpatialDocValuesFunction {
         description = "Simplifies the input geometry by applying the Douglas-Peucker algorithm with a specified tolerance. "
             + "Vertices that fall within the tolerance distance from the simplified shape are removed. "
             + "Note that the resulting geometry may be invalid, even if the original input was valid.",
+        note = "Tolerance must be a literal or foldable expression.",
         preview = true,
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW, version = "9.4.0") },
         examples = @Example(file = "spatial-jts", tag = "st_simplify"),

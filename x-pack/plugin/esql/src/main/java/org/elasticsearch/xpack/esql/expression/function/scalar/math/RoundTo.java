@@ -58,6 +58,7 @@ public class RoundTo extends EsqlScalarFunction {
         returnType = { "double", "integer", "long", "date", "date_nanos" },
         description = """
             Rounds down to one of a list of fixed points.""",
+        note = "Value below the smallest point returns the smallest point; points are sorted internally.",
         examples = @Example(file = "math", tag = "round_to"),
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.PREVIEW, version = "9.1.0") }
     )

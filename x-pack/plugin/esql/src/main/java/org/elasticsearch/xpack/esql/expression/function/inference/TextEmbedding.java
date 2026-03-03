@@ -42,7 +42,7 @@ public class TextEmbedding extends InferenceFunction<TextEmbedding> {
         description = "Generates dense vector embeddings from text input using a specified "
             + "[inference endpoint](docs-content://explore-analyze/elastic-inference/inference-api.md). "
             + "Use this function to generate query vectors for KNN searches against your vectorized data "
-            + "or others dense vector based operations.",
+            + "or other dense vector based operations.",
         appliesTo = {
             @FunctionAppliesTo(version = "9.4.0", lifeCycle = FunctionAppliesToLifecycle.GA),
             @FunctionAppliesTo(version = "9.3.0", lifeCycle = FunctionAppliesToLifecycle.PREVIEW), },
@@ -63,7 +63,7 @@ public class TextEmbedding extends InferenceFunction<TextEmbedding> {
         @Param(
             name = InferenceFunction.INFERENCE_ID_PARAMETER_NAME,
             type = { "keyword" },
-            description = "Identifier of an existing inference endpoint the that will generate the embeddings. "
+            description = "Identifier of an existing inference endpoint that will generate the embeddings. "
                 + "The inference endpoint must have the `text_embedding` task type and should use the same model "
                 + "that was used to embed your indexed data.",
             hint = @Param.Hint(

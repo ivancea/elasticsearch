@@ -24,7 +24,8 @@ public class ToTimeDuration extends FoldablesConvertFunction {
     @FunctionInfo(
         returnType = "time_duration",
         description = "Converts an input value into a `time_duration` value.",
-        examples = @Example(file = "convert", tag = "castToTimeDuration")
+        examples = @Example(file = "convert", tag = "castToTimeDuration"),
+        note = "String format is `<integer><unit>` (e.g., `\"100ms\"`, `\"5m\"`); valid units: ms/millisecond, s/sec/second, m/min/minute, h/hour. The argument must be constant or foldable."
     )
     public ToTimeDuration(
         Source source,
