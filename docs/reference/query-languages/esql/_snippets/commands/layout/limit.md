@@ -8,6 +8,15 @@ The `LIMIT` processing command limits the number of rows returned.
 ## Syntax
 
 ```esql
+LIMIT max_number_of_rows
+```
+
+```yaml {applies_to}
+serverless: preview
+stack: preview 9.4+
+```
+
+```esql
 LIMIT max_number_of_rows [BY grouping_expression1[, ..., grouping_expressionN]]
 ```
 
@@ -24,8 +33,8 @@ LIMIT max_number_of_rows [BY grouping_expression1[, ..., grouping_expressionN]]
 
 Use the `LIMIT` processing command to limit the number of rows returned.
 
-When `BY` is specified, up to `max_number_of_rows` rows are retained for each
-distinct combination of the grouping expressions.
+{applies_to}`serverless: preview` {applies_to}`stack: preview 9.4+` When `BY` is specified,
+up to `max_number_of_rows` rows are retained for each distinct combination of the grouping expressions.
 Precede `LIMIT <N> BY` with a `SORT` to keep the top N for each group.
 
 :::{include} ../../common/result-set-size-limitation.md
@@ -38,12 +47,12 @@ Precede `LIMIT <N> BY` with a `SORT` to keep the top N for each group.
 :::{include} ../examples/limit.csv-spec/basic.md
 :::
 
-### With groups
+### With groups {applies_to}`serverless: preview` {applies_to}`stack: preview 9.4+`
 
 :::{include} ../examples/limit.csv-spec/limitBy.md
 :::
 
-### Group by multiple values
+### Group by multiple values {applies_to}`serverless: preview` {applies_to}`stack: preview 9.4+`
 
 :::{include} ../examples/limit.csv-spec/limitByMultipleGroups.md
 :::
