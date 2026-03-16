@@ -9,6 +9,12 @@ package org.elasticsearch.xpack.esql.generator.function;
 
 import org.elasticsearch.xpack.esql.generator.Column;
 import org.elasticsearch.xpack.esql.generator.command.CommandGenerator;
+import org.elasticsearch.xpack.esql.generator.command.pipe.ChangePointGenerator;
+import org.elasticsearch.xpack.esql.generator.command.pipe.InlineStatsGenerator;
+import org.elasticsearch.xpack.esql.generator.command.pipe.LimitByGenerator;
+import org.elasticsearch.xpack.esql.generator.command.pipe.LimitGenerator;
+import org.elasticsearch.xpack.esql.generator.command.pipe.MvExpandGenerator;
+import org.elasticsearch.xpack.esql.generator.command.pipe.StatsGenerator;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -41,12 +47,14 @@ public final class FullTextFunctionGenerator {
             return false;
         }
         for (CommandGenerator.CommandDescription cmd : previousCommands) {
-            if ("limit".equals(cmd.commandName())
-                || "limit_by".equals(cmd.commandName())
-                || "stats".equals(cmd.commandName())
-                || "inline stats".equals(cmd.commandName())
-                || "change_point".equals(cmd.commandName())
-                || "mv_expand".equals(cmd.commandName())) {
+            if (Set.of(
+                LimitGenerator.LIMIT,
+                LimitByGenerator.LIMIT_BY,
+                StatsGenerator.STATS,
+                InlineStatsGenerator.INLINE_STATS,
+                ChangePointGenerator.CHANGE_POINT,
+                MvExpandGenerator.MV_EXPAND
+            ).contains(cmd.commandName())) {
                 return false;
             }
         }

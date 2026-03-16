@@ -22,11 +22,11 @@ import java.util.Set;
 import static org.elasticsearch.test.ESTestCase.randomIntBetween;
 
 public class LimitByGenerator implements CommandGenerator {
-
-    public static final String LIMIT_BY = "limit_by";
-    public static final String LIMIT = "limit";
-    public static final String GROUPINGS = "groupings";
     public static final CommandGenerator INSTANCE = new LimitByGenerator();
+    public static final String LIMIT_BY = "limit_by";
+
+    private static final String LIMIT_CONTEXT = "limit";
+    public static final String GROUPINGS_CONTEXT = "groupings";
 
     @Override
     public CommandDescription generate(
@@ -35,7 +35,7 @@ public class LimitByGenerator implements CommandGenerator {
         QuerySchema schema,
         QueryExecutor executor
     ) {
-        if (previousCommands != null && previousCommands.stream().anyMatch(cmd -> "sort".equals(cmd.commandName()))) {
+        if (previousCommands.stream().anyMatch(cmd -> cmd.commandName().equals(SortGenerator.SORT))) {
             return EMPTY_DESCRIPTION;
         }
         List<Column> groupable = previousOutput.stream()
@@ -60,7 +60,7 @@ public class LimitByGenerator implements CommandGenerator {
         }
 
         String cmd = " | LIMIT " + limit + " BY " + String.join(", ", groupings);
-        return new CommandDescription(LIMIT_BY, this, cmd, Map.of(LIMIT, limit, GROUPINGS, List.copyOf(groupings)));
+        return new CommandDescription(LIMIT_BY, this, cmd, Map.of(LIMIT_CONTEXT, limit, GROUPINGS_CONTEXT, List.copyOf(groupings)));
     }
 
     @Override
@@ -72,7 +72,7 @@ public class LimitByGenerator implements CommandGenerator {
         List<Column> columns,
         List<List<Object>> output
     ) {
-        int limit = (int) commandDescription.context().get(LIMIT);
+        int limit = (int) commandDescription.context().get(LIMIT_CONTEXT);
 
         if (output.size() > previousOutput.size()) {
             return new ValidationResult(
@@ -100,7 +100,7 @@ public class LimitByGenerator implements CommandGenerator {
         List<List<Object>> output,
         int limit
     ) {
-        List<String> groupings = (List<String>) commandDescription.context().get(GROUPINGS);
+        List<String> groupings = (List<String>) commandDescription.context().get(GROUPINGS_CONTEXT);
 
         List<Integer> groupingIndices = new ArrayList<>(groupings.size());
         for (String grouping : groupings) {
