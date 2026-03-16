@@ -35,6 +35,9 @@ public class LimitByGenerator implements CommandGenerator {
         QuerySchema schema,
         QueryExecutor executor
     ) {
+        if (previousCommands != null && previousCommands.stream().anyMatch(cmd -> "sort".equals(cmd.commandName()))) {
+            return EMPTY_DESCRIPTION;
+        }
         List<Column> groupable = previousOutput.stream()
             .filter(EsqlQueryGenerator::groupable)
             .filter(EsqlQueryGenerator::fieldCanBeUsed)
