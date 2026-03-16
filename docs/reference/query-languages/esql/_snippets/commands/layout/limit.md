@@ -47,12 +47,20 @@ Precede `LIMIT <N> BY` with a `SORT` to keep the top N for each group.
 :::{include} ../examples/limit.csv-spec/basic.md
 :::
 
-### With groups {applies_to}`serverless: preview` {applies_to}`stack: preview 9.4+`
+### With groups
+```yaml {applies_to}
+serverless: preview
+stack: preview 9.4+
+```
 
 :::{include} ../examples/limit.csv-spec/limitBy.md
 :::
 
-### Group by multiple values {applies_to}`serverless: preview` {applies_to}`stack: preview 9.4+`
+### Group by multiple values
+```yaml {applies_to}
+serverless: preview
+stack: preview 9.4+
+```
 
 :::{include} ../examples/limit.csv-spec/limitByMultipleGroups.md
 :::
