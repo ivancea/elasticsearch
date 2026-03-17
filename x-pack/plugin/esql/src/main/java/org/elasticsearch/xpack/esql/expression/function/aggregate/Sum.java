@@ -65,7 +65,7 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
      * Either {@link #OVERFLOWING_LONG} or {@link #SAFE_LONG}.
      * Set internally only, used for BWC.
      */
-    private final Expression useOverflowingLongSupplier;
+    private final Expression overflowMode;
 
     @FunctionInfo(
         returnType = { "long", "double", "dense_vector" },
@@ -101,11 +101,11 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
         Expression filter,
         Expression window,
         Expression summationMode,
-        Expression useOverflowingLongSupplier
+        Expression overflowMode
     ) {
-        super(source, field, filter, window, List.of(summationMode, useOverflowingLongSupplier));
+        super(source, field, filter, window, List.of(summationMode, overflowMode));
         this.summationMode = summationMode;
-        this.useOverflowingLongSupplier = useOverflowingLongSupplier;
+        this.overflowMode = overflowMode;
     }
 
     private Sum(StreamInput in) throws IOException {
@@ -118,10 +118,10 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
         );
     }
 
-    private record SumParameters(Expression summationMode, Expression useOverflowingLongSupplier) {}
+    private record SumParameters(Expression summationMode, Expression overflowMode) {}
 
     private Sum(Source source, Expression field, Expression filter, Expression window, SumParameters params) {
-        this(source, field, filter, window, params.summationMode(), params.useOverflowingLongSupplier());
+        this(source, field, filter, window, params.summationMode(), params.overflowMode());
     }
 
     private static SumParameters readParameters(StreamInput in) throws IOException {
@@ -138,7 +138,7 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
 
     @Override
     protected NodeInfo<? extends Sum> info() {
-        return NodeInfo.create(this, Sum::new, field(), filter(), window(), summationMode, useOverflowingLongSupplier);
+        return NodeInfo.create(this, Sum::new, field(), filter(), window(), summationMode, overflowMode);
     }
 
     @Override
@@ -148,7 +148,7 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
 
     @Override
     public Sum withFilter(Expression filter) {
-        return new Sum(source(), field(), filter, window(), summationMode, useOverflowingLongSupplier);
+        return new Sum(source(), field(), filter, window(), summationMode, overflowMode);
     }
 
     @Override
@@ -162,7 +162,7 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
 
     @Override
     protected AggregatorFunctionSupplier longSupplier() {
-        if (useOverflowingLongSupplier()) {
+        if (overflowMode().equals(OVERFLOWING_LONG)) {
             return new SumOverflowingLongAggregatorFunctionSupplier();
         }
         return new SumLongAggregatorFunctionSupplier(source());
@@ -191,8 +191,8 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
         return summationMode;
     }
 
-    public boolean useOverflowingLongSupplier() {
-        return useOverflowingLongSupplier.equals(OVERFLOWING_LONG);
+    public Expression overflowMode() {
+        return overflowMode;
     }
 
     @Override
@@ -239,7 +239,7 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
                 filter(),
                 window(),
                 summationMode,
-                useOverflowingLongSupplier
+                overflowMode
             );
         }
         if (field.dataType() == EXPONENTIAL_HISTOGRAM || field.dataType() == DataType.TDIGEST) {
@@ -249,7 +249,7 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
                 filter(),
                 window(),
                 summationMode,
-                useOverflowingLongSupplier
+                overflowMode
             );
         }
 
@@ -261,7 +261,7 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
 
     @Override
     public Expression forTransportVersion(TransportVersion minTransportVersion) {
-        if (minTransportVersion.supports(ESQL_SUM_LONG_OVERFLOW_FIX) && useOverflowingLongSupplier()) {
+        if (minTransportVersion.supports(ESQL_SUM_LONG_OVERFLOW_FIX) && overflowMode().equals(OVERFLOWING_LONG)) {
             return new Sum(source(), field(), filter(), window(), summationMode, SAFE_LONG);
         }
         return null;

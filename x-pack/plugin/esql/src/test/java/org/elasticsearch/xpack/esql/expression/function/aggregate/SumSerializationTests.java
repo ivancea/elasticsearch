@@ -39,14 +39,16 @@ public class SumSerializationTests extends AbstractExpressionSerializationTests<
         Expression filter = instance.filter();
         Expression window = instance.window();
         Expression summationMode = instance.summationMode();
-        switch (randomIntBetween(0, 3)) {
+        Expression overflowMode = instance.overflowMode();
+        switch (randomIntBetween(0, 4)) {
             case 0 -> field = randomValueOtherThan(field, AbstractExpressionSerializationTests::randomChild);
             case 1 -> filter = randomValueOtherThan(filter, AbstractExpressionSerializationTests::randomChild);
             case 2 -> window = randomValueOtherThan(window, AbstractExpressionSerializationTests::randomChild);
             case 3 -> summationMode = randomValueOtherThan(summationMode, AbstractExpressionSerializationTests::randomChild);
+            case 4 -> overflowMode = randomValueOtherThan(overflowMode, AbstractExpressionSerializationTests::randomChild);
             default -> throw new AssertionError("unexpected value");
         }
-        return new Sum(instance.source(), field, filter, window, summationMode);
+        return new Sum(instance.source(), field, filter, window, summationMode, overflowMode);
     }
 
     public static class OldSum extends AggregateFunction {
@@ -84,7 +86,7 @@ public class SumSerializationTests extends AbstractExpressionSerializationTests<
      * Ensures that, after deserializing the "Old" aggregate function;:
      * <ul>
      *     <li>{@link Sum#summationMode()} defaults to {@link SummationMode#COMPENSATED_LITERAL}</li>
-     *     <li>{@link Sum#useOverflowingLongSupplier()} defaults to true</li>
+     *     <li>{@link Sum#overflowMode()} defaults to {@link Sum#OVERFLOWING_LONG}</li>
      * </ul>
      */
     public void testSerializeOldSum() throws IOException {
@@ -108,13 +110,13 @@ public class SumSerializationTests extends AbstractExpressionSerializationTests<
                 assertThat(serialized.source(), equalTo(oldSum.source()));
                 assertThat(serialized.field(), equalTo(oldSum.field()));
                 assertThat(serialized.summationMode(), equalTo(SummationMode.COMPENSATED_LITERAL));
-                assertThat(serialized.useOverflowingLongSupplier(), equalTo(true));
+                assertThat(serialized.overflowMode(), equalTo(Sum.OVERFLOWING_LONG));
             }
         }
     }
 
     /**
-     * Round-trip a Sum with {@code useOverflowingLongSupplier=true} on a version that supports the fix.
+     * Round-trip a Sum with {@code overflowMode=OVERFLOWING_LONG} on a version that supports the fix.
      */
     public void testSerializeSumWithOverflowingLongSupplier() throws IOException {
         var transportVersion = TransportVersionUtils.randomVersionSupporting(Sum.ESQL_SUM_LONG_OVERFLOW_FIX);
@@ -134,7 +136,7 @@ public class SumSerializationTests extends AbstractExpressionSerializationTests<
                 Sum serialized = (Sum) planIn.readNamedWriteable(categoryClass());
                 assertThat(serialized.source(), equalTo(sum.source()));
                 assertThat(serialized.field(), equalTo(sum.field()));
-                assertThat(serialized.useOverflowingLongSupplier(), equalTo(true));
+                assertThat(serialized.overflowMode(), equalTo(Sum.OVERFLOWING_LONG));
             }
         }
     }
