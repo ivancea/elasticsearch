@@ -107,7 +107,7 @@ public class SumLongAggregatorFunctionTests extends AggregatorFunctionTestCase {
                 new PageConsumerOperator(page -> fail("shouldn't have made it this far"))
             )
         ) {
-            expectThrows(Exception.class, () -> new TestDriverRunner().run(d));  // ### find a more specific exception type
+            expectThrows(ClassCastException.class, () -> new TestDriverRunner().run(d));
         }
     }
 }

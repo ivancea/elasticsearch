@@ -82,7 +82,7 @@ public class SumOverflowingLongAggregatorFunctionTests extends AggregatorFunctio
                 () -> {}
             )
         ) {
-            expectThrows(Exception.class, () -> new TestDriverRunner().run(d));  // ### find a more specific exception type
+            expectThrows(ClassCastException.class, () -> new TestDriverRunner().run(d));
         }
     }
 }
