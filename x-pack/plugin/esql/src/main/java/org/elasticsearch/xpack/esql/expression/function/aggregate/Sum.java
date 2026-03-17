@@ -65,7 +65,7 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
      * Either {@link #OVERFLOWING_LONG} or {@link #SAFE_LONG}.
      * Set internally only, used for BWC.
      */
-    private final Expression overflowMode;
+    private final Expression longOverflowMode;
 
     @FunctionInfo(
         returnType = { "long", "double", "dense_vector" },
@@ -101,11 +101,11 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
         Expression filter,
         Expression window,
         Expression summationMode,
-        Expression overflowMode
+        Expression longOverflowMode
     ) {
-        super(source, field, filter, window, List.of(summationMode, overflowMode));
+        super(source, field, filter, window, List.of(summationMode, longOverflowMode));
         this.summationMode = summationMode;
-        this.overflowMode = overflowMode;
+        this.longOverflowMode = longOverflowMode;
     }
 
     private Sum(StreamInput in) throws IOException {
@@ -118,10 +118,10 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
         );
     }
 
-    private record SumParameters(Expression summationMode, Expression overflowMode) {}
+    private record SumParameters(Expression summationMode, Expression longOverflowMode) {}
 
     private Sum(Source source, Expression field, Expression filter, Expression window, SumParameters params) {
-        this(source, field, filter, window, params.summationMode(), params.overflowMode());
+        this(source, field, filter, window, params.summationMode(), params.longOverflowMode());
     }
 
     private static SumParameters readParameters(StreamInput in) throws IOException {
@@ -138,7 +138,7 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
 
     @Override
     protected NodeInfo<? extends Sum> info() {
-        return NodeInfo.create(this, Sum::new, field(), filter(), window(), summationMode, overflowMode);
+        return NodeInfo.create(this, Sum::new, field(), filter(), window(), summationMode, longOverflowMode);
     }
 
     @Override
@@ -148,7 +148,7 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
 
     @Override
     public Sum withFilter(Expression filter) {
-        return new Sum(source(), field(), filter, window(), summationMode, overflowMode);
+        return new Sum(source(), field(), filter, window(), summationMode, longOverflowMode);
     }
 
     @Override
@@ -162,7 +162,7 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
 
     @Override
     protected AggregatorFunctionSupplier longSupplier() {
-        if (overflowMode().equals(OVERFLOWING_LONG)) {
+        if (longOverflowMode().equals(OVERFLOWING_LONG)) {
             return new SumOverflowingLongAggregatorFunctionSupplier();
         }
         return new SumLongAggregatorFunctionSupplier(source());
@@ -191,8 +191,8 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
         return summationMode;
     }
 
-    public Expression overflowMode() {
-        return overflowMode;
+    public Expression longOverflowMode() {
+        return longOverflowMode;
     }
 
     @Override
@@ -239,7 +239,7 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
                 filter(),
                 window(),
                 summationMode,
-                overflowMode
+                longOverflowMode
             );
         }
         if (field.dataType() == EXPONENTIAL_HISTOGRAM || field.dataType() == DataType.TDIGEST) {
@@ -249,7 +249,7 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
                 filter(),
                 window(),
                 summationMode,
-                overflowMode
+                longOverflowMode
             );
         }
 
@@ -261,7 +261,7 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
 
     @Override
     public Expression forTransportVersion(TransportVersion minTransportVersion) {
-        if (minTransportVersion.supports(ESQL_SUM_LONG_OVERFLOW_FIX) && overflowMode().equals(OVERFLOWING_LONG)) {
+        if (minTransportVersion.supports(ESQL_SUM_LONG_OVERFLOW_FIX) && longOverflowMode().equals(OVERFLOWING_LONG)) {
             return new Sum(source(), field(), filter(), window(), summationMode, SAFE_LONG);
         }
         return null;
