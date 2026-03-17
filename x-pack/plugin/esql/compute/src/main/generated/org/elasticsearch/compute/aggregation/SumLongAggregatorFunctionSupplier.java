@@ -36,14 +36,14 @@ public final class SumLongAggregatorFunctionSupplier implements AggregatorFuncti
   @Override
   public SumLongAggregatorFunction aggregator(DriverContext driverContext, List<Integer> channels) {
     var warnings = Warnings.createWarnings(driverContext.warningsMode(), warningsSource);
-    return SumLongAggregatorFunction.create(warnings, driverContext, channels);
+    return new SumLongAggregatorFunction(warnings, driverContext, channels);
   }
 
   @Override
   public SumLongGroupingAggregatorFunction groupingAggregator(DriverContext driverContext,
       List<Integer> channels) {
     var warnings = Warnings.createWarnings(driverContext.warningsMode(), warningsSource);
-    return SumLongGroupingAggregatorFunction.create(warnings, channels, driverContext);
+    return new SumLongGroupingAggregatorFunction(warnings, channels, driverContext);
   }
 
   @Override

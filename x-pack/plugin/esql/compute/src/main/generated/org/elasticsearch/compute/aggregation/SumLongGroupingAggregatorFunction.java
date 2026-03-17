@@ -41,17 +41,12 @@ public final class SumLongGroupingAggregatorFunction implements GroupingAggregat
 
   private final DriverContext driverContext;
 
-  public SumLongGroupingAggregatorFunction(Warnings warnings, List<Integer> channels,
-      LongFallibleArrayState state, DriverContext driverContext) {
+  SumLongGroupingAggregatorFunction(Warnings warnings, List<Integer> channels,
+      DriverContext driverContext) {
     this.warnings = warnings;
     this.channels = channels;
-    this.state = state;
+    this.state = new LongFallibleArrayState(driverContext.bigArrays(), SumLongAggregator.init());
     this.driverContext = driverContext;
-  }
-
-  public static SumLongGroupingAggregatorFunction create(Warnings warnings, List<Integer> channels,
-      DriverContext driverContext) {
-    return new SumLongGroupingAggregatorFunction(warnings, channels, new LongFallibleArrayState(driverContext.bigArrays(), SumLongAggregator.init()), driverContext);
   }
 
   public static List<IntermediateStateDesc> intermediateStateDesc() {

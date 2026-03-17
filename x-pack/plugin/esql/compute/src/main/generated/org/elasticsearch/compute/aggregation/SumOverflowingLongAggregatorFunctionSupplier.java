@@ -31,13 +31,13 @@ public final class SumOverflowingLongAggregatorFunctionSupplier implements Aggre
   @Override
   public SumOverflowingLongAggregatorFunction aggregator(DriverContext driverContext,
       List<Integer> channels) {
-    return SumOverflowingLongAggregatorFunction.create(driverContext, channels);
+    return new SumOverflowingLongAggregatorFunction(driverContext, channels);
   }
 
   @Override
   public SumOverflowingLongGroupingAggregatorFunction groupingAggregator(
       DriverContext driverContext, List<Integer> channels) {
-    return SumOverflowingLongGroupingAggregatorFunction.create(channels, driverContext);
+    return new SumOverflowingLongGroupingAggregatorFunction(channels, driverContext);
   }
 
   @Override

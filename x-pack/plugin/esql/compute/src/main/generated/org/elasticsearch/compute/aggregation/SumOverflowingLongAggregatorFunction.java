@@ -33,16 +33,10 @@ public final class SumOverflowingLongAggregatorFunction implements AggregatorFun
 
   private final List<Integer> channels;
 
-  public SumOverflowingLongAggregatorFunction(DriverContext driverContext, List<Integer> channels,
-      LongState state) {
+  SumOverflowingLongAggregatorFunction(DriverContext driverContext, List<Integer> channels) {
     this.driverContext = driverContext;
     this.channels = channels;
-    this.state = state;
-  }
-
-  public static SumOverflowingLongAggregatorFunction create(DriverContext driverContext,
-      List<Integer> channels) {
-    return new SumOverflowingLongAggregatorFunction(driverContext, channels, new LongState(SumOverflowingLongAggregator.init()));
+    this.state = new LongState(SumOverflowingLongAggregator.init());
   }
 
   public static List<IntermediateStateDesc> intermediateStateDesc() {

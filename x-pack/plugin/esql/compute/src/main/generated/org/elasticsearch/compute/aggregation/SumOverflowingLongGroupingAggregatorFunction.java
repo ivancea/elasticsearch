@@ -36,16 +36,11 @@ public final class SumOverflowingLongGroupingAggregatorFunction implements Group
 
   private final DriverContext driverContext;
 
-  public SumOverflowingLongGroupingAggregatorFunction(List<Integer> channels, LongArrayState state,
+  SumOverflowingLongGroupingAggregatorFunction(List<Integer> channels,
       DriverContext driverContext) {
     this.channels = channels;
-    this.state = state;
+    this.state = new LongArrayState(driverContext.bigArrays(), SumOverflowingLongAggregator.init());
     this.driverContext = driverContext;
-  }
-
-  public static SumOverflowingLongGroupingAggregatorFunction create(List<Integer> channels,
-      DriverContext driverContext) {
-    return new SumOverflowingLongGroupingAggregatorFunction(channels, new LongArrayState(driverContext.bigArrays(), SumOverflowingLongAggregator.init()), driverContext);
   }
 
   public static List<IntermediateStateDesc> intermediateStateDesc() {

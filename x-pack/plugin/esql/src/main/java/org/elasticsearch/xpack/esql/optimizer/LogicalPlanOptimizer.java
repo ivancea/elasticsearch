@@ -78,6 +78,7 @@ import org.elasticsearch.xpack.esql.optimizer.rules.logical.SubstituteSurrogateE
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.SubstituteSurrogatePlans;
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.SubstituteTransportVersionAwareExpressions;
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.TranslateTimeSeriesAggregate;
+import org.elasticsearch.xpack.esql.optimizer.rules.logical.TranslateTimeSeriesWithout;
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.WarnLostSortOrder;
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.local.PruneLeftJoinOnNullMatchingField;
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.promql.TranslatePromqlToEsqlPlan;
@@ -154,6 +155,9 @@ public class LogicalPlanOptimizer extends ParameterizedRuleExecutor<LogicalPlan,
             new RemoveStatsOverride(),
             // translate PromQL plan to ESQL. It should run before TranslateTimeSeriesAggregate.
             new TranslatePromqlToEsqlPlan(),
+            // Replace TimeSeriesWithout grouping nodes with TimeSeriesMetadataAttribute carrying the excluded dimensions.
+            // Must run before TranslateTimeSeriesAggregate which expects the lowered attribute form.
+            new TranslateTimeSeriesWithout(),
             // translate metric aggregates early before they are converted to nested expressions
             new TranslateTimeSeriesAggregate(),
             new PruneUnusedIndexMode(),

@@ -72,6 +72,7 @@ import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.transport.TransportRequest;
 import org.elasticsearch.xpack.core.XPackPlugin;
 import org.elasticsearch.xpack.core.action.XPackInfoAction;
+import org.elasticsearch.xpack.core.esql.EsqlViewActionNames;
 import org.elasticsearch.xpack.core.ilm.action.DeleteLifecycleAction;
 import org.elasticsearch.xpack.core.ilm.action.ExplainLifecycleAction;
 import org.elasticsearch.xpack.core.ilm.action.GetLifecycleAction;
@@ -637,6 +638,15 @@ public class ReservedRolesStoreTests extends ESTestCase {
             ReservedRolesStore.LISTS_ITEMS_INDEX_REINDEXED_V8 + randomAlphaOfLength(randomIntBetween(0, 13)),
             ".slo-observability." + randomAlphaOfLength(randomIntBetween(0, 13))
         ).forEach(index -> assertAllIndicesAccessAllowed(kibanaRole, index));
+
+        // Alerting V2 views prefix: Kibana system user has create_view only
+        final IndexAbstraction alertingV2ViewsAbstraction = mockIndexAbstraction(
+            ReservedRolesStore.ALERTING_V2_VIEWS + randomAlphaOfLength(randomIntBetween(0, 13))
+        );
+        assertThat(
+            kibanaRole.indices().allowedIndicesMatcher(EsqlViewActionNames.ESQL_PUT_VIEW_ACTION_NAME).test(alertingV2ViewsAbstraction),
+            is(true)
+        );
 
         Arrays.asList(
             ReservedRolesStore.ADHOC_ALERTS_INDEX_ALIAS + randomAlphaOfLength(randomIntBetween(0, 13)),
@@ -2071,6 +2081,15 @@ public class ReservedRolesStoreTests extends ESTestCase {
             final IndexAbstraction otherIndex = mockIndexAbstraction("some-unrelated-index");
             assertThat(kibanaRole.indices().allowedIndicesMatcher(TransportSearchAction.TYPE.name()).test(otherIndex), is(false));
         });
+
+        // logs-*.* indices have read-only access
+        final IndexAbstraction logsStarDotStar = mockIndexAbstraction("logs-myintegration.dataset-default");
+        assertThat(kibanaRole.indices().allowedIndicesMatcher(GetIndexAction.NAME).test(logsStarDotStar), is(true));
+        assertThat(kibanaRole.indices().allowedIndicesMatcher(TransportSearchAction.TYPE.name()).test(logsStarDotStar), is(true));
+        assertThat(kibanaRole.indices().allowedIndicesMatcher(TransportGetAction.TYPE.name()).test(logsStarDotStar), is(true));
+        assertThat(kibanaRole.indices().allowedIndicesMatcher(TransportIndexAction.NAME).test(logsStarDotStar), is(false));
+        assertThat(kibanaRole.indices().allowedIndicesMatcher(TransportDeleteAction.NAME).test(logsStarDotStar), is(false));
+        assertThat(kibanaRole.indices().allowedIndicesMatcher(TransportCreateIndexAction.TYPE.name()).test(logsStarDotStar), is(false));
     }
 
     public void testKibanaAdminRole() {
