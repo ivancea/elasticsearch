@@ -7,12 +7,13 @@
 
 package org.elasticsearch.xpack.esql.expression.function.aggregate;
 
-import org.elasticsearch.TransportVersion;
 import org.elasticsearch.common.io.stream.BytesStreamOutput;
 import org.elasticsearch.common.io.stream.NamedWriteableAwareStreamInput;
 import org.elasticsearch.common.io.stream.StreamInput;
+import org.elasticsearch.test.TransportVersionUtils;
 import org.elasticsearch.xpack.esql.SerializationTestUtils;
 import org.elasticsearch.xpack.esql.core.expression.Expression;
+import org.elasticsearch.xpack.esql.core.expression.ReferenceAttribute;
 import org.elasticsearch.xpack.esql.core.tree.NodeInfo;
 import org.elasticsearch.xpack.esql.core.tree.Source;
 import org.elasticsearch.xpack.esql.core.type.DataType;
@@ -22,14 +23,14 @@ import org.elasticsearch.xpack.esql.io.stream.PlanStreamOutput;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.function.Supplier;
 
-import static org.elasticsearch.xpack.esql.action.EsqlExecutionInfo.EXECUTION_PROFILE_FORMAT_VERSION;
 import static org.hamcrest.Matchers.equalTo;
 
 public class SumSerializationTests extends AbstractExpressionSerializationTests<Sum> {
     @Override
     protected Sum createTestInstance() {
-        return new Sum(randomSource(), randomChild(), randomChild(), randomChild(), randomChild());
+        return new Sum(randomSource(), randomChild(), randomChild(), randomChild(), randomChild(), randomChild());
     }
 
     @Override
@@ -87,9 +88,10 @@ public class SumSerializationTests extends AbstractExpressionSerializationTests<
      * </ul>
      */
     public void testSerializeOldSum() throws IOException {
-        // TransportVersion before ESQL_SUM_LONG_OVERFLOW_FIX was added, which is what OldSum reproduces
-        var transportVersion = EXECUTION_PROFILE_FORMAT_VERSION;
-        var oldSum = new OldSum(randomSource(), randomChild(), randomChild(), randomChild());
+        var transportVersion = TransportVersionUtils.randomVersionNotSupporting(Sum.ESQL_SUM_LONG_OVERFLOW_FIX);
+        // Generates a child that's safe to used with old transport versions (E.g. No fields with qualifiers, or new DataTypes
+        Supplier<Expression> randomSafeChild = () -> new ReferenceAttribute(Source.EMPTY, null, randomAlphaOfLength(5), DataType.LONG);
+        var oldSum = new OldSum(randomSource(), randomSafeChild.get(), randomSafeChild.get(), randomSafeChild.get());
         try (BytesStreamOutput out = new BytesStreamOutput()) {
             PlanStreamOutput planOut = new PlanStreamOutput(out, configuration());
             planOut.setTransportVersion(transportVersion);
@@ -115,7 +117,7 @@ public class SumSerializationTests extends AbstractExpressionSerializationTests<
      * Round-trip a Sum with {@code useOverflowingLongSupplier=true} on a version that supports the fix.
      */
     public void testSerializeSumWithOverflowingLongSupplier() throws IOException {
-        var transportVersion = TransportVersion.current();
+        var transportVersion = TransportVersionUtils.randomVersionSupporting(Sum.ESQL_SUM_LONG_OVERFLOW_FIX);
         var sum = new Sum(randomSource(), randomChild(), randomChild(), randomChild(), randomChild(), Sum.OVERFLOWING_LONG);
         try (BytesStreamOutput out = new BytesStreamOutput()) {
             PlanStreamOutput planOut = new PlanStreamOutput(out, configuration());
