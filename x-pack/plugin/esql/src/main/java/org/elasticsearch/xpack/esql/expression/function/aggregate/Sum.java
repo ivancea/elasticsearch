@@ -66,14 +66,14 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
      *     Used by default, and replaced with {@link #LONG_OVERFLOW_WARN} in {@link #forTransportVersion}.
      * </p>
      */
-    public static final Literal LONG_OVERFLOW_THROW = Literal.keyword(Source.EMPTY, "overflowing_long");
+    public static final Literal LONG_OVERFLOW_THROW = Literal.keyword(Source.EMPTY, "long_overflow_throw");
     /**
      * Mode for {@link #longOverflowMode}, returning a null and a warning on long overflows.
      * <p>
      *     New behavior added in {@link #ESQL_SUM_LONG_OVERFLOW_FIX}.
      * </p>
      */
-    public static final Literal LONG_OVERFLOW_WARN = Literal.keyword(Source.EMPTY, "safe_long");
+    public static final Literal LONG_OVERFLOW_WARN = Literal.keyword(Source.EMPTY, "long_overflow_warn");
 
     private final Expression summationMode;
     /**
