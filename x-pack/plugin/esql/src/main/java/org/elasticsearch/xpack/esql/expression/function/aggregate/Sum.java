@@ -57,12 +57,27 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
 
     public static final TransportVersion ESQL_SUM_LONG_OVERFLOW_FIX = TransportVersion.fromName("esql_sum_long_overflow_fix");
 
-    public static final Literal OVERFLOWING_LONG = Literal.keyword(Source.EMPTY, "overflowing_long");
-    public static final Literal SAFE_LONG = Literal.keyword(Source.EMPTY, "safe_long");
+    /**
+     * Mode for {@link #longOverflowMode}, throwing a 500 error on long overflows.
+     * <p>
+     *     Old pre-{@link #ESQL_SUM_LONG_OVERFLOW_FIX} behavior.
+     * </p>
+     * <p>
+     *     Used by default, and replaced with {@link #LONG_OVERFLOW_WARN} in {@link #forTransportVersion}.
+     * </p>
+     */
+    public static final Literal LONG_OVERFLOW_THROW = Literal.keyword(Source.EMPTY, "overflowing_long");
+    /**
+     * Mode for {@link #longOverflowMode}, returning a null and a warning on long overflows.
+     * <p>
+     *     New behavior added in {@link #ESQL_SUM_LONG_OVERFLOW_FIX}.
+     * </p>
+     */
+    public static final Literal LONG_OVERFLOW_WARN = Literal.keyword(Source.EMPTY, "safe_long");
 
     private final Expression summationMode;
     /**
-     * Either {@link #OVERFLOWING_LONG} or {@link #SAFE_LONG}.
+     * Either {@link #LONG_OVERFLOW_THROW} or {@link #LONG_OVERFLOW_WARN}.
      * Set internally only, used for BWC.
      */
     private final Expression longOverflowMode;
@@ -92,7 +107,7 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
     }
 
     public Sum(Source source, Expression field, Expression filter, Expression window, Expression summationMode) {
-        this(source, field, filter, window, summationMode, OVERFLOWING_LONG);
+        this(source, field, filter, window, summationMode, LONG_OVERFLOW_THROW);
     }
 
     public Sum(
@@ -127,7 +142,7 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
     private static SumParameters readParameters(StreamInput in) throws IOException {
         List<Expression> parameters = in.readNamedWriteableCollectionAsList(Expression.class);
         Expression summationMode = parameters.isEmpty() ? SummationMode.COMPENSATED_LITERAL : parameters.getFirst();
-        Expression overflowing = parameters.size() >= 2 ? parameters.get(1) : OVERFLOWING_LONG;
+        Expression overflowing = parameters.size() >= 2 ? parameters.get(1) : LONG_OVERFLOW_THROW;
         return new SumParameters(summationMode, overflowing);
     }
 
@@ -162,7 +177,7 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
 
     @Override
     protected AggregatorFunctionSupplier longSupplier() {
-        if (longOverflowMode().equals(OVERFLOWING_LONG)) {
+        if (longOverflowMode().equals(LONG_OVERFLOW_THROW)) {
             return new SumOverflowingLongAggregatorFunctionSupplier();
         }
         return new SumLongAggregatorFunctionSupplier(source());
@@ -261,8 +276,8 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
 
     @Override
     public Expression forTransportVersion(TransportVersion minTransportVersion) {
-        if (minTransportVersion.supports(ESQL_SUM_LONG_OVERFLOW_FIX) && longOverflowMode().equals(OVERFLOWING_LONG)) {
-            return new Sum(source(), field(), filter(), window(), summationMode, SAFE_LONG);
+        if (minTransportVersion.supports(ESQL_SUM_LONG_OVERFLOW_FIX) && longOverflowMode().equals(LONG_OVERFLOW_THROW)) {
+            return new Sum(source(), field(), filter(), window(), summationMode, LONG_OVERFLOW_WARN);
         }
         return null;
     }

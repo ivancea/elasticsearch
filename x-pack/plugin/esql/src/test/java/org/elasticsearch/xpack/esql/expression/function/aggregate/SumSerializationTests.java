@@ -86,7 +86,7 @@ public class SumSerializationTests extends AbstractExpressionSerializationTests<
      * Ensures that, after deserializing the "Old" aggregate function;:
      * <ul>
      *     <li>{@link Sum#summationMode()} defaults to {@link SummationMode#COMPENSATED_LITERAL}</li>
-     *     <li>{@link Sum#longOverflowMode()} defaults to {@link Sum#OVERFLOWING_LONG}</li>
+     *     <li>{@link Sum#longOverflowMode()} defaults to {@link Sum#LONG_OVERFLOW_THROW}</li>
      * </ul>
      */
     public void testSerializeOldSum() throws IOException {
@@ -110,17 +110,17 @@ public class SumSerializationTests extends AbstractExpressionSerializationTests<
                 assertThat(serialized.source(), equalTo(oldSum.source()));
                 assertThat(serialized.field(), equalTo(oldSum.field()));
                 assertThat(serialized.summationMode(), equalTo(SummationMode.COMPENSATED_LITERAL));
-                assertThat(serialized.longOverflowMode(), equalTo(Sum.OVERFLOWING_LONG));
+                assertThat(serialized.longOverflowMode(), equalTo(Sum.LONG_OVERFLOW_THROW));
             }
         }
     }
 
     /**
-     * Round-trip a Sum with {@code longOverflowMode=OVERFLOWING_LONG} on a version that supports the fix.
+     * Round-trip a Sum with {@code longOverflowMode=LONG_OVERFLOW_THROW} on a version that supports the fix.
      */
     public void testSerializeSumWithOverflowingLongSupplier() throws IOException {
         var transportVersion = TransportVersionUtils.randomVersionSupporting(Sum.ESQL_SUM_LONG_OVERFLOW_FIX);
-        var sum = new Sum(randomSource(), randomChild(), randomChild(), randomChild(), randomChild(), Sum.OVERFLOWING_LONG);
+        var sum = new Sum(randomSource(), randomChild(), randomChild(), randomChild(), randomChild(), Sum.LONG_OVERFLOW_THROW);
         try (BytesStreamOutput out = new BytesStreamOutput()) {
             PlanStreamOutput planOut = new PlanStreamOutput(out, configuration());
             planOut.setTransportVersion(transportVersion);
@@ -136,7 +136,7 @@ public class SumSerializationTests extends AbstractExpressionSerializationTests<
                 Sum serialized = (Sum) planIn.readNamedWriteable(categoryClass());
                 assertThat(serialized.source(), equalTo(sum.source()));
                 assertThat(serialized.field(), equalTo(sum.field()));
-                assertThat(serialized.longOverflowMode(), equalTo(Sum.OVERFLOWING_LONG));
+                assertThat(serialized.longOverflowMode(), equalTo(Sum.LONG_OVERFLOW_THROW));
             }
         }
     }

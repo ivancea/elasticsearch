@@ -41,7 +41,7 @@ public class SubstituteTransportVersionAwareExpressionsTests extends ESTestCase 
         TransportVersion newVersion = TransportVersionUtils.randomVersionSupporting(ESQL_SUM_LONG_OVERFLOW_FIX);
         Expression result = SubstituteTransportVersionAwareExpressions.rule(sum, newVersion);
         assertThat(result, instanceOf(Sum.class));
-        assertThat(((Sum) result).longOverflowMode(), is(Sum.SAFE_LONG));
+        assertThat(((Sum) result).longOverflowMode(), is(Sum.LONG_OVERFLOW_WARN));
         assertThat(result, not(sameInstance(sum)));
     }
 
@@ -53,7 +53,14 @@ public class SubstituteTransportVersionAwareExpressionsTests extends ESTestCase 
      */
     public void testSumAlreadyOverflowingWithOldVersion() {
         Expression field = getFieldAttribute("f", DataType.LONG);
-        Sum sum = new Sum(EMPTY, field, Literal.TRUE, AggregateFunction.NO_WINDOW, SummationMode.COMPENSATED_LITERAL, Sum.OVERFLOWING_LONG);
+        Sum sum = new Sum(
+            EMPTY,
+            field,
+            Literal.TRUE,
+            AggregateFunction.NO_WINDOW,
+            SummationMode.COMPENSATED_LITERAL,
+            Sum.LONG_OVERFLOW_THROW
+        );
         TransportVersion oldVersion = TransportVersionUtils.randomVersionNotSupporting(ESQL_SUM_LONG_OVERFLOW_FIX);
         Expression result = SubstituteTransportVersionAwareExpressions.rule(sum, oldVersion);
         assertThat(result, sameInstance(sum));
@@ -64,11 +71,18 @@ public class SubstituteTransportVersionAwareExpressionsTests extends ESTestCase 
      */
     public void testSumOverflowingWithNewVersionUpgraded() {
         Expression field = getFieldAttribute("f", DataType.LONG);
-        Sum sum = new Sum(EMPTY, field, Literal.TRUE, AggregateFunction.NO_WINDOW, SummationMode.COMPENSATED_LITERAL, Sum.OVERFLOWING_LONG);
+        Sum sum = new Sum(
+            EMPTY,
+            field,
+            Literal.TRUE,
+            AggregateFunction.NO_WINDOW,
+            SummationMode.COMPENSATED_LITERAL,
+            Sum.LONG_OVERFLOW_THROW
+        );
         TransportVersion newVersion = TransportVersionUtils.randomVersionSupporting(ESQL_SUM_LONG_OVERFLOW_FIX);
         Expression result = SubstituteTransportVersionAwareExpressions.rule(sum, newVersion);
         assertThat(result, instanceOf(Sum.class));
-        assertThat(((Sum) result).longOverflowMode(), is(Sum.SAFE_LONG));
+        assertThat(((Sum) result).longOverflowMode(), is(Sum.LONG_OVERFLOW_WARN));
         assertThat(result, not(sameInstance(sum)));
     }
 
@@ -77,7 +91,14 @@ public class SubstituteTransportVersionAwareExpressionsTests extends ESTestCase 
      */
     public void testSumAlreadySafeWithNewVersion() {
         Expression field = getFieldAttribute("f", DataType.LONG);
-        Sum sum = new Sum(EMPTY, field, Literal.TRUE, AggregateFunction.NO_WINDOW, SummationMode.COMPENSATED_LITERAL, Sum.SAFE_LONG);
+        Sum sum = new Sum(
+            EMPTY,
+            field,
+            Literal.TRUE,
+            AggregateFunction.NO_WINDOW,
+            SummationMode.COMPENSATED_LITERAL,
+            Sum.LONG_OVERFLOW_WARN
+        );
         TransportVersion newVersion = TransportVersionUtils.randomVersionSupporting(ESQL_SUM_LONG_OVERFLOW_FIX);
         Expression result = SubstituteTransportVersionAwareExpressions.rule(sum, newVersion);
         assertThat(result, sameInstance(sum));
@@ -89,7 +110,7 @@ public class SubstituteTransportVersionAwareExpressionsTests extends ESTestCase 
         TransportVersion newVersion = TransportVersionUtils.randomVersionSupporting(ESQL_SUM_LONG_OVERFLOW_FIX);
         Expression result = SubstituteTransportVersionAwareExpressions.rule(sum, newVersion);
         assertThat(result, instanceOf(Sum.class));
-        assertThat(((Sum) result).longOverflowMode(), is(Sum.SAFE_LONG));
+        assertThat(((Sum) result).longOverflowMode(), is(Sum.LONG_OVERFLOW_WARN));
     }
 
     public void testNonTransportVersionAwareUnchanged() {
