@@ -504,21 +504,22 @@ public class CategorizeBlockHashTests extends BlockHashTestCase {
             driverContext,
             new LocalSourceOperator(input1),
             List.of(
-                new HashAggregationOperator.HashAggregationOperatorFactory(
-                    List.of(groupSpec),
-                    AggregatorMode.INITIAL,
-                    List.of(
-                        new SumLongAggregatorFunctionSupplier(TestWarningsSource.INSTANCE).groupingAggregatorFactory(
-                            AggregatorMode.INITIAL,
-                            List.of(1)
-                        ),
-                        new MaxLongAggregatorFunctionSupplier().groupingAggregatorFactory(AggregatorMode.INITIAL, List.of(1))
-                    ),
-                    16 * 1024,
-                    Integer.MAX_VALUE,
-                    1.0,
-                    analysisRegistry
-                ).get(driverContext)
+                new HashAggregationOperator.Builder().groups(List.of(groupSpec))
+                    .mode(AggregatorMode.INITIAL)
+                    .aggregators(
+                        List.of(
+                            new SumLongAggregatorFunctionSupplier(TestWarningsSource.INSTANCE).groupingAggregatorFactory(
+                                AggregatorMode.INITIAL,
+                                List.of(1)
+                            ),
+                            new MaxLongAggregatorFunctionSupplier().groupingAggregatorFactory(AggregatorMode.INITIAL, List.of(1))
+                        )
+                    )
+                    .maxPageSize(16 * 1024)
+                    .aggregationBatchSize(16 * 1024)
+                    .analysisRegistry(analysisRegistry)
+                    .build()
+                    .get(driverContext)
             ),
             new PageConsumerOperator(intermediateOutput::add)
         );
@@ -528,21 +529,22 @@ public class CategorizeBlockHashTests extends BlockHashTestCase {
             driverContext,
             new LocalSourceOperator(input2),
             List.of(
-                new HashAggregationOperator.HashAggregationOperatorFactory(
-                    List.of(groupSpec),
-                    AggregatorMode.INITIAL,
-                    List.of(
-                        new SumLongAggregatorFunctionSupplier(TestWarningsSource.INSTANCE).groupingAggregatorFactory(
-                            AggregatorMode.INITIAL,
-                            List.of(1)
-                        ),
-                        new MaxLongAggregatorFunctionSupplier().groupingAggregatorFactory(AggregatorMode.INITIAL, List.of(1))
-                    ),
-                    16 * 1024,
-                    Integer.MAX_VALUE,
-                    1.0,
-                    analysisRegistry
-                ).get(driverContext)
+                new HashAggregationOperator.Builder().groups(List.of(groupSpec))
+                    .mode(AggregatorMode.INITIAL)
+                    .aggregators(
+                        List.of(
+                            new SumLongAggregatorFunctionSupplier(TestWarningsSource.INSTANCE).groupingAggregatorFactory(
+                                AggregatorMode.INITIAL,
+                                List.of(1)
+                            ),
+                            new MaxLongAggregatorFunctionSupplier().groupingAggregatorFactory(AggregatorMode.INITIAL, List.of(1))
+                        )
+                    )
+                    .maxPageSize(16 * 1024)
+                    .aggregationBatchSize(16 * 1024)
+                    .analysisRegistry(analysisRegistry)
+                    .build()
+                    .get(driverContext)
             ),
             new PageConsumerOperator(intermediateOutput::add)
         );
@@ -554,21 +556,23 @@ public class CategorizeBlockHashTests extends BlockHashTestCase {
             driverContext,
             new CannedSourceOperator(intermediateOutput.iterator()),
             List.of(
-                new HashAggregationOperator.HashAggregationOperatorFactory(
-                    List.of(groupSpec),
-                    AggregatorMode.FINAL,
-                    List.of(
-                        new SumLongAggregatorFunctionSupplier(TestWarningsSource.INSTANCE).groupingAggregatorFactory(
-                            AggregatorMode.FINAL,
-                            List.of(1, 2, 3)
-                        ),
-                        new MaxLongAggregatorFunctionSupplier().groupingAggregatorFactory(AggregatorMode.FINAL, List.of(4, 5))
-                    ),
-                    16 * 1024,
-                    randomIntBetween(1, 1000),
-                    randomDoubleBetween(0.1, 1.0, true),
-                    analysisRegistry
-                ).get(driverContext)
+                new HashAggregationOperator.Builder().groups(List.of(groupSpec))
+                    .mode(AggregatorMode.FINAL)
+                    .aggregators(
+                        List.of(
+                            new SumLongAggregatorFunctionSupplier(TestWarningsSource.INSTANCE).groupingAggregatorFactory(
+                                AggregatorMode.FINAL,
+                                List.of(1, 2, 3)
+                            ),
+                            new MaxLongAggregatorFunctionSupplier().groupingAggregatorFactory(AggregatorMode.FINAL, List.of(4, 5))
+                        )
+                    )
+                    .partialEmit(randomIntBetween(1, 1000), randomDoubleBetween(0.1, 1.0, true))
+                    .maxPageSize(16 * 1024)
+                    .aggregationBatchSize(16 * 1024)
+                    .analysisRegistry(analysisRegistry)
+                    .build()
+                    .get(driverContext)
             ),
             new PageConsumerOperator(finalOutput::add)
         );
