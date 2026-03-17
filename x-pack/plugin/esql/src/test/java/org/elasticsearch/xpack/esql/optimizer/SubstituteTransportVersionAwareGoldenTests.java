@@ -18,24 +18,24 @@ import org.elasticsearch.xpack.esql.expression.function.aggregate.Sum;
  * </p>
  */
 public class SubstituteTransportVersionAwareGoldenTests extends GoldenTestCase {
-    public void testTransportVersionAwareGetsReplaced() {
-        builder("""
-            FROM employees
-            | STATS sum = SUM(salary)
-            """).transportVersion(TransportVersionUtils.randomVersionNotSupporting(Sum.ESQL_SUM_LONG_OVERFLOW_FIX)).run();
-    }
-
-    public void testTransportVersionAwareNotReplaced() {
+    public void testSumGetsReplacedWithSafeLong() {
         builder("""
             FROM employees
             | STATS sum = SUM(salary)
             """).transportVersion(TransportVersionUtils.randomVersionSupporting(Sum.ESQL_SUM_LONG_OVERFLOW_FIX)).run();
     }
 
-    public void testTransportVersionAwareGetsReplacedWithMultipleAggsAndGroups() {
+    public void testSumStaysWithOverflowingLong() {
+        builder("""
+            FROM employees
+            | STATS sum = SUM(salary)
+            """).transportVersion(TransportVersionUtils.randomVersionNotSupporting(Sum.ESQL_SUM_LONG_OVERFLOW_FIX)).run();
+    }
+
+    public void testSumGetsReplacedWithSafeLongAndMultipleAggsAndGroups() {
         builder("""
             FROM employees
             | STATS sum_a = SUM(salary), sum_b = SUM(emp_no) BY emp_no
-            """).transportVersion(TransportVersionUtils.randomVersionNotSupporting(Sum.ESQL_SUM_LONG_OVERFLOW_FIX)).run();
+            """).transportVersion(TransportVersionUtils.randomVersionSupporting(Sum.ESQL_SUM_LONG_OVERFLOW_FIX)).run();
     }
 }

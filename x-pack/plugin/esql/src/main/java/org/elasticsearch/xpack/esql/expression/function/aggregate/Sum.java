@@ -92,7 +92,7 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
     }
 
     public Sum(Source source, Expression field, Expression filter, Expression window, Expression summationMode) {
-        this(source, field, filter, window, summationMode, SAFE_LONG);
+        this(source, field, filter, window, summationMode, OVERFLOWING_LONG);
     }
 
     public Sum(
@@ -261,8 +261,8 @@ public class Sum extends NumericAggregate implements SurrogateExpression, Transp
 
     @Override
     public Expression forTransportVersion(TransportVersion minTransportVersion) {
-        if (minTransportVersion.supports(ESQL_SUM_LONG_OVERFLOW_FIX) == false && useOverflowingLongSupplier() == false) {
-            return new Sum(source(), field(), filter(), window(), summationMode, OVERFLOWING_LONG);
+        if (minTransportVersion.supports(ESQL_SUM_LONG_OVERFLOW_FIX) && useOverflowingLongSupplier()) {
+            return new Sum(source(), field(), filter(), window(), summationMode, SAFE_LONG);
         }
         return null;
     }

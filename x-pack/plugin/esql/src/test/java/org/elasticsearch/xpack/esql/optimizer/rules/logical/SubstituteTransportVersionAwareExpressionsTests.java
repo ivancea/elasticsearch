@@ -27,26 +27,26 @@ import static org.hamcrest.Matchers.sameInstance;
 public class SubstituteTransportVersionAwareExpressionsTests extends ESTestCase {
     private static final TransportVersion ESQL_SUM_LONG_OVERFLOW_FIX = TransportVersion.fromName("esql_sum_long_overflow_fix");
 
-    public void testSumReplacedWithOldVersion() {
+    public void testSumNotReplacedWithOldVersion() {
         Expression field = getFieldAttribute("f", DataType.LONG);
         Sum sum = new Sum(EMPTY, field);
         TransportVersion oldVersion = TransportVersionUtils.randomVersionNotSupporting(ESQL_SUM_LONG_OVERFLOW_FIX);
         Expression result = SubstituteTransportVersionAwareExpressions.rule(sum, oldVersion);
-        assertThat(result, instanceOf(Sum.class));
-        assertThat(((Sum) result).useOverflowingLongSupplier(), is(true));
-        assertThat(result, not(sameInstance(sum)));
+        assertThat(result, sameInstance(sum));
     }
 
-    public void testSumNotReplacedWithCurrentVersion() {
+    public void testSumReplacedWithCurrentVersion() {
         Expression field = getFieldAttribute("f", DataType.LONG);
         Sum sum = new Sum(EMPTY, field);
         TransportVersion newVersion = TransportVersionUtils.randomVersionSupporting(ESQL_SUM_LONG_OVERFLOW_FIX);
         Expression result = SubstituteTransportVersionAwareExpressions.rule(sum, newVersion);
-        assertThat(result, sameInstance(sum));
+        assertThat(result, instanceOf(Sum.class));
+        assertThat(((Sum) result).useOverflowingLongSupplier(), is(false));
+        assertThat(result, not(sameInstance(sum)));
     }
 
     /**
-     * Checks that if an overflowing sum (used for old transport versions) receives an old transport version, it won't be changed.
+     * Checks that if an overflowing sum receives an old transport version, it won't be changed.
      * <p>
      *     This tests idempotence.
      * </p>
@@ -60,27 +60,36 @@ public class SubstituteTransportVersionAwareExpressionsTests extends ESTestCase 
     }
 
     /**
-     * Checks that if an overflowing sum (used for old transport versions) receives a new transport version, it won't be changed again.
-     * <p>
-     *     <b>This shouldn't happen in practice</b>, unless Sum is purposely initialized with the overflowing=true.
-     *     But we're testing it anyway to ensure the behavior doesn't change.
-     * </p>
+     * Checks that an overflowing sum with a new transport version gets upgraded to safe long mode.
      */
-    public void testSumAlreadyOverflowingWithNewVersionKeptOverflowing() {
+    public void testSumOverflowingWithNewVersionUpgraded() {
         Expression field = getFieldAttribute("f", DataType.LONG);
         Sum sum = new Sum(EMPTY, field, Literal.TRUE, AggregateFunction.NO_WINDOW, SummationMode.COMPENSATED_LITERAL, Sum.OVERFLOWING_LONG);
+        TransportVersion newVersion = TransportVersionUtils.randomVersionSupporting(ESQL_SUM_LONG_OVERFLOW_FIX);
+        Expression result = SubstituteTransportVersionAwareExpressions.rule(sum, newVersion);
+        assertThat(result, instanceOf(Sum.class));
+        assertThat(((Sum) result).useOverflowingLongSupplier(), is(false));
+        assertThat(result, not(sameInstance(sum)));
+    }
+
+    /**
+     * Checks that a safe long sum with a new transport version is not changed (idempotent).
+     */
+    public void testSumAlreadySafeWithNewVersion() {
+        Expression field = getFieldAttribute("f", DataType.LONG);
+        Sum sum = new Sum(EMPTY, field, Literal.TRUE, AggregateFunction.NO_WINDOW, SummationMode.COMPENSATED_LITERAL, Sum.SAFE_LONG);
         TransportVersion newVersion = TransportVersionUtils.randomVersionSupporting(ESQL_SUM_LONG_OVERFLOW_FIX);
         Expression result = SubstituteTransportVersionAwareExpressions.rule(sum, newVersion);
         assertThat(result, sameInstance(sum));
     }
 
-    public void testSumDoubleFieldWithOldVersion() {
+    public void testSumDoubleFieldWithNewVersion() {
         Expression field = getFieldAttribute("f", DataType.DOUBLE);
         Sum sum = new Sum(EMPTY, field);
-        TransportVersion oldVersion = TransportVersionUtils.randomVersionNotSupporting(ESQL_SUM_LONG_OVERFLOW_FIX);
-        Expression result = SubstituteTransportVersionAwareExpressions.rule(sum, oldVersion);
+        TransportVersion newVersion = TransportVersionUtils.randomVersionSupporting(ESQL_SUM_LONG_OVERFLOW_FIX);
+        Expression result = SubstituteTransportVersionAwareExpressions.rule(sum, newVersion);
         assertThat(result, instanceOf(Sum.class));
-        assertThat(((Sum) result).useOverflowingLongSupplier(), is(true));
+        assertThat(((Sum) result).useOverflowingLongSupplier(), is(false));
     }
 
     public void testNonTransportVersionAwareUnchanged() {
