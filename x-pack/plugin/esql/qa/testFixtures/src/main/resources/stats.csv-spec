@@ -3898,6 +3898,23 @@ null          | null           | 6          | 0
 null          | null           | 9          | 1
 ;
 
+sumWithOverflowMixedGrouping
+required_capability: fix_sum_agg_long_overflow
+FROM employees
+| SORT emp_no ASC
+| LIMIT 4
+| EVAL group = emp_no % 2, x = CASE(group == 0, 9223372036854775807, 1::long)
+| STATS s = SUM(x) BY group
+| SORT group
+;
+warning:Line 5:13: evaluation of [SUM(x)] failed, treating result as null. Only first 20 failures recorded.
+warning:Line 5:13: java.lang.ArithmeticException: long overflow
+
+s:long | group:integer
+null   | 0
+2      | 1
+;
+
 sumWithOverflowRow
 required_capability: fix_sum_agg_long_overflow
 ROW x = [9223372036854775807, 9223372036854775807]
