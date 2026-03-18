@@ -74,14 +74,7 @@ public class LimitByGenerator implements CommandGenerator {
     ) {
         int limit = (int) commandDescription.context().get(LIMIT_CONTEXT);
 
-        if (output.size() > previousOutput.size()) {
-            return new ValidationResult(
-                false,
-                "LIMIT BY should not increase row count: was [" + previousOutput.size() + "], got [" + output.size() + "]"
-            );
-        }
-
-        if (limit == 0 && output.size() > 0) {
+        if (limit == 0 && output.isEmpty() == false) {
             return new ValidationResult(false, "LIMIT 0 BY should return no rows, got [" + output.size() + "]");
         }
 
