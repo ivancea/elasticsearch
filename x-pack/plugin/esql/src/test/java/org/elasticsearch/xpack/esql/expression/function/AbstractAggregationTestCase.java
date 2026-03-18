@@ -622,9 +622,12 @@ public abstract class AbstractAggregationTestCase extends AbstractFunctionTestCa
             });
         }
 
-        expression = SubstituteSurrogateExpressions.rule(expression);
+        expression = expression.transformUp(AggregateFunction.class, SubstituteSurrogateExpressions::rule);
 
-        expression = SubstituteTransportVersionAwareExpressions.rule(expression, TransportVersion.current());
+        expression = expression.transformUp(
+            AggregateFunction.class,
+            agg -> SubstituteTransportVersionAwareExpressions.rule(agg, TransportVersion.current())
+        );
 
         return expression;
     }
