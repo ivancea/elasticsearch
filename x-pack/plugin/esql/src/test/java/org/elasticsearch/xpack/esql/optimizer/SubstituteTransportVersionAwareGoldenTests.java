@@ -21,21 +21,21 @@ public class SubstituteTransportVersionAwareGoldenTests extends GoldenTestCase {
     public void testSumGetsReplacedWithSafeLong() {
         builder("""
             FROM employees
-            | STATS sum = SUM(salary)
+            | STATS sum = SUM(languages.long)
             """).transportVersion(TransportVersionUtils.randomVersionSupporting(Sum.ESQL_SUM_LONG_OVERFLOW_FIX)).run();
     }
 
     public void testSumStaysWithOverflowingLong() {
         builder("""
             FROM employees
-            | STATS sum = SUM(salary)
+            | STATS sum = SUM(languages.long)
             """).transportVersion(TransportVersionUtils.randomVersionNotSupporting(Sum.ESQL_SUM_LONG_OVERFLOW_FIX)).run();
     }
 
     public void testSumGetsReplacedWithSafeLongAndMultipleAggsAndGroups() {
         builder("""
             FROM employees
-            | STATS sum_a = SUM(salary), sum_b = SUM(emp_no) BY emp_no
+            | STATS sum_a = SUM(languages.long), sum_b = SUM(emp_no) BY emp_no
             """).transportVersion(TransportVersionUtils.randomVersionSupporting(Sum.ESQL_SUM_LONG_OVERFLOW_FIX)).run();
     }
 }
