@@ -83,7 +83,7 @@ public class SumSerializationTests extends AbstractExpressionSerializationTests<
     }
 
     /**
-     * Ensures that, after deserializing the "Old" aggregate function;:
+     * Ensures that, after deserializing the "Old" aggregate function:
      * <ul>
      *     <li>{@link Sum#summationMode()} defaults to {@link SummationMode#COMPENSATED_LITERAL}</li>
      *     <li>{@link Sum#longOverflowMode()} defaults to {@link Sum#LONG_OVERFLOW_THROW}</li>
@@ -91,7 +91,7 @@ public class SumSerializationTests extends AbstractExpressionSerializationTests<
      */
     public void testSerializeOldSum() throws IOException {
         var transportVersion = TransportVersionUtils.randomVersionNotSupporting(Sum.ESQL_SUM_LONG_OVERFLOW_FIX);
-        // Generates a child that's safe to used with old transport versions (E.g. No fields with qualifiers, or new DataTypes
+        // Generates a child that's safe to be used with old transport versions (E.g. No fields with qualifiers, or new DataTypes)
         Supplier<Expression> randomSafeChild = () -> new ReferenceAttribute(Source.EMPTY, null, randomAlphaOfLength(5), DataType.LONG);
         var oldSum = new OldSum(randomSource(), randomSafeChild.get(), randomSafeChild.get(), randomSafeChild.get());
         try (BytesStreamOutput out = new BytesStreamOutput()) {
