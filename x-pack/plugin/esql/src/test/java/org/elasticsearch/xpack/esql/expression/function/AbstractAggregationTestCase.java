@@ -603,7 +603,7 @@ public abstract class AbstractAggregationTestCase extends AbstractFunctionTestCa
      * <ul>
      *     <li>Aggregation surrogates ({@link SubstituteSurrogateAggregations}). Executed twice, like in the optimizer.</li>
      *     <li>Expression surrogates ({@link SubstituteSurrogateExpressions})</li>
-     *     <lI>TransportVersionAware expressions {@link SubstituteTransportVersionAwareExpressions}</lI>
+     *     <li>TransportVersionAware expressions {@link SubstituteTransportVersionAwareExpressions}</li>
      * </ul>
      * <p>
      *     No-op if expecting errors.
@@ -622,12 +622,9 @@ public abstract class AbstractAggregationTestCase extends AbstractFunctionTestCa
             });
         }
 
-        expression = expression.transformUp(AggregateFunction.class, SubstituteSurrogateExpressions::rule);
+        expression = expression.transformUp(SubstituteSurrogateExpressions::rule);
 
-        expression = expression.transformUp(
-            AggregateFunction.class,
-            agg -> SubstituteTransportVersionAwareExpressions.rule(agg, TransportVersion.current())
-        );
+        expression = expression.transformUp(agg -> SubstituteTransportVersionAwareExpressions.rule(agg, TransportVersion.current()));
 
         return expression;
     }
