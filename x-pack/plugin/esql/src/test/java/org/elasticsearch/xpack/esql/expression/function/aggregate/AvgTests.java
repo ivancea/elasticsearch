@@ -41,15 +41,22 @@ public class AvgTests extends AbstractAggregationTestCase {
     @ParametersFactory
     public static Iterable<Object[]> parameters() {
         var suppliers = new ArrayList<TestCaseSupplier>();
-        FunctionAppliesTo histogramAppliesTo = appliesTo(FunctionAppliesToLifecycle.PREVIEW, "9.3.0", "", true);
+        FunctionAppliesTo histogramPreviewAppliesTo = appliesTo(FunctionAppliesToLifecycle.PREVIEW, "9.3.0", "", false);
+        FunctionAppliesTo histogramGaAppliesTo = appliesTo(FunctionAppliesToLifecycle.GA, "9.4.0", "", true);
 
         Stream.of(
             MultiRowTestCaseSupplier.intCases(1, 1000, Integer.MIN_VALUE, Integer.MAX_VALUE, true),
             MultiRowTestCaseSupplier.longCases(1, 1000, Long.MIN_VALUE, Long.MAX_VALUE, true),
             MultiRowTestCaseSupplier.doubleCases(1, 1000, -Double.MAX_VALUE, Double.MAX_VALUE, true),
             MultiRowTestCaseSupplier.aggregateMetricDoubleCases(1, 1000, -Double.MAX_VALUE, Double.MAX_VALUE),
-            MultiRowTestCaseSupplier.exponentialHistogramCases(1, 100).stream().map(s -> s.withAppliesTo(histogramAppliesTo)).toList(),
-            MultiRowTestCaseSupplier.tdigestCases(1, 100).stream().map(s -> s.withAppliesTo(histogramAppliesTo)).toList(),
+            MultiRowTestCaseSupplier.exponentialHistogramCases(1, 100)
+                .stream()
+                .map(s -> s.withAppliesTo(histogramPreviewAppliesTo).withAppliesTo(histogramGaAppliesTo))
+                .toList(),
+            MultiRowTestCaseSupplier.tdigestCases(1, 100)
+                .stream()
+                .map(s -> s.withAppliesTo(histogramPreviewAppliesTo).withAppliesTo(histogramGaAppliesTo))
+                .toList(),
 
             // No rows cases
             List.of(
@@ -110,12 +117,17 @@ public class AvgTests extends AbstractAggregationTestCase {
 
             Double expected = null;
             String expectedWarning = null;
+            boolean divByZero = false;
 
             if (fieldData.size() == 1) {
                 // For single elements, we directly return them to avoid precision issues
                 expected = switch (dataType) {
                     case AGGREGATE_METRIC_DOUBLE -> {
                         var aggMetric = (AggregateMetricDoubleBlockBuilder.AggregateMetricDoubleLiteral) fieldData.get(0);
+                        if (aggMetric.count() == 0) {
+                            divByZero = true;
+                            yield null;
+                        }
                         yield aggMetric.sum() / (aggMetric.count().doubleValue());
                     }
                     case EXPONENTIAL_HISTOGRAM -> {
@@ -163,6 +175,10 @@ public class AvgTests extends AbstractAggregationTestCase {
                         long count = fieldData.stream()
                             .mapToLong(v -> ((AggregateMetricDoubleBlockBuilder.AggregateMetricDoubleLiteral) v).count())
                             .sum();
+                        if (count == 0) {
+                            divByZero = true;
+                            yield null;
+                        }
                         yield sum / count;
                     }
                     case EXPONENTIAL_HISTOGRAM -> {
@@ -185,11 +201,11 @@ public class AvgTests extends AbstractAggregationTestCase {
                 };
             }
 
-            if (expected != null) {
-                if (Double.isFinite(expected) == false) {
-                    expected = null;
-                    expectedWarning = "java.lang.ArithmeticException: / by zero";
-                }
+            if (divByZero) {
+                expectedWarning = "java.lang.ArithmeticException: / by zero";
+            } else if (expected != null && Double.isFinite(expected) == false) {
+                expectedWarning = "java.lang.ArithmeticException: not a finite double number: " + expected;
+                expected = null;
             }
 
             return new TestCaseSupplier.TestCase(
