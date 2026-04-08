@@ -113,10 +113,7 @@ public class SumLongGroupingAggregatorFunctionTests extends GroupingAggregatorFu
             totalPositions += page.getPositionCount();
             for (int i = 0; i < page.getPositionCount(); i++) {
                 long group = groupsBlock.getLong(i);
-                assertFalse(
-                    "duplicate output row for group " + group,
-                    sumsByGroup.containsKey(group) || nullSumGroups.contains(group)
-                );
+                assertFalse("duplicate output row for group " + group, sumsByGroup.containsKey(group) || nullSumGroups.contains(group));
                 if (sumBlock.isNull(i)) {
                     nullSumGroups.add(group);
                 } else {
