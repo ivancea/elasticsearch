@@ -449,19 +449,12 @@ public class MvPercentile extends EsqlScalarFunction {
     }
 
     /**
-     * Calculates a percentile for a double avoiding overflows.
-     * <p>
-     *     If the values are too separated (negative + positive), it uses a slightly different approach.
-     *     This approach would fail if the values are big but not separated, so it’s only used in this case.
-     * </p>
+     * Interpolates between two doubles for a multivalue percentile.
+     * Uses {@code (1 - fraction) * lower + fraction * upper} which is numerically stable:
+     * it avoids computing {@code upper - lower} (which can overflow to infinity or discard
+     * the smaller value when magnitudes differ vastly, causing catastrophic cancellation).
      */
-    private static double calculateDoublePercentile(double fraction, double lowerValue, double upperValue) {
-        if (lowerValue < 0 && upperValue > 0) {
-            // Order is required to avoid `upper - lower` overflows
-            return (lowerValue + fraction * upperValue) - fraction * lowerValue;
-        }
-
-        var difference = upperValue - lowerValue;
-        return lowerValue + fraction * difference;
+    static double calculateDoublePercentile(double fraction, double lowerValue, double upperValue) {
+        return (1 - fraction) * lowerValue + fraction * upperValue;
     }
 }

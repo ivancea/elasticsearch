@@ -211,7 +211,7 @@ public record RandomBlock(List<List<Object>> values, Block block) {
                     if (dedupedAndSortedList.size() != valuesAtPosition.size()) {
                         mvOrdering = Block.MvOrdering.UNORDERED;
                     } else if (dedupedAndSortedList.equals(valuesAtPosition) == false) {
-                        mvOrdering = Block.MvOrdering.DEDUPLICATED_UNORDERD;
+                        mvOrdering = Block.MvOrdering.DEDUPLICATED_UNORDERED;
                     }
                 }
             }
