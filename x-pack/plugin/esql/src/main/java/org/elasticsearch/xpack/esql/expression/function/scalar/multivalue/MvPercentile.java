@@ -450,9 +450,11 @@ public class MvPercentile extends EsqlScalarFunction {
 
     /**
      * Interpolates between two doubles for a multivalue percentile.
-     * Uses {@code (1 - fraction) * lower + fraction * upper} which is numerically stable:
-     * it avoids computing {@code upper - lower} (which can overflow to infinity or discard
-     * the smaller value when magnitudes differ vastly, causing catastrophic cancellation).
+     * <p>
+     *     Uses {@code (1 - fraction) * lower + fraction * upper}, which is numerically stable:
+     *     it avoids computing {@code upper - lower}, which can overflow to infinity,
+     *     or discard the smaller value when magnitudes differ vastly.
+     * </p>
      */
     static double calculateDoublePercentile(double fraction, double lowerValue, double upperValue) {
         return (1 - fraction) * lowerValue + fraction * upperValue;
