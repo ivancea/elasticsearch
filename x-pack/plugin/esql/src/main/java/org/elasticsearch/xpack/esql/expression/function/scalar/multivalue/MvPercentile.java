@@ -456,7 +456,7 @@ public class MvPercentile extends EsqlScalarFunction {
      *     or discard the smaller value when magnitudes differ vastly.
      * </p>
      */
-    static double calculateDoublePercentile(double fraction, double lowerValue, double upperValue) {
+    private static double calculateDoublePercentile(double fraction, double lowerValue, double upperValue) {
         return (1 - fraction) * lowerValue + fraction * upperValue;
     }
 }
