@@ -451,9 +451,35 @@ public class MvPercentile extends EsqlScalarFunction {
     /**
      * Interpolates between two doubles for a multivalue percentile.
      * <p>
-     *     Uses {@code (1 - fraction) * lower + fraction * upper}, which is numerically stable:
-     *     it avoids computing {@code upper - lower}, which can overflow to infinity,
-     *     or discard the smaller value when magnitudes differ vastly.
+     *     Uses {@code (1 - fraction) * lower + fraction * upper}, which is numerically stable.
+     * </p>
+     * <p>
+     *     The formula comes from the simple interpolation formula, which is:
+     *     <pre>lower + fraction * (upper - lower)</pre>
+     *     Expanding the multiplication:
+     *     <pre>lower + fraction * upper - fraction * lower</pre>
+     *     Factoring out {@code lower}:
+     *     <pre>(1 - fraction) * lower + fraction * upper</pre>
+     * </p>
+     * <p>
+     *     The straightforward formula has two problems for doubles:
+     *     <ul>
+     *         <li>
+     *             {@code upper - lower} can overflow to {@code +/-infinity} when the values have
+     *             opposite signs and large magnitudes (e.g. {@code MAX_VALUE - (-MAX_VALUE)}).
+     *         </li>
+     *         <li>
+     *             The addition in {@code lower + fraction * (upper - lower)} causes catastrophic
+     *             cancellation when {@code fraction} is close to 1 and {@code |upper| << |lower|}.
+     *             <p>
+     *                 For example, with {@code lower = -100}, {@code upper = -1},
+     *                 {@code fraction = 0.99} and a hypothetical 3-significant-digit float:
+     *                 <pre>-100 + 0.99 * 99 = -100 + 98.0(1!) = -2.00 (wrong, answer should be -1.99)</pre>
+     *                 With the equivalent form:
+     *                 <pre>0.01 * (-100) + 0.99 * (-1) = -1.00 + (-0.99) = -1.99 (correct)</pre>
+     *             </p>
+     *         </li>
+     *     </ul>
      * </p>
      */
     private static double calculateDoublePercentile(double fraction, double lowerValue, double upperValue) {
