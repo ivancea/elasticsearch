@@ -665,23 +665,6 @@ public class EsqlQueryGenerator {
         return randomBoolean() ? indexName : indexName.substring(0, randomIntBetween(0, indexName.length())) + "*";
     }
 
-    public static String row() {
-        StringBuilder cmd = new StringBuilder("row ");
-        int nFields = randomIntBetween(1, 10);
-        for (int i = 0; i < nFields; i++) {
-            String name = randomIdentifier();
-            String expression = constantExpression();
-            if (i > 0) {
-                cmd.append(",");
-            }
-            cmd.append(" ");
-            cmd.append(name);
-            cmd.append(" = ");
-            cmd.append(expression);
-        }
-        return cmd.toString();
-    }
-
     public static String constantExpression() {
         // TODO not only simple values, but also foldable expressions
         if (randomBoolean()) {

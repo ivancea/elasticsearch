@@ -73,10 +73,7 @@ public class RowGenerator implements CommandGenerator {
         List<String> expectedNames = (List<String>) commandDescription.context().get(COLUMNS);
         List<String> actualNames = columns.stream().map(Column::name).toList();
         if (actualNames.equals(expectedNames) == false) {
-            return new ValidationResult(
-                false,
-                "ROW columns mismatch: expected " + expectedNames + " but got " + actualNames
-            );
+            return new ValidationResult(false, "ROW columns mismatch: expected " + expectedNames + " but got " + actualNames);
         }
         return VALIDATION_OK;
     }
