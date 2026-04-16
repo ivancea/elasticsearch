@@ -65,10 +65,14 @@ public class PushCountQueryAndTagsToSource extends PhysicalOptimizerRules.Optimi
         // There should be exactly one grouping field (hence 2 aggregates: agg + group by field).
         // The aggregation should be Count(*) or CountApproximate(*), without a filter on the count
         // itself.
+        // Note: CombineProjections may remove the grouping key from aggregates when it's unused
+        // downstream, leaving 2 aggregates that are both aggregate functions (e.g. COUNT + MAX).
+        // We must verify the second aggregate is NOT an aggregate function.
         if (aggregateExec.aggregates().size() == 2
             && aggregateExec.aggregates().getFirst() instanceof Alias alias
             && ((alias.child() instanceof Count count && count.hasFilter() == false && count.field() instanceof Literal)
                 || (alias.child() instanceof CountApproximate ca && ca.hasFilter() == false && ca.field() instanceof Literal))
+            && (Alias.unwrap(aggregateExec.aggregates().get(1)) instanceof AggregateFunction == false)
             && aggregateExec.child() instanceof EvalExec evalExec
             && evalExec.child() instanceof EsQueryExec queryExec
             && queryExec.queryBuilderAndTags().size() > 1 // Ensures there are query and tags to push down.
