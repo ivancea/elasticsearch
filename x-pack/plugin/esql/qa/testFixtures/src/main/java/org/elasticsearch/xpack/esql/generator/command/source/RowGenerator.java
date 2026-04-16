@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.elasticsearch.test.ESTestCase.randomFrom;
 import static org.elasticsearch.test.ESTestCase.randomIntBetween;
 import static org.elasticsearch.xpack.esql.generator.EsqlQueryGenerator.constantExpression;
 
@@ -39,15 +40,15 @@ public class RowGenerator implements CommandGenerator {
         QuerySchema schema,
         QueryExecutor executor
     ) {
-        int nFields = randomIntBetween(1, 5);
+        int nFields = randomIntBetween(1, 10);
         StringBuilder result = new StringBuilder("ROW ");
         Set<String> names = new LinkedHashSet<>();
 
         for (int i = 0; i < nFields; i++) {
-            String name;
-            do {
-                name = EsqlQueryGenerator.randomIdentifier();
-            } while (names.add(name) == false);
+            // 25% of the time, reuse an existing field name. The last one wins.
+            String name = (i > 0 && randomIntBetween(0, 3) == 0) ? randomFrom(names) : EsqlQueryGenerator.randomIdentifier();
+            names.remove(name);
+            names.add(name);
 
             if (i > 0) {
                 result.append(", ");
