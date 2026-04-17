@@ -75,9 +75,8 @@ public class SubstituteRoundToGoldenTests extends GoldenTestCase {
 
     // https://github.com/elastic/elasticsearch/issues/146479
     // When the grouping key is dropped and COUNT(*) is the only agg, CombineProjections removes
-    // the grouping key from aggregates leaving [COUNT] (size 1). The rule doesn't fire (missed
-    // optimization, but correct results).
-    public void testDateTruncCountOnlyNotPushedWhenGroupingKeyDropped() {
+    // the grouping key from aggregates leaving [COUNT] (size 1). But it should still be pushed down.
+    public void testDateTruncCountOnlyPushedWhenGroupingKeyDropped() {
         for (var queryAndName : dateHistograms) {
             String query = LoggerMessageFormat.format(null, """
                 from all_types
