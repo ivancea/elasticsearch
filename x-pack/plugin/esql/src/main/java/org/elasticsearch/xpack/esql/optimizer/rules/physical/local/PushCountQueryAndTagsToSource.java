@@ -70,7 +70,8 @@ public class PushCountQueryAndTagsToSource extends PhysicalOptimizerRules.Optimi
         // The COUNT must be Count(*) or CountApproximate(*), without a filter on the count itself.
         if (aggregateExec.groupings().size() == 1
             && (aggregateExec.aggregates().size() == 1
-                // The second "aggregate" must be the grouping itself
+                // The second "aggregate" must be the grouping itself.
+                // Sometimes CombineProjections or other rules may remove it, so we check for both 1 and 2 aggs
                 || aggregateExec.aggregates().size() == 2
                     && Expressions.equalsAsAttribute(Alias.unwrap(aggregateExec.aggregates().get(1)), aggregateExec.groupings().getFirst()))
             && aggregateExec.aggregates().getFirst() instanceof Alias alias
