@@ -667,9 +667,10 @@ public class EsqlQueryGenerator {
 
     public static String constantExpression() {
         // TODO not only simple values, but also foldable expressions
-        if (randomBoolean()) {
+        if (randomIntBetween(0, 9) == 0) {
             return multivalueConstant();
         }
+        // TODO: Add more types (double, geo, ranges...)
         return switch (randomIntBetween(0, 4)) {
             case 0 -> "" + randomIntBetween(Integer.MIN_VALUE, Integer.MAX_VALUE);
             case 1 -> "" + randomLongBetween(Long.MIN_VALUE, Long.MAX_VALUE);
@@ -680,12 +681,12 @@ public class EsqlQueryGenerator {
     }
 
     /**
-     * Generates a homogeneous multivalue array literal: numeric, string, or boolean.
-     * Null is intentionally excluded since it is not valid inside array literals.
+     * Generates a multivalue array literal of numeric, string, or boolean types.
      */
     public static String multivalueConstant() {
-        int n = randomIntBetween(2, 5);
+        int n = randomIntBetween(1, 10);
         StringBuilder sb = new StringBuilder("[");
+        // TODO: Add more types (double, geo, ranges...)
         return switch (randomIntBetween(0, 3)) {
             case 0 -> {
                 for (int i = 0; i < n; i++) {
