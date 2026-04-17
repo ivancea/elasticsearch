@@ -759,6 +759,23 @@ public class VerifierTests extends ESTestCase {
         );
     }
 
+    public void testBucketAllowedInLimitBy() {
+        // Bare evaluatable grouping function as the LIMIT BY key.
+        defaultAnalyzer().query("FROM test | LIMIT 1 BY BUCKET(emp_no, 100.)");
+        // Wrapped in a scalar expression.
+        defaultAnalyzer().query("FROM test | LIMIT 1 BY BUCKET(emp_no, 100.) + 1");
+        // Combined with a regular field grouping.
+        defaultAnalyzer().query("FROM test | LIMIT 1 BY BUCKET(emp_no, 100.), languages");
+    }
+
+    public void testCategorizeNotAllowedInLimitBy() {
+        // Stateful grouping functions still require a STATS context.
+        defaultAnalyzer().error(
+            "FROM test | LIMIT 1 BY CATEGORIZE(first_name)",
+            equalTo("1:24: cannot use grouping function [CATEGORIZE(first_name)] outside of a STATS command")
+        );
+    }
+
     public void testDoubleRenamingField() {
         defaultAnalyzer().error(
             "from test | rename emp_no as r1, r1 as r2, emp_no as r3 | keep r3",

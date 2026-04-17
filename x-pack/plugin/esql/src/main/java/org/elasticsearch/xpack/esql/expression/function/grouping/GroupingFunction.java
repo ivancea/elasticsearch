@@ -15,6 +15,7 @@ import org.elasticsearch.xpack.esql.core.expression.function.Function;
 import org.elasticsearch.xpack.esql.core.tree.Source;
 import org.elasticsearch.xpack.esql.evaluator.mapper.EvaluatorMapper;
 import org.elasticsearch.xpack.esql.plan.logical.Aggregate;
+import org.elasticsearch.xpack.esql.plan.logical.LimitBy;
 import org.elasticsearch.xpack.esql.plan.logical.LogicalPlan;
 
 import java.util.List;
@@ -32,12 +33,23 @@ public abstract sealed class GroupingFunction extends Function implements PostAn
     @Override
     public BiConsumer<LogicalPlan, Failures> postAnalysisPlanVerification() {
         return (p, failures) -> {
-            if (p instanceof Aggregate == false) {
+            if (p instanceof Aggregate) {
+                return;
+            }
+            if (p instanceof LimitBy) {
+                // EvaluatableGroupingFunction (e.g. BUCKET) can be computed row-by-row, so it is
+                // safe to use as a LIMIT ... BY key. NonEvaluatableGroupingFunction (e.g. CATEGORIZE)
+                // would require more changes to the LimitBy operators to work with them.
                 p.forEachExpression(
-                    GroupingFunction.class,
+                    NonEvaluatableGroupingFunction.class,
                     gf -> failures.add(fail(gf, "cannot use grouping function [{}] outside of a STATS command", gf.sourceText()))
                 );
+                return;
             }
+            p.forEachExpression(
+                GroupingFunction.class,
+                gf -> failures.add(fail(gf, "cannot use grouping function [{}] outside of a STATS command", gf.sourceText()))
+            );
         };
     }
 
