@@ -1220,3 +1220,19 @@ emp_no:integer | languages:integer | hire_date:date
 10004          | 5                 | 1986-12-01T00:00:00.000Z
 10007          | 4                 | 1989-02-10T00:00:00.000Z
 ;
+
+sortLimitByTBucket
+required_capability: limit_by_allow_evaluatable_grouping_functions
+
+FROM sample_data
+| SORT @timestamp ASC
+| LIMIT 1 BY TBUCKET(10 minutes)
+| KEEP @timestamp, message
+;
+
+@timestamp:date          | message:keyword
+2023-10-23T12:15:03.360Z | Connected to 10.1.0.3
+2023-10-23T12:27:28.948Z | Connected to 10.1.0.2
+2023-10-23T13:33:34.937Z | Disconnected
+2023-10-23T13:51:54.732Z | Connection error
+;
