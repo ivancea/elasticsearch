@@ -103,6 +103,18 @@ public class SubstituteRoundToGoldenTests extends GoldenTestCase {
         }
     }
 
+    // With multiple groupings the optimization does not apply: [COUNT, grouping_1, grouping_2] has
+    // size 3, so the rule's guard (aggregates().size() == 2) keeps it from firing.
+    public void testDateTruncBucketNotPushedWithMultipleGroupings() {
+        for (var queryAndName : dateHistograms) {
+            String query = LoggerMessageFormat.format(null, """
+                from all_types
+                | stats count(*) by x = {}, long
+                """, queryAndName.query());
+            runGoldenTest(query, EnumSet.of(Stage.LOCAL_PHYSICAL_OPTIMIZATION), STATS, queryAndName.name());
+        }
+    }
+
     // DateTrunc is transformed to RoundTo first but cannot be transformed to QueryAndTags, when the TopN is pushed down to EsQueryExec
     public void testDateTruncNotTransformToQueryAndTags() {
         for (var queryAndName : dateHistograms) {

@@ -69,6 +69,7 @@ public class PushCountQueryAndTagsToSource extends PhysicalOptimizerRules.Optimi
         // downstream, leaving 2 aggregates that are both aggregate functions (e.g. COUNT + MAX).
         // We must verify the second aggregate is NOT an aggregate function.
         if (aggregateExec.aggregates().size() == 2
+            && aggregateExec.groupings().size() == 1
             && aggregateExec.aggregates().getFirst() instanceof Alias alias
             && ((alias.child() instanceof Count count && count.hasFilter() == false && count.field() instanceof Literal)
                 || (alias.child() instanceof CountApproximate ca && ca.hasFilter() == false && ca.field() instanceof Literal))
