@@ -187,22 +187,18 @@ public class Bucket extends GroupingFunction.EvaluatableGroupingFunction
         signatures = {
             @Signature(params = { "date", "date_period" }, returnType = "date"),
             @Signature(params = { "date", "time_duration" }, returnType = "date"),
-            @Signature(params = { "date", "integer", "date|keyword|text", "date|keyword|text" }, returnType = "date"),
+            @Signature(params = { "date", "integer", "date|STRING", "date|STRING" }, returnType = "date"),
             @Signature(params = { "date_nanos", "date_period" }, returnType = "date_nanos"),
             @Signature(params = { "date_nanos", "time_duration" }, returnType = "date_nanos"),
-            @Signature(params = { "date_nanos", "integer", "date|keyword|text", "date|keyword|text" }, returnType = "date_nanos"),
-            @Signature(params = { "double", "double" }, returnType = "double"),
-            @Signature(params = { "double", "integer" }, returnType = "double"),
-            @Signature(params = { "double", "long" }, returnType = "double"),
-            @Signature(params = { "double", "integer", "double|integer|long", "double|integer|long" }, returnType = "double"),
-            @Signature(params = { "integer", "double" }, returnType = "double"),
-            @Signature(params = { "integer", "integer" }, returnType = "double"),
-            @Signature(params = { "integer", "long" }, returnType = "double"),
-            @Signature(params = { "integer", "integer", "double|integer|long", "double|integer|long" }, returnType = "double"),
-            @Signature(params = { "long", "double" }, returnType = "double"),
-            @Signature(params = { "long", "integer" }, returnType = "double"),
-            @Signature(params = { "long", "long" }, returnType = "double"),
-            @Signature(params = { "long", "integer", "double|integer|long", "double|integer|long" }, returnType = "double") },
+            @Signature(params = { "date_nanos", "integer", "date|STRING", "date|STRING" }, returnType = "date_nanos"),
+            // unsigned_long is in NUMERIC but not supported by BUCKET; list the accepted numerics explicitly.
+            @Signature(params = { "integer|long|double", "double" }, returnType = "double"),
+            @Signature(params = { "integer|long|double", "integer" }, returnType = "double"),
+            @Signature(params = { "integer|long|double", "long" }, returnType = "double"),
+            @Signature(
+                params = { "integer|long|double", "integer", "integer|long|double", "integer|long|double" },
+                returnType = "double"
+            ) },
         briefSummary = "Creates groups of values (buckets) from a datetime or numeric input.",
         description = """
             Creates groups of values - buckets - out of a datetime or numeric input.

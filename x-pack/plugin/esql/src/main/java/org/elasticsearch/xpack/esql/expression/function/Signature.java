@@ -14,9 +14,17 @@ import java.lang.annotation.Target;
 /**
  * One concrete overload of a function: argument types plus return type.
  * <p>
- *     A parameter entry may use {@code |} to declare a within-signature union
- *     (e.g. {@code "date|keyword|text"}), which is expanded to the cartesian
- *     product of those types when validating tests and generating docs.
+ *     A parameter entry may use {@code |} for a within-signature union and/or
+ *     {@link TypeGroup} names ({@code NUMERIC}, {@code STRING}, {@code GEO},
+ *     {@code SORTABLE}, {@code ALL}), e.g. {@code "NUMERIC|keyword"} or
+ *     {@code "date|STRING"}. Unions and groups are expanded when validating
+ *     tests and generating docs.
+ * </p>
+ * <p>
+ *     {@link #returnType()} must name a single concrete type. Type groups are
+ *     not allowed there — a signature returns one type. When the return type
+ *     should track a parameter, list per-type overloads for now (a future
+ *     {@code $N} reference will cover identity returns).
  * </p>
  */
 @Retention(RetentionPolicy.RUNTIME)
@@ -24,12 +32,13 @@ import java.lang.annotation.Target;
 public @interface Signature {
     /**
      * Argument types for this overload. Optional trailing parameters are omitted
-     * rather than listed as nullable. Use {@code |} for a union in one position.
+     * rather than listed as nullable. Use {@code |} for a union and/or a
+     * {@link TypeGroup} name in one position.
      */
     String[] params();
 
     /**
-     * The return type of this overload.
+     * The concrete return type of this overload. Must not be a {@link TypeGroup} name.
      */
     String returnType();
 }

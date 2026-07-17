@@ -842,14 +842,20 @@ public abstract class AbstractFunctionTestCase extends ESTestCase {
     private static Set<FunctionSignatures.ConcreteSignature> concreteSignatures(Set<DocsV3Support.TypeSignature> signatures) {
         Set<FunctionSignatures.ConcreteSignature> result = new HashSet<>();
         for (DocsV3Support.TypeSignature signature : signatures) {
-            result.add(
-                new FunctionSignatures.ConcreteSignature(
-                    signature.argTypes().stream().map(DocsV3Support.Param::dataType).toList(),
-                    signature.returnType()
-                )
-            );
+            result.add(toConcreteSignature(signature));
         }
         return result;
+    }
+
+    /**
+     * Return types are compared after {@link DataType#noText()} so {@code text} results
+     * (as in CASE test suppliers) match declared signatures that return {@code keyword}.
+     */
+    private static FunctionSignatures.ConcreteSignature toConcreteSignature(DocsV3Support.TypeSignature signature) {
+        return new FunctionSignatures.ConcreteSignature(
+            signature.argTypes().stream().map(DocsV3Support.Param::dataType).toList(),
+            signature.returnType().noText()
+        );
     }
 
     private static Set<FunctionSignatures.ConcreteSignature> filterUnderConstruction(Set<FunctionSignatures.ConcreteSignature> signatures) {
@@ -891,16 +897,7 @@ public abstract class AbstractFunctionTestCase extends ESTestCase {
         }
         Set<DocsV3Support.TypeSignature> tested = signatures(testClass);
         Map<FunctionSignatures.ConcreteSignature, DocsV3Support.TypeSignature> testedByConcrete = tested.stream()
-            .collect(
-                Collectors.toMap(
-                    s -> new FunctionSignatures.ConcreteSignature(
-                        s.argTypes().stream().map(DocsV3Support.Param::dataType).toList(),
-                        s.returnType()
-                    ),
-                    s -> s,
-                    (a, b) -> a
-                )
-            );
+            .collect(Collectors.toMap(AbstractFunctionTestCase::toConcreteSignature, s -> s, (a, b) -> a));
         Set<DocsV3Support.TypeSignature> result = new HashSet<>();
         for (FunctionSignatures.ConcreteSignature concrete : declared) {
             DocsV3Support.TypeSignature fromTests = testedByConcrete.get(concrete);

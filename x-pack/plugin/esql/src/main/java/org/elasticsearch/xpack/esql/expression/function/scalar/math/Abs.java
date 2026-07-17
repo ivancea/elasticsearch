@@ -51,10 +51,10 @@ public class Abs extends UnaryScalarFunction {
     @FunctionInfo(
         returnType = { "double", "integer", "long", "unsigned_long" },
         signatures = {
-            @Signature(params = { "double" }, returnType = "double"),
             @Signature(params = { "integer" }, returnType = "integer"),
             @Signature(params = { "long" }, returnType = "long"),
-            @Signature(params = { "unsigned_long" }, returnType = "unsigned_long") },
+            @Signature(params = { "unsigned_long" }, returnType = "unsigned_long"),
+            @Signature(params = { "double" }, returnType = "double") },
         briefSummary = "Returns the absolute value of a number.",
         description = "Returns the absolute value.",
         examples = { @Example(file = "math", tag = "abs"), @Example(file = "math", tag = "abs-employees") }
