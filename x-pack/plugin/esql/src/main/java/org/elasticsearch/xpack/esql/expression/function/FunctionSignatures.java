@@ -80,20 +80,14 @@ public final class FunctionSignatures {
             int index = Integer.parseInt(ref.group(1));
             if (index < 0 || index >= signature.params().length) {
                 throw new IllegalArgumentException(
-                    "return type reference ["
-                        + returnDecl
-                        + "] is out of range for "
-                        + signature.params().length
-                        + " parameter(s)"
+                    "return type reference [" + returnDecl + "] is out of range for " + signature.params().length + " parameter(s)"
                 );
             }
             return expandWithReturnRef(perPosition, index);
         }
 
         if (returnDecl.contains("|")) {
-            throw new IllegalArgumentException(
-                "return type [" + returnDecl + "] must be a concrete type or $N reference, not a union"
-            );
+            throw new IllegalArgumentException("return type [" + returnDecl + "] must be a concrete type or $N reference, not a union");
         }
         if (TypeGroup.parse(returnDecl) != null) {
             throw new IllegalArgumentException(
