@@ -691,7 +691,7 @@ public abstract class AbstractFunctionTestCase extends ESTestCase {
             Set<FunctionSignatures.ConcreteSignature> filteredDeclared = filterUnderConstruction(declaredSignatures);
             Set<FunctionSignatures.ConcreteSignature> filteredTested = filterUnderConstruction(testedSignatures);
             assertSignaturesMatchTests(filteredDeclared, filteredTested);
-            for (FunctionSignatures.ConcreteSignature entry : declaredSignatures) {
+            for (FunctionSignatures.ConcreteSignature entry : filteredDeclared) {
                 collectPositionalTypes(args, entry.argTypes(), typesFromSignature);
                 if (DataType.UNDER_CONSTRUCTION.contains(entry.returnType()) == false) {
                     returnFromSignature.add(entry.returnType().esNameIfPossible());
@@ -931,11 +931,14 @@ public abstract class AbstractFunctionTestCase extends ESTestCase {
         if (definition == null) {
             return signatures(testClass);
         }
-        Set<FunctionSignatures.ConcreteSignature> declared = FunctionSignatures.declaredSignatures(definition);
+        Set<FunctionSignatures.ConcreteSignature> declared = filterUnderConstruction(FunctionSignatures.declaredSignatures(definition));
         if (declared.isEmpty()) {
             return signatures(testClass);
         }
-        Set<DocsV3Support.TypeSignature> tested = signatures(testClass);
+        Set<DocsV3Support.TypeSignature> tested = signatures(testClass).stream()
+            .filter(s -> DataType.UNDER_CONSTRUCTION.contains(s.returnType()) == false)
+            .filter(s -> s.argTypes().stream().noneMatch(p -> DataType.UNDER_CONSTRUCTION.contains(p.dataType())))
+            .collect(Collectors.toSet());
         Map<FunctionSignatures.ConcreteSignature, DocsV3Support.TypeSignature> testedByConcrete = tested.stream()
             .collect(Collectors.toMap(AbstractFunctionTestCase::toConcreteSignature, s -> s, (a, b) -> a));
         Set<DocsV3Support.TypeSignature> result = new HashSet<>();

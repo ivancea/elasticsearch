@@ -233,6 +233,31 @@
       "params" : [
         {
           "name" : "field",
+          "type" : "unsigned_long",
+          "optional" : false,
+          "description" : "Expression that can be null, a single value, or multiple values. If `null`, the function returns `null`."
+        },
+        {
+          "name" : "order",
+          "type" : "keyword",
+          "optional" : true,
+          "description" : "Sort order. The valid options are ASC and DESC, the default is ASC.",
+          "hint" : {
+            "kind" : "constant",
+            "allowedValues" : [
+              "asc",
+              "desc"
+            ]
+          }
+        }
+      ],
+      "variadic" : false,
+      "returnType" : "unsigned_long"
+    },
+    {
+      "params" : [
+        {
+          "name" : "field",
           "type" : "version",
           "optional" : false,
           "description" : "Expression that can be null, a single value, or multiple values. If `null`, the function returns `null`."

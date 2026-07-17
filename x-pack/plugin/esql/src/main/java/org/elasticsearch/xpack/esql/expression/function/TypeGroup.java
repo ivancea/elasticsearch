@@ -42,18 +42,19 @@ public enum TypeGroup {
      * Types that support value ordering in ES|QL multivalue / top-n style functions.
      */
     SORTABLE(
-        List.of(
-            DataType.BOOLEAN,
-            DataType.DATETIME,
-            DataType.DATE_NANOS,
-            DataType.DOUBLE,
-            DataType.INTEGER,
-            DataType.IP,
-            DataType.KEYWORD,
-            DataType.LONG,
-            DataType.TEXT,
-            DataType.VERSION
-        )
+        Arrays.stream(DataType.values())
+            .filter(t -> t.supportedVersion().supportedLocally())
+            .filter(DataType::isRepresentable)
+            .filter(DataType::isSortable)
+            .filter(t -> t != DataType.NULL)
+            .filter(t -> t != DataType.DOC_DATA_TYPE && t != DataType.TSID_DATA_TYPE)
+            .filter(
+                t -> t != DataType.DENSE_VECTOR
+                    && t != DataType.AGGREGATE_METRIC_DOUBLE
+                    && t != DataType.EXPONENTIAL_HISTOGRAM
+                    && t != DataType.TDIGEST
+            )
+            .toList()
     ),
 
     /**

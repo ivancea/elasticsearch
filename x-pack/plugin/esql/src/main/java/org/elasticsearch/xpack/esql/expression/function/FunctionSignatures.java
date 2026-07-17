@@ -95,7 +95,7 @@ public final class FunctionSignatures {
             );
         }
 
-        DataType returnType = DataType.fromNameOrAlias(returnDecl);
+        DataType returnType = requireKnownType(returnDecl, "return type");
         List<ConcreteSignature> expanded = new ArrayList<>();
         expandRecursive(perPosition, 0, new ArrayList<>(perPosition.size()), returnType, null, expanded);
         return expanded;
@@ -128,7 +128,15 @@ public final class FunctionSignatures {
         if (group != null) {
             return group.types();
         }
-        return List.of(DataType.fromNameOrAlias(token.toLowerCase(Locale.ROOT)));
+        return List.of(requireKnownType(token, "parameter type"));
+    }
+
+    private static DataType requireKnownType(String typeName, String kind) {
+        DataType type = DataType.fromNameOrAlias(typeName.toLowerCase(Locale.ROOT));
+        if (type == DataType.UNSUPPORTED) {
+            throw new IllegalArgumentException(kind + " [" + typeName + "] is not a known data type");
+        }
+        return type;
     }
 
     /**

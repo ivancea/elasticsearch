@@ -13,5 +13,6 @@
 | keyword | keyword | keyword |
 | long | keyword | long |
 | text | keyword | keyword |
+| unsigned_long | keyword | unsigned_long |
 | version | keyword | version |
 

@@ -332,9 +332,9 @@ public class Bucket extends GroupingFunction.EvaluatableGroupingFunction
         returnType = { "double", "date", "date_nanos" },
         signatures = {
             @Signature(params = { "date", "date_period|time_duration" }, returnType = "date"),
-            @Signature(params = { "date", "integer", "date|STRING", "date|STRING" }, returnType = "date"),
+            @Signature(params = { "date", "integer|long", "date|STRING", "date|STRING" }, returnType = "date"),
             @Signature(params = { "date_nanos", "date_period|time_duration" }, returnType = "date_nanos"),
-            @Signature(params = { "date_nanos", "integer", "date|STRING", "date|STRING" }, returnType = "date_nanos"),
+            @Signature(params = { "date_nanos", "integer|long", "date|STRING", "date|STRING" }, returnType = "date_nanos"),
             // unsigned_long is in NUMERIC but not supported by BUCKET; list the accepted numerics explicitly.
             @Signature(params = { "integer|long|double", "double|integer|long" }, returnType = "double"),
             @Signature(

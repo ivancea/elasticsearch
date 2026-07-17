@@ -20,6 +20,7 @@ import org.elasticsearch.xpack.esql.expression.function.AbstractScalarFunctionTe
 import org.elasticsearch.xpack.esql.expression.function.TestCaseSupplier;
 import org.hamcrest.Matchers;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -43,6 +44,7 @@ public class MvSortTests extends AbstractScalarFunctionTestCase {
         longs(suppliers);
         doubles(suppliers);
         bytesRefs(suppliers);
+        unsignedLongs(suppliers);
         nulls(suppliers);
 
         suppliers = anyNullIsNull(
@@ -168,6 +170,23 @@ public class MvSortTests extends AbstractScalarFunctionTestCase {
                 );
             }));
         }
+    }
+
+    private static void unsignedLongs(List<TestCaseSupplier> suppliers) {
+        suppliers.add(new TestCaseSupplier(List.of(DataType.UNSIGNED_LONG, DataType.KEYWORD), () -> {
+            List<BigInteger> field = randomList(1, 10, () -> new BigInteger(Long.toUnsignedString(randomLong())));
+            boolean order = randomBoolean();
+            var sortedData = field.stream().sorted(order ? Comparator.naturalOrder() : Comparator.reverseOrder()).toList();
+            return new TestCaseSupplier.TestCase(
+                List.of(
+                    new TestCaseSupplier.TypedData(field, DataType.UNSIGNED_LONG, "field"),
+                    new TestCaseSupplier.TypedData(new BytesRef(order ? "ASC" : "DESC"), DataType.KEYWORD, "order").forceLiteral()
+                ),
+                "MvSortLong[field=Attribute[channel=0], order=" + order + "]",
+                DataType.UNSIGNED_LONG,
+                equalTo(sortedData.size() == 1 ? sortedData.get(0) : sortedData)
+            );
+        }));
     }
 
     private static void nulls(List<TestCaseSupplier> suppliers) {
