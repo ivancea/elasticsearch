@@ -679,19 +679,39 @@ public abstract class AbstractFunctionTestCase extends ESTestCase {
                 .or(endsWith("∅")) // Math
         );
 
+        Set<FunctionSignatures.ConcreteSignature> testedSignatures = concreteSignatures(signatures(testClass));
+        Set<FunctionSignatures.ConcreteSignature> declaredSignatures = FunctionSignatures.declaredSignatures(definition);
         List<Set<String>> typesFromSignature = new ArrayList<>();
         Set<String> returnFromSignature = new TreeSet<>();
         for (int i = 0; i < args.size(); i++) {
             typesFromSignature.add(new HashSet<>());
         }
-        for (DocsV3Support.TypeSignature entry : signatures(testClass)) {
-            List<DocsV3Support.Param> types = entry.argTypes();
-            int initialProvidedParamIndex = getFirstParametersIndexForSignature(args, entry);
-            for (int i = 0; i < args.size() && i < types.size(); i++) {
-                typesFromSignature.get(initialProvidedParamIndex + i).add(types.get(i).dataType().esNameIfPossible());
+
+        if (declaredSignatures.isEmpty() == false) {
+            Set<FunctionSignatures.ConcreteSignature> filteredDeclared = filterUnderConstruction(declaredSignatures);
+            Set<FunctionSignatures.ConcreteSignature> filteredTested = filterUnderConstruction(testedSignatures);
+            assertEquals(
+                "Mismatch between @FunctionInfo.signatures and test cases. "
+                    + "Update @FunctionInfo.signatures or add/remove test suppliers.",
+                filteredDeclared,
+                filteredTested
+            );
+            for (FunctionSignatures.ConcreteSignature entry : declaredSignatures) {
+                collectPositionalTypes(args, entry.argTypes(), typesFromSignature);
+                if (DataType.UNDER_CONSTRUCTION.contains(entry.returnType()) == false) {
+                    returnFromSignature.add(entry.returnType().esNameIfPossible());
+                }
             }
-            if (DataType.UNDER_CONSTRUCTION.contains(entry.returnType()) == false) {
-                returnFromSignature.add(entry.returnType().esNameIfPossible());
+        } else {
+            for (DocsV3Support.TypeSignature entry : signatures(testClass)) {
+                List<DocsV3Support.Param> types = entry.argTypes();
+                int initialProvidedParamIndex = getFirstParametersIndexForSignature(args, entry);
+                for (int i = 0; i < args.size() && i < types.size(); i++) {
+                    typesFromSignature.get(initialProvidedParamIndex + i).add(types.get(i).dataType().esNameIfPossible());
+                }
+                if (DataType.UNDER_CONSTRUCTION.contains(entry.returnType()) == false) {
+                    returnFromSignature.add(entry.returnType().esNameIfPossible());
+                }
             }
         }
 
@@ -784,7 +804,9 @@ public abstract class AbstractFunctionTestCase extends ESTestCase {
                 "Mismatch between actual and declared param type for ["
                     + arg.name()
                     + "]. "
-                    + "You probably need to update your @params annotations or add test cases to your test.",
+                    + (declaredSignatures.isEmpty()
+                        ? "You probably need to update your @params annotations or add test cases to your test."
+                        : "You probably need to update your @params annotations or @FunctionInfo.signatures."),
                 signatureTypes,
                 annotationTypes
             );
@@ -815,6 +837,92 @@ public abstract class AbstractFunctionTestCase extends ESTestCase {
             .filter(t -> DataType.UNDER_CONSTRUCTION.contains(DataType.fromNameOrAlias(t)) == false)
             .collect(Collectors.toCollection(TreeSet::new));
         assertEquals(returnFromSignature, returnTypes);
+    }
+
+    private static Set<FunctionSignatures.ConcreteSignature> concreteSignatures(Set<DocsV3Support.TypeSignature> signatures) {
+        Set<FunctionSignatures.ConcreteSignature> result = new HashSet<>();
+        for (DocsV3Support.TypeSignature signature : signatures) {
+            result.add(
+                new FunctionSignatures.ConcreteSignature(
+                    signature.argTypes().stream().map(DocsV3Support.Param::dataType).toList(),
+                    signature.returnType()
+                )
+            );
+        }
+        return result;
+    }
+
+    private static Set<FunctionSignatures.ConcreteSignature> filterUnderConstruction(Set<FunctionSignatures.ConcreteSignature> signatures) {
+        return signatures.stream()
+            .filter(
+                s -> DataType.UNDER_CONSTRUCTION.contains(s.returnType()) == false
+                    && s.argTypes().stream().noneMatch(DataType.UNDER_CONSTRUCTION::contains)
+            )
+            .collect(Collectors.toSet());
+    }
+
+    private static void collectPositionalTypes(
+        List<EsqlFunctionRegistry.ArgSignature> args,
+        List<DataType> argTypes,
+        List<Set<String>> typesFromSignature
+    ) {
+        DocsV3Support.TypeSignature asDocs = new DocsV3Support.TypeSignature(
+            argTypes.stream().map(t -> new DocsV3Support.Param(t, List.of())).toList(),
+            DataType.NULL
+        );
+        int initialProvidedParamIndex = getFirstParametersIndexForSignature(args, asDocs);
+        for (int i = 0; i < args.size() && i < argTypes.size(); i++) {
+            typesFromSignature.get(initialProvidedParamIndex + i).add(argTypes.get(i).esNameIfPossible());
+        }
+    }
+
+    /**
+     * Signatures used for docs and Kibana JSON: declared {@link FunctionInfo#signatures()} when present
+     * (with {@code appliesTo}/{@code preview} merged from matching test cases), otherwise test-derived.
+     */
+    public static Set<DocsV3Support.TypeSignature> docsSignatures(Class<?> testClass) {
+        FunctionDefinition definition = definition(functionName(testClass));
+        if (definition == null) {
+            return signatures(testClass);
+        }
+        Set<FunctionSignatures.ConcreteSignature> declared = FunctionSignatures.declaredSignatures(definition);
+        if (declared.isEmpty()) {
+            return signatures(testClass);
+        }
+        Set<DocsV3Support.TypeSignature> tested = signatures(testClass);
+        Map<FunctionSignatures.ConcreteSignature, DocsV3Support.TypeSignature> testedByConcrete = tested.stream()
+            .collect(
+                Collectors.toMap(
+                    s -> new FunctionSignatures.ConcreteSignature(
+                        s.argTypes().stream().map(DocsV3Support.Param::dataType).toList(),
+                        s.returnType()
+                    ),
+                    s -> s,
+                    (a, b) -> a
+                )
+            );
+        Set<DocsV3Support.TypeSignature> result = new HashSet<>();
+        for (FunctionSignatures.ConcreteSignature concrete : declared) {
+            DocsV3Support.TypeSignature fromTests = testedByConcrete.get(concrete);
+            if (fromTests != null) {
+                result.add(fromTests);
+            } else {
+                result.add(
+                    new DocsV3Support.TypeSignature(
+                        concrete.argTypes().stream().map(t -> new DocsV3Support.Param(t, List.of())).toList(),
+                        concrete.returnType()
+                    )
+                );
+            }
+        }
+        return result;
+    }
+
+    private static String functionName(Class<?> testClass) {
+        if (testClass.isAnnotationPresent(FunctionName.class)) {
+            return testClass.getAnnotation(FunctionName.class).value();
+        }
+        return StringUtils.camelCaseToUnderscore(testClass.getSimpleName().replace("Tests", "")).toLowerCase(Locale.ROOT);
     }
 
     /**
@@ -1051,13 +1159,7 @@ public abstract class AbstractFunctionTestCase extends ESTestCase {
     }
 
     protected static String functionName() {
-        Class<?> testClass = getTestClass();
-        if (testClass.isAnnotationPresent(FunctionName.class)) {
-            FunctionName functionNameAnnotation = testClass.getAnnotation(FunctionName.class);
-            return functionNameAnnotation.value();
-        } else {
-            return StringUtils.camelCaseToUnderscore(testClass.getSimpleName().replace("Tests", "")).toLowerCase(Locale.ROOT);
-        }
+        return functionName(getTestClass());
     }
 
     static boolean functionRegistered(String name) {

@@ -20,6 +20,7 @@ import org.elasticsearch.xpack.esql.expression.function.Example;
 import org.elasticsearch.xpack.esql.expression.function.FunctionDefinition;
 import org.elasticsearch.xpack.esql.expression.function.FunctionInfo;
 import org.elasticsearch.xpack.esql.expression.function.Param;
+import org.elasticsearch.xpack.esql.expression.function.Signature;
 import org.elasticsearch.xpack.esql.expression.function.scalar.UnaryScalarFunction;
 import org.elasticsearch.xpack.esql.expression.promql.function.PromqlFunctionDefinition;
 
@@ -49,6 +50,11 @@ public class Abs extends UnaryScalarFunction {
 
     @FunctionInfo(
         returnType = { "double", "integer", "long", "unsigned_long" },
+        signatures = {
+            @Signature(params = { "double" }, returnType = "double"),
+            @Signature(params = { "integer" }, returnType = "integer"),
+            @Signature(params = { "long" }, returnType = "long"),
+            @Signature(params = { "unsigned_long" }, returnType = "unsigned_long") },
         briefSummary = "Returns the absolute value of a number.",
         description = "Returns the absolute value.",
         examples = { @Example(file = "math", tag = "abs"), @Example(file = "math", tag = "abs-employees") }

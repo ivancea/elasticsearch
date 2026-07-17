@@ -697,7 +697,7 @@ public abstract class DocsV3Support {
 
     static class FunctionDocsSupport extends DocsV3Support {
         private FunctionDocsSupport(String name, Class<?> testClass, Callbacks callbacks) {
-            super("functions", name, testClass, () -> AbstractFunctionTestCase.signatures(testClass), callbacks);
+            super("functions", name, testClass, () -> AbstractFunctionTestCase.docsSignatures(testClass), callbacks);
         }
 
         FunctionDocsSupport(
@@ -1059,6 +1059,11 @@ public abstract class DocsV3Support {
                 @Override
                 public String[] returnType() {
                     return orig.returnType();
+                }
+
+                @Override
+                public Signature[] signatures() {
+                    return orig.signatures();
                 }
 
                 @Override

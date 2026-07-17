@@ -34,6 +34,7 @@ import org.elasticsearch.xpack.esql.expression.function.FunctionDefinition;
 import org.elasticsearch.xpack.esql.expression.function.FunctionInfo;
 import org.elasticsearch.xpack.esql.expression.function.FunctionType;
 import org.elasticsearch.xpack.esql.expression.function.Param;
+import org.elasticsearch.xpack.esql.expression.function.Signature;
 import org.elasticsearch.xpack.esql.expression.function.TwoOptionalArguments;
 import org.elasticsearch.xpack.esql.expression.function.scalar.date.DateTrunc;
 import org.elasticsearch.xpack.esql.expression.function.scalar.math.Floor;
@@ -183,6 +184,25 @@ public class Bucket extends GroupingFunction.EvaluatableGroupingFunction
 
     @FunctionInfo(
         returnType = { "double", "date", "date_nanos" },
+        signatures = {
+            @Signature(params = { "date", "date_period" }, returnType = "date"),
+            @Signature(params = { "date", "time_duration" }, returnType = "date"),
+            @Signature(params = { "date", "integer", "date|keyword|text", "date|keyword|text" }, returnType = "date"),
+            @Signature(params = { "date_nanos", "date_period" }, returnType = "date_nanos"),
+            @Signature(params = { "date_nanos", "time_duration" }, returnType = "date_nanos"),
+            @Signature(params = { "date_nanos", "integer", "date|keyword|text", "date|keyword|text" }, returnType = "date_nanos"),
+            @Signature(params = { "double", "double" }, returnType = "double"),
+            @Signature(params = { "double", "integer" }, returnType = "double"),
+            @Signature(params = { "double", "long" }, returnType = "double"),
+            @Signature(params = { "double", "integer", "double|integer|long", "double|integer|long" }, returnType = "double"),
+            @Signature(params = { "integer", "double" }, returnType = "double"),
+            @Signature(params = { "integer", "integer" }, returnType = "double"),
+            @Signature(params = { "integer", "long" }, returnType = "double"),
+            @Signature(params = { "integer", "integer", "double|integer|long", "double|integer|long" }, returnType = "double"),
+            @Signature(params = { "long", "double" }, returnType = "double"),
+            @Signature(params = { "long", "integer" }, returnType = "double"),
+            @Signature(params = { "long", "long" }, returnType = "double"),
+            @Signature(params = { "long", "integer", "double|integer|long", "double|integer|long" }, returnType = "double") },
         briefSummary = "Creates groups of values (buckets) from a datetime or numeric input.",
         description = """
             Creates groups of values - buckets - out of a datetime or numeric input.
