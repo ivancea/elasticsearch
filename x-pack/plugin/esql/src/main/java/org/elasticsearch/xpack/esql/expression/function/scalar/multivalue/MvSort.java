@@ -75,18 +75,7 @@ public class MvSort extends EsqlScalarFunction implements OptionalArgument, Post
 
     @FunctionInfo(
         returnType = { "boolean", "date", "date_nanos", "double", "integer", "ip", "keyword", "long", "version" },
-        // Return tracks the field type (text → keyword). Per-type until $N return refs exist.
-        signatures = {
-            @Signature(params = { "boolean", "keyword" }, returnType = "boolean"),
-            @Signature(params = { "date", "keyword" }, returnType = "date"),
-            @Signature(params = { "date_nanos", "keyword" }, returnType = "date_nanos"),
-            @Signature(params = { "double", "keyword" }, returnType = "double"),
-            @Signature(params = { "integer", "keyword" }, returnType = "integer"),
-            @Signature(params = { "ip", "keyword" }, returnType = "ip"),
-            @Signature(params = { "keyword", "keyword" }, returnType = "keyword"),
-            @Signature(params = { "long", "keyword" }, returnType = "long"),
-            @Signature(params = { "text", "keyword" }, returnType = "keyword"),
-            @Signature(params = { "version", "keyword" }, returnType = "version") },
+        signatures = { @Signature(params = { "SORTABLE", "keyword" }, returnType = "$0") },
         briefSummary = "Sorts the values in a multi-value field.",
         description = "Sorts a multivalued field in lexicographical order.",
         examples = @Example(file = "ints", tag = "mv_sort")

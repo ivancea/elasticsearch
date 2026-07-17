@@ -14,18 +14,23 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Reads and expands {@link FunctionInfo#signatures()} into concrete type tuples.
  * <p>
  *     Parameter entries may use {@code |} for unions and {@link TypeGroup} names
  *     (e.g. {@code NUMERIC}, {@code STRING}, {@code GEO}, {@code SORTABLE}, {@code ALL}).
- *     {@link Signature#returnType()} must be a single concrete type name — groups are
- *     not allowed there (a signature returns one type; use a future {@code $N} reference
- *     when the return type should track a parameter).
+ *     {@link Signature#returnType()} must be either a single concrete type name or a
+ *     positional reference {@code $N} (return type follows parameter {@code N} after
+ *     expansion, normalized with {@link DataType#noText()}). Type groups and {@code |}
+ *     unions are not allowed in the return type.
  * </p>
  */
 public final class FunctionSignatures {
+    private static final Pattern RETURN_PARAM_REF = Pattern.compile("\\$(\\d+)");
+
     private FunctionSignatures() {}
 
     /**
@@ -57,22 +62,51 @@ public final class FunctionSignatures {
     }
 
     private static List<ConcreteSignature> expandOne(Signature signature) {
-        if (TypeGroup.parse(signature.returnType()) != null) {
-            throw new IllegalArgumentException(
-                "return type ["
-                    + signature.returnType()
-                    + "] must be a concrete type, not a type group; a signature returns a single type"
-            );
-        }
-
+        String returnDecl = signature.returnType().trim();
         List<List<DataType>> perPosition = new ArrayList<>(signature.params().length);
         for (String param : signature.params()) {
             perPosition.add(resolveParam(param));
         }
 
-        DataType returnType = DataType.fromNameOrAlias(signature.returnType());
+        Matcher ref = RETURN_PARAM_REF.matcher(returnDecl);
+        if (ref.matches()) {
+            int index = Integer.parseInt(ref.group(1));
+            if (index < 0 || index >= signature.params().length) {
+                throw new IllegalArgumentException(
+                    "return type reference ["
+                        + returnDecl
+                        + "] is out of range for "
+                        + signature.params().length
+                        + " parameter(s)"
+                );
+            }
+            return expandWithReturnRef(perPosition, index);
+        }
+
+        if (returnDecl.contains("|")) {
+            throw new IllegalArgumentException(
+                "return type [" + returnDecl + "] must be a concrete type or $N reference, not a union"
+            );
+        }
+        if (TypeGroup.parse(returnDecl) != null) {
+            throw new IllegalArgumentException(
+                "return type [" + returnDecl + "] must be a concrete type or $N reference, not a type group"
+            );
+        }
+
+        DataType returnType = DataType.fromNameOrAlias(returnDecl);
         List<ConcreteSignature> expanded = new ArrayList<>();
-        expandRecursive(perPosition, 0, new ArrayList<>(perPosition.size()), returnType, expanded);
+        expandRecursive(perPosition, 0, new ArrayList<>(perPosition.size()), returnType, null, expanded);
+        return expanded;
+    }
+
+    /**
+     * Expand params freely; for each concrete arg list, return type is
+     * {@code args.get(index).noText()}.
+     */
+    private static List<ConcreteSignature> expandWithReturnRef(List<List<DataType>> perPosition, int index) {
+        List<ConcreteSignature> expanded = new ArrayList<>();
+        expandRecursive(perPosition, 0, new ArrayList<>(perPosition.size()), null, index, expanded);
         return expanded;
     }
 
@@ -96,20 +130,26 @@ public final class FunctionSignatures {
         return List.of(DataType.fromNameOrAlias(token.toLowerCase(Locale.ROOT)));
     }
 
+    /**
+     * @param fixedReturn non-null when return type is concrete; then {@code returnRefIndex} is ignored
+     * @param returnRefIndex non-null when return type is {@code $N}; then {@code fixedReturn} is ignored
+     */
     private static void expandRecursive(
         List<List<DataType>> perPosition,
         int index,
         List<DataType> current,
-        DataType returnType,
+        DataType fixedReturn,
+        Integer returnRefIndex,
         List<ConcreteSignature> out
     ) {
         if (index == perPosition.size()) {
+            DataType returnType = fixedReturn != null ? fixedReturn : current.get(returnRefIndex).noText();
             out.add(new ConcreteSignature(List.copyOf(current), returnType));
             return;
         }
         for (DataType type : perPosition.get(index)) {
             current.add(type);
-            expandRecursive(perPosition, index + 1, current, returnType, out);
+            expandRecursive(perPosition, index + 1, current, fixedReturn, returnRefIndex, out);
             current.remove(current.size() - 1);
         }
     }

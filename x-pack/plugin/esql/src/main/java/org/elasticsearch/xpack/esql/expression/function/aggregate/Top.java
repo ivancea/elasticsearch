@@ -99,26 +99,13 @@ public class Top extends AggregateFunction
     @FunctionInfo(
         returnType = { "boolean", "double", "integer", "long", "date", "ip", "keyword" },
         signatures = {
-            @Signature(params = { "boolean", "integer" }, returnType = "boolean"),
-            @Signature(params = { "boolean", "integer", "keyword" }, returnType = "boolean"),
-            @Signature(params = { "ip", "integer" }, returnType = "ip"),
-            @Signature(params = { "ip", "integer", "keyword" }, returnType = "ip"),
-            @Signature(params = { "date", "integer" }, returnType = "date"),
-            @Signature(params = { "date", "integer", "keyword" }, returnType = "date"),
-            @Signature(params = { "double", "integer" }, returnType = "double"),
-            @Signature(params = { "double", "integer", "keyword" }, returnType = "double"),
-            @Signature(params = { "integer", "integer" }, returnType = "integer"),
-            @Signature(params = { "integer", "integer", "keyword" }, returnType = "integer"),
-            @Signature(params = { "long", "integer" }, returnType = "long"),
-            @Signature(params = { "long", "integer", "keyword" }, returnType = "long"),
-            @Signature(params = { "STRING", "integer" }, returnType = "keyword"),
-            @Signature(params = { "STRING", "integer", "keyword" }, returnType = "keyword"),
-            // outputField present: return follows the 4th argument (STRING → keyword via noText)
-            @Signature(params = { "date|double|integer|long|STRING", "integer", "keyword", "date" }, returnType = "date"),
-            @Signature(params = { "date|double|integer|long|STRING", "integer", "keyword", "double" }, returnType = "double"),
-            @Signature(params = { "date|double|integer|long|STRING", "integer", "keyword", "integer" }, returnType = "integer"),
-            @Signature(params = { "date|double|integer|long|STRING", "integer", "keyword", "long" }, returnType = "long"),
-            @Signature(params = { "date|double|integer|long|STRING", "integer", "keyword", "STRING" }, returnType = "keyword") },
+            @Signature(params = { "boolean|ip|date|double|integer|long|STRING", "integer" }, returnType = "$0"),
+            @Signature(params = { "boolean|ip|date|double|integer|long|STRING", "integer", "keyword" }, returnType = "$0"),
+            // outputField present: return follows the 4th argument
+            @Signature(
+                params = { "date|double|integer|long|STRING", "integer", "keyword", "date|double|integer|long|STRING" },
+                returnType = "$3"
+            ) },
         briefSummary = "Collects the top values for a field, including repeated values.",
         description = "Collects the top values for a field. Includes repeated values.",
         type = FunctionType.AGGREGATE,

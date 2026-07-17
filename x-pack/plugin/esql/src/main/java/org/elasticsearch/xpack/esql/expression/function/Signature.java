@@ -21,10 +21,10 @@ import java.lang.annotation.Target;
  *     tests and generating docs.
  * </p>
  * <p>
- *     {@link #returnType()} must name a single concrete type. Type groups are
- *     not allowed there — a signature returns one type. When the return type
- *     should track a parameter, list per-type overloads for now (a future
- *     {@code $N} reference will cover identity returns).
+ *     {@link #returnType()} is either a single concrete type name, or a positional
+ *     reference {@code $N} meaning the return type equals parameter {@code N} after
+ *     expansion (normalized with {@code noText()}). Type groups and {@code |} unions
+ *     are not allowed in the return type.
  * </p>
  */
 @Retention(RetentionPolicy.RUNTIME)
@@ -38,7 +38,8 @@ public @interface Signature {
     String[] params();
 
     /**
-     * The concrete return type of this overload. Must not be a {@link TypeGroup} name.
+     * The return type of this overload: a concrete type name, or {@code $N} to
+     * follow parameter {@code N} ({@code noText()}-normalized).
      */
     String returnType();
 }
