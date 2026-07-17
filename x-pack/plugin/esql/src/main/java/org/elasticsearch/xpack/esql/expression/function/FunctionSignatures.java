@@ -56,9 +56,16 @@ public final class FunctionSignatures {
     public static Set<ConcreteSignature> expand(Signature[] signatures) {
         Set<ConcreteSignature> result = new LinkedHashSet<>();
         for (Signature signature : signatures) {
-            result.addAll(expandOne(signature));
+            result.addAll(expand(signature));
         }
         return result;
+    }
+
+    /**
+     * Expands a single {@link Signature} into concrete signatures.
+     */
+    public static Set<ConcreteSignature> expand(Signature signature) {
+        return new LinkedHashSet<>(expandOne(signature));
     }
 
     private static List<ConcreteSignature> expandOne(Signature signature) {

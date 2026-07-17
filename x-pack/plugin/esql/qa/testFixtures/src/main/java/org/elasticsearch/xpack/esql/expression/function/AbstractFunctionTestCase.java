@@ -690,12 +690,7 @@ public abstract class AbstractFunctionTestCase extends ESTestCase {
         if (declaredSignatures.isEmpty() == false) {
             Set<FunctionSignatures.ConcreteSignature> filteredDeclared = filterUnderConstruction(declaredSignatures);
             Set<FunctionSignatures.ConcreteSignature> filteredTested = filterUnderConstruction(testedSignatures);
-            assertEquals(
-                "Mismatch between @FunctionInfo.signatures and test cases. "
-                    + "Update @FunctionInfo.signatures or add/remove test suppliers.",
-                filteredDeclared,
-                filteredTested
-            );
+            assertSignaturesMatchTests(filteredDeclared, filteredTested);
             for (FunctionSignatures.ConcreteSignature entry : declaredSignatures) {
                 collectPositionalTypes(args, entry.argTypes(), typesFromSignature);
                 if (DataType.UNDER_CONSTRUCTION.contains(entry.returnType()) == false) {
@@ -865,6 +860,51 @@ public abstract class AbstractFunctionTestCase extends ESTestCase {
                     && s.argTypes().stream().noneMatch(DataType.UNDER_CONSTRUCTION::contains)
             )
             .collect(Collectors.toSet());
+    }
+
+    /**
+     * Asserts declared {@link FunctionInfo#signatures()} match test-derived signatures.
+     * On failure, lists concrete signatures missing from tests and any unexpected ones.
+     */
+    private static void assertSignaturesMatchTests(
+        Set<FunctionSignatures.ConcreteSignature> declared,
+        Set<FunctionSignatures.ConcreteSignature> tested
+    ) {
+        if (declared.equals(tested)) {
+            return;
+        }
+        Set<FunctionSignatures.ConcreteSignature> missing = new TreeSet<>(AbstractFunctionTestCase::compareSignatures);
+        missing.addAll(declared);
+        missing.removeAll(tested);
+        Set<FunctionSignatures.ConcreteSignature> unexpected = new TreeSet<>(AbstractFunctionTestCase::compareSignatures);
+        unexpected.addAll(tested);
+        unexpected.removeAll(declared);
+        StringBuilder message = new StringBuilder();
+        if (missing.isEmpty() == false) {
+            message.append("Signatures not covered by tests:");
+            for (FunctionSignatures.ConcreteSignature signature : missing) {
+                message.append("\n").append(formatSignature(signature));
+            }
+        }
+        if (unexpected.isEmpty() == false) {
+            if (message.isEmpty() == false) {
+                message.append('\n');
+            }
+            message.append("Test signatures not declared:");
+            for (FunctionSignatures.ConcreteSignature signature : unexpected) {
+                message.append("\n").append(formatSignature(signature));
+            }
+        }
+        fail(message.toString());
+    }
+
+    private static int compareSignatures(FunctionSignatures.ConcreteSignature a, FunctionSignatures.ConcreteSignature b) {
+        return formatSignature(a).compareTo(formatSignature(b));
+    }
+
+    private static String formatSignature(FunctionSignatures.ConcreteSignature signature) {
+        String args = signature.argTypes().stream().map(DataType::typeName).collect(Collectors.joining(", "));
+        return "(" + args + ") -> " + signature.returnType().typeName();
     }
 
     private static void collectPositionalTypes(
