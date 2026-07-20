@@ -1,5 +1,5 @@
 area: ES|QL
 issues: []
 pr: 154417
-summary: Remove geo from `MvSort` allowed inputs and added Error tests
+summary: Remove geo from MV_SORT allowed inputs and added error tests
 type: bug
