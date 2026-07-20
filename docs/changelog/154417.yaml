@@ -1,0 +1,5 @@
+area: ES|QL
+issues: []
+pr: 154417
+summary: Remove geo from `MvSort` allowed inputs and added Error tests
+type: bug
