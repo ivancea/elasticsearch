@@ -40,6 +40,7 @@ public enum TypeGroup {
 
     /**
      * Types that support value ordering in ES|QL multivalue / top-n style functions.
+     * Derived from {@link DataType#isSortable(DataType)} plus representable/supported filters.
      */
     SORTABLE(
         Arrays.stream(DataType.values())

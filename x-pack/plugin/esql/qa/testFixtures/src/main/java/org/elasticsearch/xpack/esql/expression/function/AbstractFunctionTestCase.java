@@ -940,12 +940,15 @@ public abstract class AbstractFunctionTestCase extends ESTestCase {
             .filter(s -> s.argTypes().stream().noneMatch(p -> DataType.UNDER_CONSTRUCTION.contains(p.dataType())))
             .collect(Collectors.toSet());
         Map<FunctionSignatures.ConcreteSignature, DocsV3Support.TypeSignature> testedByConcrete = tested.stream()
-            .collect(Collectors.toMap(AbstractFunctionTestCase::toConcreteSignature, s -> s, (a, b) -> a));
+            .collect(
+                Collectors.toMap(AbstractFunctionTestCase::toConcreteSignature, s -> s, AbstractFunctionTestCase::mergeTypeSignatures)
+            );
         Set<DocsV3Support.TypeSignature> result = new HashSet<>();
         for (FunctionSignatures.ConcreteSignature concrete : declared) {
             DocsV3Support.TypeSignature fromTests = testedByConcrete.get(concrete);
             if (fromTests != null) {
-                result.add(fromTests);
+                // Keep arg appliesTo/preview from tests; prefer declared return ($N / noText()).
+                result.add(new DocsV3Support.TypeSignature(fromTests.argTypes(), concrete.returnType()));
             } else {
                 result.add(
                     new DocsV3Support.TypeSignature(
@@ -956,6 +959,27 @@ public abstract class AbstractFunctionTestCase extends ESTestCase {
             }
         }
         return result;
+    }
+
+    /**
+     * Merges lifecycle metadata when multiple test rows normalize to the same concrete signature.
+     */
+    private static DocsV3Support.TypeSignature mergeTypeSignatures(DocsV3Support.TypeSignature a, DocsV3Support.TypeSignature b) {
+        List<DocsV3Support.Param> mergedArgs = new ArrayList<>(a.argTypes().size());
+        for (int i = 0; i < a.argTypes().size(); i++) {
+            DocsV3Support.Param left = a.argTypes().get(i);
+            DocsV3Support.Param right = b.argTypes().get(i);
+            List<FunctionAppliesTo> appliesTo = new ArrayList<>(left.appliesTo() == null ? List.of() : left.appliesTo());
+            if (right.appliesTo() != null) {
+                for (FunctionAppliesTo next : right.appliesTo()) {
+                    if (appliesTo.contains(next) == false) {
+                        appliesTo.add(next);
+                    }
+                }
+            }
+            mergedArgs.add(new DocsV3Support.Param(left.dataType(), appliesTo, left.preview() || right.preview()));
+        }
+        return new DocsV3Support.TypeSignature(mergedArgs, a.returnType().noText());
     }
 
     private static String functionName(Class<?> testClass) {

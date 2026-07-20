@@ -78,7 +78,9 @@ public class MvSort extends EsqlScalarFunction implements OptionalArgument, Post
     @FunctionInfo(
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.GA) },
         returnType = { "boolean", "date", "date_nanos", "double", "integer", "ip", "keyword", "long", "unsigned_long", "version" },
-        signatures = { @Signature(params = { "SORTABLE", "keyword" }, returnType = "$0") },
+        signatures = {
+            @Signature(params = { "SORTABLE" }, returnType = "$0"),
+            @Signature(params = { "SORTABLE", "keyword" }, returnType = "$0") },
         briefSummary = "Sorts the values in a multi-value field.",
         description = "Sorts a multivalued field in lexicographical order.",
         examples = @Example(file = "ints", tag = "mv_sort")

@@ -104,7 +104,8 @@ public class Top extends AggregateFunction
         signatures = {
             @Signature(params = { "boolean|ip|date|double|integer|long|STRING", "integer" }, returnType = "$0"),
             @Signature(params = { "boolean|ip|date|double|integer|long|STRING", "integer", "keyword" }, returnType = "$0"),
-            // outputField present: return follows the 4th argument
+            // outputField present: return follows the 4th argument.
+            // Narrower than 2/3-arg forms on purpose — matches current TopTests (no boolean/ip 4-arg coverage yet).
             @Signature(
                 params = { "date|double|integer|long|STRING", "integer", "keyword", "date|double|integer|long|STRING" },
                 returnType = "$3"

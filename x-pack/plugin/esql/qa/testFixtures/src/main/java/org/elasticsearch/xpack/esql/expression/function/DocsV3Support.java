@@ -990,7 +990,7 @@ public abstract class DocsV3Support {
         private final OperatorConfig op;
 
         private OperatorsDocsSupport(String name, Class<?> testClass, Callbacks callbacks) {
-            this(name, testClass, OPERATORS.get(name), () -> AbstractFunctionTestCase.signatures(testClass), callbacks);
+            this(name, testClass, OPERATORS.get(name), () -> AbstractFunctionTestCase.docsSignatures(testClass), callbacks);
         }
 
         public OperatorsDocsSupport(
