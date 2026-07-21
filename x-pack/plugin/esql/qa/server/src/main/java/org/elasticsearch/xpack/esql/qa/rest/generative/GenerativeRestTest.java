@@ -196,7 +196,7 @@ public abstract class GenerativeRestTest extends ESRestTestCase implements Query
         "failed to create query: class java\\.lang\\.String cannot be cast to class org\\.apache\\.lucene\\.util\\.BytesRef.*",
 
         // https://github.com/elastic/elasticsearch/pull/153514
-        "can't lookup values from DateRangeBlock",
+        "can't lookup values from LongRangeBlock",
 
         // https://github.com/elastic/elasticsearch/issues/154079
         "class java\\.util\\.ArrayList cannot be cast to class java\\.lang\\.Boolean.*",

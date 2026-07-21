@@ -89,6 +89,14 @@ public abstract class BlockTestCase<B extends Block, BB extends Block.Builder, V
         return true;
     }
 
+    /**
+     * Whether {@link Block#mvOrdering()} reflects the ordering set on the builder.
+     * Some composite blocks always report {@link Block.MvOrdering#UNORDERED}.
+     */
+    protected boolean supportsConfigurableMvOrdering() {
+        return true;
+    }
+
     protected boolean supportsConstantBlockFactory() {
         return false;
     }
@@ -294,6 +302,7 @@ public abstract class BlockTestCase<B extends Block, BB extends Block.Builder, V
     }
 
     public final void testMvOrdering() {
+        assumeTrue("configurable mvOrdering unsupported", supportsConfigurableMvOrdering());
         List<List<V>> expected = List.of(List.of(randomValue(), randomValue()));
         for (Block.MvOrdering ordering : Block.MvOrdering.values()) {
             try (B block = buildBlock(blockFactory(), ordering, expected)) {
@@ -479,7 +488,7 @@ public abstract class BlockTestCase<B extends Block, BB extends Block.Builder, V
         }
     }
 
-    private void assertSerializationAtSupportedVersions(B block, List<List<V>> expected) throws IOException {
+    protected final void assertSerializationAtSupportedVersions(B block, List<List<V>> expected) throws IOException {
         assertSerializationAtSupportedVersions(block, expected, copy -> {});
     }
 
@@ -784,7 +793,9 @@ public abstract class BlockTestCase<B extends Block, BB extends Block.Builder, V
             BooleanVector mask = block.blockFactory().newConstantBooleanVector(true, expected.size());
             Block masked = block.keepMask(mask)
         ) {
-            if (masked != block && masked.asVector() != block.asVector()) {
+            // Same block, or same underlying vector (for vector-backed blocks). When asVector() is
+            // null (e.g. LongRange), only same-block identity is accepted.
+            if (masked != block && (block.asVector() == null || masked.asVector() != block.asVector())) {
                 fail("all-true keep mask should return the original block or vector");
             }
             assertValues(castBlock(masked), expected);
