@@ -7,6 +7,7 @@
 
 package org.elasticsearch.compute.data;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
@@ -62,6 +63,11 @@ public class DoubleBlockTests extends BlockTestCase<DoubleBlock, DoubleBlock.Bui
     @Override
     protected Double randomValue() {
         return randomDouble();
+    }
+
+    @Override
+    protected boolean positionHasValue(DoubleBlock block, int position, Double value) {
+        return block.hasValue(position, value);
     }
 
     @Override
@@ -264,6 +270,30 @@ public class DoubleBlockTests extends BlockTestCase<DoubleBlock, DoubleBlock.Bui
                 for (int i = dstPosition + length; i < dst.length; i++) {
                     assertThat(dst[i], equalTo(sentinel));
                 }
+            }
+        }
+    }
+
+    public void testVectorFactorySerialization() throws IOException {
+        // asBlock() takes ownership of the vector — close only the block.
+        try (DoubleBlock emptyBlock = blockFactory().newDoubleVectorBuilder(0).build().asBlock()) {
+            assertSerializationAtSupportedVersions(emptyBlock, List.of());
+        }
+        try (DoubleVector toFilter = blockFactory().newDoubleVectorBuilder(1).appendDouble(randomDouble()).build()) {
+            // filter() returns a new vector; asBlock() owns that filtered vector, not toFilter.
+            try (DoubleBlock filtered = toFilter.filter(false).asBlock()) {
+                assertSerializationAtSupportedVersions(filtered, List.of());
+            }
+        }
+        try (
+            DoubleVector toFilter = blockFactory().newDoubleVectorBuilder(1)
+                .appendDouble(randomDouble())
+                .appendDouble(randomDouble())
+                .build()
+        ) {
+            double expected = toFilter.getDouble(0);
+            try (DoubleBlock filtered = toFilter.filter(false, 0).asBlock()) {
+                assertSerializationAtSupportedVersions(filtered, List.of(List.of(expected)));
             }
         }
     }

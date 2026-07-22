@@ -16,6 +16,7 @@ import org.elasticsearch.geo.ShapeTestUtils;
 import org.elasticsearch.geometry.utils.WellKnownBinary;
 import org.elasticsearch.geometry.utils.WellKnownText;
 
+import java.io.IOException;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -75,6 +76,11 @@ public class BytesRefBlockTests extends BlockTestCase<BytesRefBlock, BytesRefBlo
     @Override
     protected BytesRef randomValue() {
         return new BytesRef(randomByteArrayOfLength(between(1, 20)));
+    }
+
+    @Override
+    protected boolean positionHasValue(BytesRefBlock block, int position, BytesRef value) {
+        return block.hasValue(position, value, new BytesRef());
     }
 
     @Override
@@ -345,6 +351,26 @@ public class BytesRefBlockTests extends BlockTestCase<BytesRefBlock, BytesRefBlo
         }
     }
 
+    public void testVectorFactorySerialization() throws IOException {
+        // asBlock() takes ownership of the vector — close only the block.
+        try (BytesRefBlock emptyBlock = blockFactory().newBytesRefVectorBuilder(0).build().asBlock()) {
+            assertSerializationAtSupportedVersions(emptyBlock, List.of());
+        }
+        try (BytesRefVector toFilter = blockFactory().newBytesRefVectorBuilder(0).appendBytesRef(randomValue()).build()) {
+            // filter() returns a new vector; asBlock() owns that filtered vector, not toFilter.
+            try (BytesRefBlock filtered = toFilter.filter(false).asBlock()) {
+                assertSerializationAtSupportedVersions(filtered, List.of());
+            }
+        }
+        BytesRef first = randomValue();
+        BytesRef second = randomValue();
+        try (BytesRefVector toFilter = blockFactory().newBytesRefVectorBuilder(0).appendBytesRef(first).appendBytesRef(second).build()) {
+            try (BytesRefBlock filtered = toFilter.filter(false, 0).asBlock()) {
+                assertSerializationAtSupportedVersions(filtered, List.of(List.of(BytesRef.deepCopyOf(first))));
+            }
+        }
+    }
+
     @Override
     protected void assertAdditionalInvariants(BytesRefBlock block, List<List<BytesRef>> expected) {
         int expectedMax = 0;
@@ -359,7 +385,12 @@ public class BytesRefBlockTests extends BlockTestCase<BytesRefBlock, BytesRefBlo
         assertThat(block.valueMaxByteSize(), equalTo(block instanceof ConstantNullBlock ? 0 : expectedMax));
     }
 
-    private void assertDenseBytesRefBlock(Supplier<BytesRef> supplier, boolean chomp, org.mockito.ThrowingConsumer<BytesRef> assertions) {
+    @FunctionalInterface
+    private interface BytesRefAssertions {
+        void accept(BytesRef value) throws Exception;
+    }
+
+    private void assertDenseBytesRefBlock(Supplier<BytesRef> supplier, boolean chomp, BytesRefAssertions assertions) {
         int positionCount = randomIntBetween(1, 16 * 1024);
         List<List<BytesRef>> expected = new ArrayList<>(positionCount);
         BytesRef[] values = new BytesRef[positionCount];
@@ -391,7 +422,11 @@ public class BytesRefBlockTests extends BlockTestCase<BytesRefBlock, BytesRefBlo
                 int pos = randomIntBetween(0, positionCount - 1);
                 scratch = block.getBytesRef(pos, scratch);
                 assertThat(scratch, equalTo(values[pos]));
-                assertions.accept(scratch);
+                try {
+                    assertions.accept(scratch);
+                } catch (Exception e) {
+                    throw new AssertionError(e);
+                }
             }
             assertBlock(block, expected);
         }

@@ -73,6 +73,11 @@ public class LongRangeBlockTests extends BlockTestCase<LongRangeBlock, LongRange
     }
 
     @Override
+    protected boolean positionHasValue(LongRangeBlock block, int position, LongRangeBlockBuilder.LongRange value) {
+        return block.hasValue(position, value, new LongRangeBlockBuilder.LongRange());
+    }
+
+    @Override
     protected ElementType expectedElementType() {
         return ElementType.LONG_RANGE;
     }
