@@ -279,9 +279,7 @@ public class LongBlockTests extends BlockTestCase<LongBlock, LongBlock.Builder, 
                 assertSerializationAtSupportedVersions(filtered, List.of());
             }
         }
-        try (
-            LongVector toFilter = blockFactory().newLongVectorBuilder(1).appendLong(randomLong()).appendLong(randomLong()).build()
-        ) {
+        try (LongVector toFilter = blockFactory().newLongVectorBuilder(1).appendLong(randomLong()).appendLong(randomLong()).build()) {
             long expected = toFilter.getLong(0);
             try (LongBlock filtered = toFilter.filter(false, 0).asBlock()) {
                 assertSerializationAtSupportedVersions(filtered, List.of(List.of(expected)));
