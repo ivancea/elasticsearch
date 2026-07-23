@@ -11,10 +11,12 @@ package org.elasticsearch.action.bulk;
 
 import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.RamUsageEstimator;
+import org.elasticsearch.TransportVersion;
 import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.support.replication.ReplicatedWriteRequest;
 import org.elasticsearch.action.support.replication.ReplicationRequest;
+import org.elasticsearch.action.support.replication.ReshardSplitAwareReplicationRequest;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.cluster.metadata.InferenceFieldMetadata;
 import org.elasticsearch.cluster.routing.SplitShardCountSummary;
@@ -22,7 +24,6 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.util.set.Sets;
 import org.elasticsearch.core.Nullable;
-import org.elasticsearch.eirf.EirfBatch;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.transport.RawIndexingDataTransportRequest;
 
@@ -33,51 +34,60 @@ import java.util.Set;
 public final class BulkShardRequest extends ReplicatedWriteRequest<BulkShardRequest>
     implements
         Accountable,
-        RawIndexingDataTransportRequest {
+        RawIndexingDataTransportRequest,
+        ReshardSplitAwareReplicationRequest {
+
+    public static final TransportVersion BULK_SHARD_BATCH = TransportVersion.fromName("bulk_shard_batch");
 
     private static final long SHALLOW_SIZE = RamUsageEstimator.shallowSizeOfInstance(BulkShardRequest.class);
 
     private final BulkItemRequest[] items;
     private final boolean isSimulated;
+    private final SplitShardCountSummary splitShardCountSummary;
+    @Nullable
+    private BulkShardBatch bulkShardBatch = null;
 
     private transient Map<String, InferenceFieldMetadata> inferenceFieldMap = null;
-    @Nullable
-    private transient EirfBatch eirfBatch = null;
 
     public BulkShardRequest(StreamInput in) throws IOException {
         super(in);
         items = in.readArray(i -> i.readOptionalWriteable(inpt -> new BulkItemRequest(shardId, inpt)), BulkItemRequest[]::new);
         isSimulated = in.readBoolean();
+        if (in.getTransportVersion().supports(BULK_SHARD_BATCH)) {
+            bulkShardBatch = in.readOptionalWriteable(BulkShardBatch::new);
+            if (bulkShardBatch != null) {
+                BulkShardBatch.attachBatchToItems(bulkShardBatch.getBatch(), items);
+            }
+        }
+        this.splitShardCountSummary = readReshardSplitAwareSummary(in, legacySplitShardCountSummary);
     }
 
     public BulkShardRequest(
         ShardId shardId,
-        SplitShardCountSummary reshardSplitShardCountSummary,
+        SplitShardCountSummary splitShardCountSummary,
         RefreshPolicy refreshPolicy,
         BulkItemRequest[] items
     ) {
-        this(shardId, reshardSplitShardCountSummary, refreshPolicy, items, false);
-    }
-
-    public BulkShardRequest(ShardId shardId, RefreshPolicy refreshPolicy, BulkItemRequest[] items) {
-        this(shardId, SplitShardCountSummary.UNSET, refreshPolicy, items, false);
-    }
-
-    public BulkShardRequest(ShardId shardId, RefreshPolicy refreshPolicy, BulkItemRequest[] items, boolean isSimulated) {
-        this(shardId, SplitShardCountSummary.UNSET, refreshPolicy, items, isSimulated);
+        this(shardId, splitShardCountSummary, refreshPolicy, items, false);
     }
 
     public BulkShardRequest(
         ShardId shardId,
-        SplitShardCountSummary reshardSplitShardCountSummary,
+        SplitShardCountSummary splitShardCountSummary,
         RefreshPolicy refreshPolicy,
         BulkItemRequest[] items,
         boolean isSimulated
     ) {
-        super(shardId, reshardSplitShardCountSummary);
+        super(shardId);
+        this.splitShardCountSummary = splitShardCountSummary;
         this.items = items;
         setRefreshPolicy(refreshPolicy);
         this.isSimulated = isSimulated;
+    }
+
+    @Override
+    public SplitShardCountSummary splitShardCountSummary() {
+        return splitShardCountSummary;
     }
 
     /**
@@ -105,16 +115,16 @@ public final class BulkShardRequest extends ReplicatedWriteRequest<BulkShardRequ
     }
 
     /**
-     * Sets the EIRF batch for batch indexing. When non-null, the batch indexing path
+     * Sets the batch for batch indexing. When non-null, the batch indexing path
      * will be used instead of the standard per-document parsing path.
      */
-    public void setEirfBatch(@Nullable EirfBatch eirfBatch) {
-        this.eirfBatch = eirfBatch;
+    public void setBulkShardBatch(@Nullable BulkShardBatch bulkShardBatch) {
+        this.bulkShardBatch = bulkShardBatch;
     }
 
     @Nullable
-    public EirfBatch getEirfBatch() {
-        return eirfBatch;
+    public BulkShardBatch getBulkShardBatch() {
+        return bulkShardBatch;
     }
 
     public long totalSizeInBytes() {
@@ -176,9 +186,17 @@ public final class BulkShardRequest extends ReplicatedWriteRequest<BulkShardRequ
             // Inferencing metadata should have been consumed as part of the ShardBulkInferenceActionFilter processing
             throw new IllegalStateException("Inference metadata should have been consumed before writing to the stream");
         }
+        boolean supportsBatch = out.getTransportVersion().supports(BULK_SHARD_BATCH);
+        if (supportsBatch == false && bulkShardBatch != null) {
+            throw new IllegalStateException("BulkShardBatch should not be set when transport version does not support it");
+        }
         super.writeTo(out);
         out.writeArray((o, item) -> o.writeOptional(BulkItemRequest.THIN_WRITER, item), items);
         out.writeBoolean(isSimulated);
+        if (supportsBatch) {
+            out.writeOptionalWriteable(bulkShardBatch);
+        }
+        writeReshardSplitAwareSummary(out, splitShardCountSummary);
     }
 
     @Override

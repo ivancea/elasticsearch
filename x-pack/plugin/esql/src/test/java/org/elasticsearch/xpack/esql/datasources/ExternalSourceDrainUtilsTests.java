@@ -15,7 +15,10 @@ import org.elasticsearch.compute.data.BlockFactory;
 import org.elasticsearch.compute.data.IntBlock;
 import org.elasticsearch.compute.data.Page;
 import org.elasticsearch.compute.operator.CloseableIterator;
+import org.elasticsearch.tasks.TaskCancelledException;
 import org.elasticsearch.test.ESTestCase;
+import org.junit.After;
+import org.junit.Before;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -26,7 +29,6 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -44,17 +46,15 @@ public class ExternalSourceDrainUtilsTests extends ESTestCase {
 
     private ExecutorService exec;
 
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
+    @Before
+    public void startExecutor() {
         exec = Executors.newFixedThreadPool(2, EsExecutors.daemonThreadFactory("test", "drain-test"));
     }
 
-    @Override
-    public void tearDown() throws Exception {
+    @After
+    public void stopExecutor() throws Exception {
         exec.shutdown();
         assertTrue(exec.awaitTermination(30, TimeUnit.SECONDS));
-        super.tearDown();
     }
 
     private static Page createTestPage(int numColumns, int numRows) {
@@ -232,32 +232,6 @@ public class ExternalSourceDrainUtilsTests extends ESTestCase {
         assertNull("Drain should not throw", drainError.get());
     }
 
-    public void testDrainPagesWithBudgetAsyncRespectsRowLimit() throws Exception {
-        AsyncExternalSourceBuffer buffer = new AsyncExternalSourceBuffer(1024 * 1024);
-
-        List<Page> pages = new ArrayList<>();
-        for (int i = 0; i < 5; i++) {
-            pages.add(createTestPage(1, 10));
-        }
-
-        CountDownLatch latch = new CountDownLatch(1);
-        AtomicReference<Integer> result = new AtomicReference<>();
-        AtomicReference<Exception> error = new AtomicReference<>();
-        ExternalSourceDrainUtils.drainPagesWithBudgetAsync(iteratorOf(pages), buffer, 25, exec, ActionListener.wrap(totalRows -> {
-            result.set(totalRows);
-            latch.countDown();
-        }, e -> {
-            error.set(e);
-            latch.countDown();
-        }));
-
-        assertTrue(latch.await(10, java.util.concurrent.TimeUnit.SECONDS));
-        assertNull(error.get());
-        assertEquals(Integer.valueOf(30), result.get());
-        assertEquals(3, buffer.size());
-        buffer.finish(true);
-    }
-
     public void testDrainPagesAsyncIteratorThrowsOnNext() throws Exception {
         AsyncExternalSourceBuffer buffer = new AsyncExternalSourceBuffer(1024 * 1024);
 
@@ -372,34 +346,6 @@ public class ExternalSourceDrainUtilsTests extends ESTestCase {
         buffer.finish(true);
     }
 
-    public void testDrainPagesWithBudgetAsyncThrowsMidDrain() throws Exception {
-        AsyncExternalSourceBuffer buffer = new AsyncExternalSourceBuffer(1024 * 1024);
-
-        List<Page> pages = new ArrayList<>();
-        for (int i = 0; i < 5; i++) {
-            pages.add(createTestPage(1, 10));
-        }
-
-        CountDownLatch latch = new CountDownLatch(1);
-        AtomicReference<Exception> error = new AtomicReference<>();
-        ExternalSourceDrainUtils.drainPagesWithBudgetAsync(
-            faultingIterator(pages, 2, false),
-            buffer,
-            100,
-            exec,
-            ActionListener.wrap(v -> latch.countDown(), e -> {
-                error.set(e);
-                latch.countDown();
-            })
-        );
-
-        assertTrue(latch.await(10, java.util.concurrent.TimeUnit.SECONDS));
-        assertNotNull(error.get());
-        assertTrue(error.get().getCause().getMessage().contains("simulated S3 read failure on next"));
-        assertEquals(2, buffer.size());
-        buffer.finish(true);
-    }
-
     public void testDrainAsyncExecutorRejection() throws Exception {
         long maxBufferBytes = 100;
         AsyncExternalSourceBuffer buffer = new AsyncExternalSourceBuffer(maxBufferBytes);
@@ -477,46 +423,6 @@ public class ExternalSourceDrainUtilsTests extends ESTestCase {
 
         assertTrue(latch.await(10, java.util.concurrent.TimeUnit.SECONDS));
         assertFalse("drainPagesAsync must NOT close the iterator (INV-7)", closeCalled.get());
-        buffer.finish(true);
-    }
-
-    public void testBudgetAccountingAcrossAsyncBoundaries() throws Exception {
-        long maxBufferBytes = 500;
-        AsyncExternalSourceBuffer buffer = new AsyncExternalSourceBuffer(maxBufferBytes);
-
-        List<Page> pages = new ArrayList<>();
-        for (int i = 0; i < 10; i++) {
-            pages.add(createTestPage(2, 5));
-        }
-
-        CountDownLatch latch = new CountDownLatch(1);
-        AtomicInteger resultRows = new AtomicInteger();
-        AtomicReference<Exception> error = new AtomicReference<>();
-        ExternalSourceDrainUtils.drainPagesWithBudgetAsync(iteratorOf(pages), buffer, 20, exec, ActionListener.wrap(totalRows -> {
-            resultRows.set(totalRows);
-            latch.countDown();
-        }, e -> {
-            error.set(e);
-            latch.countDown();
-        }));
-
-        int consumed = 0;
-        while (true) {
-            Page page = buffer.pollPage();
-            if (page != null) {
-                page.releaseBlocks();
-                consumed++;
-            } else if (latch.getCount() == 0) {
-                break;
-            } else {
-                Thread.yield();
-            }
-        }
-
-        assertTrue(latch.await(10, java.util.concurrent.TimeUnit.SECONDS));
-        assertNull(error.get());
-        assertEquals(20, resultRows.get());
-        assertEquals(4, consumed);
         buffer.finish(true);
     }
 
@@ -841,18 +747,16 @@ public class ExternalSourceDrainUtilsTests extends ESTestCase {
             tracked,
             buffer,
             exec,
-            ActionListener.runAfter(ActionListener.wrap(v -> drainDone.countDown(), e -> {
-                drainError.set(e);
-                drainDone.countDown();
-            }), () -> {
+            ActionListener.runAfter(ActionListener.wrap(v -> {}, drainError::set), () -> {
                 closeQuietly(tracked);
                 cleanupRan.set(true);
+                // countDown after cleanup so the awaiting thread observes cleanupRan==true (avoid race).
+                drainDone.countDown();
             })
         );
 
         // Let the buffer fill up (producer should be blocked waiting for space)
-        Thread.sleep(200);
-        assertTrue("Buffer should have pages", buffer.size() > 0);
+        assertBusy(() -> assertTrue("Buffer should have pages", buffer.size() > 0), 5, TimeUnit.SECONDS);
 
         // Cancel the query
         buffer.finish(true);
@@ -861,110 +765,6 @@ public class ExternalSourceDrainUtilsTests extends ESTestCase {
         assertNull("Drain should exit cleanly on cancellation, but got: " + drainError.get(), drainError.get());
         assertTrue("Cleanup must run after cancellation", cleanupRan.get());
         assertEquals("Iterator must be closed exactly once after cancellation", 1, closeCount.get());
-    }
-
-    /**
-     * Budget accounting with multiple sequential drains simulating multi-split behavior.
-     * Each drain reports consumed rows; the total across async boundaries must match.
-     */
-    public void testBudgetPropagationAcrossMultipleSequentialDrains() throws Exception {
-        long maxBufferBytes = 500;
-        AsyncExternalSourceBuffer buffer = new AsyncExternalSourceBuffer(maxBufferBytes);
-        int overallRowLimit = 35;
-
-        List<Page> batch1 = new ArrayList<>();
-        for (int i = 0; i < 5; i++) {
-            batch1.add(createTestPage(2, 5));
-        }
-        List<Page> batch2 = new ArrayList<>();
-        for (int i = 0; i < 5; i++) {
-            batch2.add(createTestPage(2, 5));
-        }
-
-        CountDownLatch latch = new CountDownLatch(1);
-        AtomicInteger totalConsumedRows = new AtomicInteger(0);
-        AtomicReference<Exception> error = new AtomicReference<>();
-
-        // Simulate multi-split: drain batch1, then batch2 with remaining budget
-        ExternalSourceDrainUtils.drainPagesWithBudgetAsync(iteratorOf(batch1), buffer, overallRowLimit, exec, ActionListener.wrap(c1 -> {
-            totalConsumedRows.addAndGet(c1);
-            int remaining = overallRowLimit - c1;
-            ExternalSourceDrainUtils.drainPagesWithBudgetAsync(iteratorOf(batch2), buffer, remaining, exec, ActionListener.wrap(c2 -> {
-                totalConsumedRows.addAndGet(c2);
-                latch.countDown();
-            }, e -> {
-                error.set(e);
-                latch.countDown();
-            }));
-        }, e -> {
-            error.set(e);
-            latch.countDown();
-        }));
-
-        // Consume pages to avoid blocking
-        int consumed = 0;
-        while (latch.getCount() > 0 || buffer.size() > 0) {
-            Page page = buffer.pollPage();
-            if (page != null) {
-                page.releaseBlocks();
-                consumed++;
-            } else {
-                Thread.yield();
-            }
-        }
-
-        assertTrue(latch.await(10, TimeUnit.SECONDS));
-        assertNull(error.get());
-        assertEquals("Total rows across async boundaries must match limit", 35, totalConsumedRows.get());
-        buffer.finish(true);
-    }
-
-    /**
-     * Executor rejection with budget variant: when executor.execute() throws during a
-     * budget-limited drain, the listener receives the failure and cleanup runs.
-     */
-    public void testBudgetDrainExecutorRejection() throws Exception {
-        long maxBufferBytes = 100;
-        AsyncExternalSourceBuffer buffer = new AsyncExternalSourceBuffer(maxBufferBytes);
-        List<Page> pages = new ArrayList<>();
-        for (int i = 0; i < 10; i++) {
-            pages.add(createTestPage(2, 50));
-        }
-
-        CountDownLatch latch = new CountDownLatch(1);
-        AtomicReference<Exception> error = new AtomicReference<>();
-        AtomicBoolean cleanupRan = new AtomicBoolean(false);
-
-        ExecutorService shutdownExec = Executors.newSingleThreadExecutor(EsExecutors.daemonThreadFactory("test", "shutdown"));
-        shutdownExec.shutdown();
-
-        exec.execute(() -> {
-            ExternalSourceDrainUtils.drainPagesWithBudgetAsync(
-                iteratorOf(pages),
-                buffer,
-                1000,
-                shutdownExec,
-                ActionListener.runAfter(ActionListener.<Integer>wrap(v -> latch.countDown(), e -> {
-                    error.set(e);
-                    latch.countDown();
-                }), () -> cleanupRan.set(true))
-            );
-        });
-
-        Thread.sleep(200);
-        Page p = buffer.pollPage();
-        if (p != null) {
-            p.releaseBlocks();
-        }
-
-        assertTrue(latch.await(10, TimeUnit.SECONDS));
-        assertNotNull("Should fail with executor rejection", error.get());
-        assertTrue(
-            "Error should be RejectedExecutionException, got: " + error.get().getClass().getSimpleName(),
-            error.get() instanceof RejectedExecutionException
-        );
-        assertTrue("Cleanup must run on executor rejection", cleanupRan.get());
-        buffer.finish(true);
     }
 
     /**
@@ -1000,6 +800,99 @@ public class ExternalSourceDrainUtilsTests extends ESTestCase {
         assertNotNull(error.get());
         assertTrue(error.get().getMessage().contains("immediate hasNext failure"));
         assertEquals(0, buffer.size());
+        buffer.finish(true);
+    }
+
+    /**
+     * The drain installs {@code readCancelled} as the ambient {@link StorageRetryCancellation} scope around every
+     * page pull. A pull parked in a storage retry/throttle backoff (modeled here by
+     * {@link StorageRetryCancellation#sleepWithCancellationChecks}) must therefore abort promptly with
+     * {@link TaskCancelledException} when the signal flips — instead of sleeping out the full backoff, which is the
+     * long-lived post-cancel read this change fixes. Cooperative {@code noMoreInputs} cancellation only fires
+     * between pulls, so it cannot cut a pull already inside the backoff; the scope is what closes that gap.
+     */
+    public void testDrainAbortsPagePullBackoffOnCancel() throws Exception {
+        AsyncExternalSourceBuffer buffer = new AsyncExternalSourceBuffer(1024 * 1024);
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+        CountDownLatch pullStarted = new CountDownLatch(1);
+        long backoffMillis = TimeUnit.SECONDS.toMillis(30);
+
+        CloseableIterator<Page> backoffIterator = new CloseableIterator<>() {
+            @Override
+            public boolean hasNext() {
+                pullStarted.countDown();
+                try {
+                    // Mirrors RetryPolicy.execute / RetryableStorageObject.reopenOrThrow parking in backoff.
+                    StorageRetryCancellation.sleepWithCancellationChecks(backoffMillis);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(e);
+                }
+                return false;
+            }
+
+            @Override
+            public Page next() {
+                throw new NoSuchElementException();
+            }
+
+            @Override
+            public void close() {}
+        };
+
+        CountDownLatch done = new CountDownLatch(1);
+        AtomicReference<Exception> error = new AtomicReference<>();
+        long startNanos = System.nanoTime();
+        // The first drain step runs synchronously on the caller, so dispatch it to a worker thread — otherwise the
+        // backoff sleep would block this test thread before it can flip the cancel signal.
+        exec.execute(
+            () -> ExternalSourceDrainUtils.drainPagesAsync(
+                backoffIterator,
+                buffer,
+                exec,
+                cancelled::get,
+                ActionListener.wrap(v -> done.countDown(), e -> {
+                    error.set(e);
+                    done.countDown();
+                })
+            )
+        );
+
+        assertTrue("the page pull must have entered the backoff", pullStarted.await(10, TimeUnit.SECONDS));
+        cancelled.set(true);
+        assertTrue("drain must abort after cancel rather than sleeping out the backoff", done.await(10, TimeUnit.SECONDS));
+        long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
+        assertTrue(
+            "drain aborted well under the " + backoffMillis + "ms backoff (took " + elapsedMillis + "ms)",
+            elapsedMillis < backoffMillis / 2
+        );
+        assertNotNull("a cancelled pull must surface as a failure", error.get());
+        assertTrue("cancel must surface as TaskCancelledException, got " + error.get(), error.get() instanceof TaskCancelledException);
+        buffer.finish(true);
+    }
+
+    /**
+     * Sanity: threading a never-cancelled signal through the drain does not change normal completion — all pages
+     * are drained and success is reported.
+     */
+    public void testDrainWithCancellationSupplierCompletesNormally() throws Exception {
+        AsyncExternalSourceBuffer buffer = new AsyncExternalSourceBuffer(1024 * 1024);
+        List<Page> pages = List.of(createTestPage(1, 10), createTestPage(1, 10));
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<Exception> error = new AtomicReference<>();
+        ExternalSourceDrainUtils.drainPagesAsync(
+            iteratorOf(pages),
+            buffer,
+            exec,
+            () -> false,
+            ActionListener.wrap(v -> latch.countDown(), e -> {
+                error.set(e);
+                latch.countDown();
+            })
+        );
+        assertTrue(latch.await(10, TimeUnit.SECONDS));
+        assertNull("normal drain must not fail", error.get());
+        assertEquals("both pages must be buffered", 2, buffer.size());
         buffer.finish(true);
     }
 

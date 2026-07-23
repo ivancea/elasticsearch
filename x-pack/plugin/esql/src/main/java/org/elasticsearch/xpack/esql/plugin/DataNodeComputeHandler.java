@@ -13,6 +13,7 @@ import org.elasticsearch.action.ActionListenerResponseHandler;
 import org.elasticsearch.action.ActionRunnable;
 import org.elasticsearch.action.OriginalIndices;
 import org.elasticsearch.action.support.ChannelActionListener;
+import org.elasticsearch.action.support.ContextPreservingActionListener;
 import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.action.support.RefCountingRunnable;
 import org.elasticsearch.cluster.node.DiscoveryNode;
@@ -52,7 +53,6 @@ import org.elasticsearch.xpack.esql.action.EsqlCapabilities;
 import org.elasticsearch.xpack.esql.core.expression.FoldContext;
 import org.elasticsearch.xpack.esql.datasources.spi.ExternalSplit;
 import org.elasticsearch.xpack.esql.plan.physical.ExchangeSinkExec;
-import org.elasticsearch.xpack.esql.plan.physical.ExternalSourceExec;
 import org.elasticsearch.xpack.esql.plan.physical.PhysicalPlan;
 import org.elasticsearch.xpack.esql.planner.PlanConcurrencyCalculator;
 import org.elasticsearch.xpack.esql.planner.PlannerSettings;
@@ -71,8 +71,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.elasticsearch.xpack.esql.plugin.EsqlPlugin.ESQL_WORKER_THREAD_POOL_NAME;
-
 /**
  * Handles computes within a single cluster by dispatching {@link DataNodeRequest} to data nodes
  * and executing these computes on the data nodes.
@@ -89,7 +87,7 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
     private final ProjectResolver projectResolver;
     private final TransportService transportService;
     private final ExchangeService exchangeService;
-    private final Executor esqlExecutor;
+    private final Executor searchExecutor;
     private final ThreadPool threadPool;
 
     DataNodeComputeHandler(
@@ -99,7 +97,7 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
         SearchService searchService,
         TransportService transportService,
         ExchangeService exchangeService,
-        Executor esqlExecutor
+        Executor searchExecutor
     ) {
         this.computeService = computeService;
         this.clusterService = clusterService;
@@ -107,9 +105,9 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
         this.searchService = searchService;
         this.transportService = transportService;
         this.exchangeService = exchangeService;
-        this.esqlExecutor = esqlExecutor;
+        this.searchExecutor = searchExecutor;
         this.threadPool = transportService.getThreadPool();
-        transportService.registerRequestHandler(ComputeService.DATA_ACTION_NAME, esqlExecutor, DataNodeRequest::new, this);
+        transportService.registerRequestHandler(ComputeService.DATA_ACTION_NAME, searchExecutor, DataNodeRequest::new, this);
     }
 
     void startComputeOnDataNodes(
@@ -131,7 +129,7 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
             clusterService,
             projectResolver,
             transportService,
-            esqlExecutor,
+            searchExecutor,
             parentTask,
             originalIndices,
             PlannerUtils.canMatchFilter(flags, configuration, clusterService.state().getMinTransportVersion(), dataNodePlan),
@@ -170,7 +168,7 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
                     connection,
                     childSessionId,
                     queryPragmas.exchangeBufferSize(),
-                    esqlExecutor,
+                    searchExecutor,
                     listener.delegateFailureAndWrap((l, unused) -> {
                         final Runnable onGroupFailure;
                         final CancellableTask groupTask;
@@ -212,7 +210,10 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
                                 // TopN late materialization, listed below), as the node-reduce driver would end up doing the exact same
                                 // work as the final driver.
                                 queryPragmas.nodeLevelReduction() && sameNodeAsCoordinator == false,
-                                queryPragmas.nodeLevelReduction() && enableReduceNodeLateMaterialization
+                                queryPragmas.nodeLevelReduction() && enableReduceNodeLateMaterialization,
+                                // TODO: gate on EsqlCapabilities.Cap.REMOTE_FETCH plus request/connection transport versions
+                                // when coordinator planning starts requesting retained contexts.
+                                false
                             );
                             transportService.sendChildRequest(
                                 connection,
@@ -223,7 +224,7 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
                                 new ActionListenerResponseHandler<>(computeListener.acquireCompute().map(r -> {
                                     nodeResponseRef.set(r);
                                     return r.completionInfo();
-                                }), DataNodeComputeResponse::new, esqlExecutor)
+                                }), DataNodeComputeResponse::new, searchExecutor)
                             );
                             final var remoteSink = exchangeService.newRemoteSink(groupTask, childSessionId, transportService, connection);
                             exchangeSource.addRemoteSink(
@@ -351,7 +352,24 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
                         groupTask = parentTask;
                         onGroupFailure = runOnTaskFailure;
                     }
-                    try (var computeListener = new ComputeListener(threadPool, onGroupFailure, l.map(ignored -> null))) {
+                    // Mirror the indexed path (startComputeOnDataNodes): forward the inner
+                    // ComputeListener's accumulated DriverCompletionInfo (driver + plan profiles)
+                    // into a dedicated parentComputeListener.acquireCompute() slot.
+                    final ActionListener<DriverCompletionInfo> profileSlot = parentComputeListener.acquireCompute();
+                    final ActionListener<Void> outerL = l;
+                    try (var computeListener = new ComputeListener(threadPool, onGroupFailure, ActionListener.wrap(info -> {
+                        try {
+                            profileSlot.onResponse(info);
+                        } finally {
+                            outerL.onResponse(null);
+                        }
+                    }, e -> {
+                        try {
+                            profileSlot.onFailure(e);
+                        } finally {
+                            outerL.onFailure(e);
+                        }
+                    }))) {
                         var dataNodeRequest = new DataNodeRequest(
                             childSessionId,
                             configuration,
@@ -363,6 +381,7 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
                             IndicesOptions.STRICT_EXPAND_OPEN,
                             queryPragmas.nodeLevelReduction(),
                             false,
+                            false,
                             nodeSplits
                         );
                         transportService.sendChildRequest(
@@ -372,9 +391,9 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
                             groupTask,
                             TransportRequestOptions.EMPTY,
                             new ActionListenerResponseHandler<>(
-                                computeListener.acquireCompute().map(r -> r.completionInfo()),
+                                computeListener.acquireCompute().map(DataNodeComputeResponse::completionInfo),
                                 DataNodeComputeResponse::new,
-                                esqlExecutor
+                                searchExecutor
                             )
                         );
                         var remoteSink = exchangeService.newRemoteSink(groupTask, childSessionId, transportService, connection);
@@ -410,7 +429,7 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
                         connection,
                         childSessionId,
                         queryPragmas.exchangeBufferSize(),
-                        esqlExecutor,
+                        searchExecutor,
                         openExchangeListenerWithNodeCompletion
                     );
                 } catch (Exception e) {
@@ -553,7 +572,7 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
                 configuration,
                 request.aliasFilters(),
                 ActionListener.wrap(acquiredSearchContexts -> {
-                    assert ThreadPool.assertCurrentThreadPool(ThreadPool.Names.SEARCH, ESQL_WORKER_THREAD_POOL_NAME);
+                    assert ThreadPool.assertCurrentThreadPool(ThreadPool.Names.SEARCH);
                     if (acquiredSearchContexts.isEmpty()) {
                         batchListener.onResponse(DriverCompletionInfo.EMPTY);
                         return;
@@ -567,7 +586,8 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
                         configuration,
                         configuration.newFoldContext(),
                         null,
-                        () -> exchangeSink.createExchangeSink(pagesProduced::incrementAndGet)
+                        () -> exchangeSink.createExchangeSink(pagesProduced::incrementAndGet),
+                        request.retainSearchContexts()
                     );
                     computeService.runCompute(
                         parentTask,
@@ -595,7 +615,7 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
                     var indexShard = searchService.getIndicesService()
                         .indexServiceSafe(shard.shardId().getIndex())
                         .getShard(shard.shardId().id());
-                    targetShards.add(new Tuple<>(indexShard, shard.reshardSplitShardCountSummary()));
+                    targetShards.add(new Tuple<>(indexShard, shard.splitShardCountSummary()));
                 } catch (Exception e) {
                     if (addShardLevelFailure(shard.shardId(), e) == false) {
                         listener.onFailure(e);
@@ -635,7 +655,7 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
             final AtomicBoolean waitedForRefreshes = new AtomicBoolean();
             try (RefCountingRunnable refs = new RefCountingRunnable(() -> {
                 if (waitedForRefreshes.get()) {
-                    esqlExecutor.execute(doAcquire);
+                    searchExecutor.execute(doAcquire);
                 } else {
                     doAcquire.run();
                 }
@@ -680,7 +700,6 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
         CancellableTask task,
         String externalId,
         PhysicalPlan reducePlan,
-        LocalPhysicalOptimization localPhysicalOptimization,
         DataNodeRequest request,
         boolean failFastOnShardFailure,
         AcquiredSearchContexts searchContexts,
@@ -720,7 +739,7 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
                 );
                 dataNodeRequestExecutor.start();
                 // run the node-level reduction
-                var exchangeSource = new ExchangeSourceHandler(1, esqlExecutor);
+                var exchangeSource = new ExchangeSourceHandler(1, searchExecutor);
                 exchangeSource.addRemoteSink(internalSink::fetchPageAsync, true, () -> {}, 1, ActionListener.noop());
                 var reductionListener = computeListener.acquireCompute();
                 computeService.runCompute(
@@ -734,18 +753,25 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
                         request.configuration(),
                         new FoldContext(request.pragmas().foldLimit().getBytes()),
                         exchangeSource::createExchangeSource,
-                        () -> externalSink.createExchangeSink(() -> {})
+                        () -> externalSink.createExchangeSink(() -> {}),
+                        request.retainSearchContexts()
                     ),
                     reducePlan,
                     plannerSettings,
-                    localPhysicalOptimization,
+                    // Local physical optimization is aimed at data nodes. For node-reduce-level reduction we precompute the final physical
+                    // plan and pass it in reducePlan. We don't need any additional optimizations.
+                    LocalPhysicalOptimization.DISABLED,
                     planTimeProfile,
                     ActionListener.wrap(resp -> {
-                        // don't return until all pages are fetched
-                        externalSink.addCompletionListener(ActionListener.running(() -> {
-                            exchangeService.finishSinkHandler(externalId, null);
-                            reductionListener.onResponse(resp);
-                        }));
+                        // don't return until all pages are fetched; preserve the current thread context (which holds the
+                        // reduction driver's warnings) because the completion listener may fire on a different thread
+                        // (the transport thread that processes the coordinator's fetchPageAsync call)
+                        externalSink.addCompletionListener(
+                            ContextPreservingActionListener.wrapPreservingContext(ActionListener.running(() -> {
+                                exchangeService.finishSinkHandler(externalId, null);
+                                reductionListener.onResponse(resp);
+                            }), threadPool.getThreadContext())
+                        );
                     }, e -> {
                         LOGGER.debug("Error in node-level reduction", e);
                         exchangeService.finishSinkHandler(externalId, e);
@@ -792,8 +818,9 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
             return;
         }
         final String sessionId = request.sessionId();
+        final String nodeReduceSessionId = sessionId + "[n]";
         request = new DataNodeRequest(
-            sessionId + "[n]", // internal session
+            nodeReduceSessionId, // internal session
             request.configuration(),
             request.clusterAlias(),
             request.shards(),
@@ -803,22 +830,68 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
             request.indicesOptions(),
             request.runNodeLevelReduction(),
             request.reductionLateMaterialization(),
+            request.retainSearchContexts(),
             request.externalSplits()
         );
         // the sender doesn't support retry on shard failures, so we need to fail fast here.
         final boolean failFastOnShardFailures = supportShardLevelRetryFailure(channel.getVersion()) == false;
         var computeSearchContexts = new AcquiredSearchContexts(request.shards().size());
+        ActionListener<DataNodeComputeResponse> responseListener;
+        if (request.retainSearchContexts()) {
+            final RetainedSearchContextsRegistry.Handle retainedSearchContexts;
+            try {
+                retainedSearchContexts = computeService.remoteFetchService()
+                    .retainSearchContexts(nodeReduceSessionId, computeSearchContexts);
+            } catch (Exception e) {
+                computeSearchContexts.close();
+                listener.onFailure(e);
+                return;
+            }
+            /*
+             * The compute holds its own lease on the retained contexts while its drivers run. Cancellation closes the
+             * registration asynchronously, which rejects new fetch leases immediately, but must not release the
+             * contexts out from under still-running drivers; that only happens once this lease is closed in the
+             * response listener, after the compute has completed.
+             */
+            final RetainedSearchContextsRegistry.Handle computeLease;
+            try {
+                computeLease = computeService.remoteFetchService().acquireRetainedContexts(nodeReduceSessionId);
+            } catch (Exception e) {
+                retainedSearchContexts.close();
+                listener.onFailure(e);
+                return;
+            }
+            ((CancellableTask) task).addListener(retainedSearchContexts::close);
+            responseListener = ActionListener.wrap(response -> {
+                boolean success = false;
+                try {
+                    retainedSearchContexts.finishRegistration();
+                    listener.onResponse(response);
+                    success = true;
+                } finally {
+                    computeLease.close();
+                    if (success == false) {
+                        retainedSearchContexts.close();
+                    }
+                }
+            }, e -> {
+                try (retainedSearchContexts; computeLease) {
+                    listener.onFailure(e);
+                }
+            });
+        } else {
+            responseListener = ActionListener.releaseAfter(listener, computeSearchContexts);
+        }
         runComputeOnDataNode(
             (CancellableTask) task,
             sessionId,
             reductionPlan.nodeReducePlan(),
-            reductionPlan.localPhysicalOptimization(),
             request.withPlan(reductionPlan.dataNodePlan()),
             failFastOnShardFailures,
             computeSearchContexts,
             computeService.plannerSettings().get(),
             planTimeProfile,
-            ActionListener.releaseAfter(listener, computeSearchContexts)
+            responseListener
         );
     }
 
@@ -841,7 +914,8 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
         // Run localPlan() to expand FragmentExec(ExternalRelation) -> ExternalSourceExec
         // This runs LocalLogicalPlanOptimizer, LocalMapper, and LocalPhysicalPlanOptimizer
         // (including filter pushdown via FormatReader.filterPushdownSupport())
-        PhysicalPlan expandedPlan = PlannerUtils.localPlan(
+        // Splits are injected before physical optimization so rules like PushStatsToExternalSource see them.
+        PhysicalPlan planWithSplits = PlannerUtils.localPlan(
             plannerSettings,
             flags,
             configuration,
@@ -849,11 +923,9 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
             sinkExec,
             SearchStats.EMPTY,
             computeService.formatReaderRegistry(),
+            request.externalSplits(),
             planTimeProfile
         );
-
-        // Inject external splits into the ExternalSourceExec created by localPlan()
-        PhysicalPlan planWithSplits = expandedPlan.transformUp(ExternalSourceExec.class, exec -> exec.withSplits(request.externalSplits()));
 
         try (
             ComputeListener computeListener = new ComputeListener(
@@ -882,7 +954,8 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
                     configuration,
                     configuration.newFoldContext(),
                     null,
-                    () -> externalSink.createExchangeSink(() -> {})
+                    () -> externalSink.createExchangeSink(() -> {}),
+                    false
                 );
                 computeService.runCompute(
                     task,

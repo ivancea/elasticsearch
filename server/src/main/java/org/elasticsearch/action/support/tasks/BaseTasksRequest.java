@@ -10,7 +10,7 @@
 package org.elasticsearch.action.support.tasks;
 
 import org.elasticsearch.action.ActionRequestValidationException;
-import org.elasticsearch.action.LegacyActionRequest;
+import org.elasticsearch.action.UntypedActionRequest;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -28,7 +28,7 @@ import static org.elasticsearch.action.ValidateActions.addValidationError;
 /**
  * A base class for task requests
  */
-public class BaseTasksRequest<Request extends BaseTasksRequest<Request>> extends LegacyActionRequest {
+public class BaseTasksRequest<Request extends BaseTasksRequest<Request>> extends UntypedActionRequest {
 
     public static final String[] ALL_ACTIONS = Strings.EMPTY_ARRAY;
 
@@ -176,7 +176,7 @@ public class BaseTasksRequest<Request extends BaseTasksRequest<Request>> extends
     }
 
     public boolean match(Task task) {
-        if (!canMatchAction(task.getAction())) {
+        if (matchesActionAndParent(task) == false) {
             return false;
         }
         if (getTargetTaskId().isSet()) {
@@ -184,12 +184,14 @@ public class BaseTasksRequest<Request extends BaseTasksRequest<Request>> extends
                 return false;
             }
         }
-        if (targetParentTaskId.isSet()) {
-            if (targetParentTaskId.equals(task.getParentTaskId()) == false) {
-                return false;
-            }
-        }
         return true;
+    }
+
+    protected final boolean matchesActionAndParent(Task task) {
+        if (canMatchAction(task.getAction()) == false) {
+            return false;
+        }
+        return targetParentTaskId.isSet() == false || targetParentTaskId.equals(task.getParentTaskId());
     }
 
     public boolean canMatchAction(final String action) {

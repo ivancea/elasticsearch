@@ -45,6 +45,7 @@ class FlattenedFieldParser {
     private final String nullValue;
 
     private final boolean usesBinaryDocValues;
+    private final boolean usesArrayOrderBinaryDocValues;
     private final boolean hasRootDocValues;
     private final boolean storeIgnoredFieldsInBinaryDocValues;
     private final IndexVersion indexVersion;
@@ -52,6 +53,8 @@ class FlattenedFieldParser {
     private final Map<String, FieldMapper> mappedSubFields;
 
     private final FlattenedFieldMapper.PreserveLeafArrays preserveLeafArrays;
+
+    private final boolean writeDimensionRouting;
 
     FlattenedFieldParser(
         String rootFieldFullPath,
@@ -66,7 +69,9 @@ class FlattenedFieldParser {
         Map<String, FieldMapper> mappedSubFields,
         boolean storeIgnoredFieldsInBinaryDocValues,
         FlattenedFieldMapper.PreserveLeafArrays preserveLeafArrays,
-        IndexVersion indexVersion
+        IndexVersion indexVersion,
+        boolean writeDimensionRouting,
+        boolean usesArrayOrderBinaryDocValues
     ) {
         this.rootFieldFullPath = rootFieldFullPath;
         this.keyedFieldFullPath = keyedFieldFullPath;
@@ -76,11 +81,13 @@ class FlattenedFieldParser {
         this.ignoreAbove = ignoreAbove;
         this.nullValue = nullValue;
         this.usesBinaryDocValues = usesBinaryDocValues;
+        this.usesArrayOrderBinaryDocValues = usesArrayOrderBinaryDocValues;
         this.hasRootDocValues = hasRootDocValues;
         this.mappedSubFields = mappedSubFields;
         this.storeIgnoredFieldsInBinaryDocValues = storeIgnoredFieldsInBinaryDocValues;
         this.preserveLeafArrays = preserveLeafArrays;
         this.indexVersion = indexVersion;
+        this.writeDimensionRouting = writeDimensionRouting;
     }
 
     public void parse(final DocumentParserContext documentParserContext, FlattenedFieldArrayContext arrayContext) throws IOException {
@@ -146,6 +153,13 @@ class FlattenedFieldParser {
                 mappedSubField.parse(context.documentParserContext());
             } else if (nullValue != null) {
                 addField(context, path, currentName, nullValue);
+            } else if (usesArrayOrderBinaryDocValues) {
+                // Document-order mode: record a null slot with the key inline so synthetic source can reconstruct it.
+                MultiValuedBinaryDocValuesField.KeyedArrayOrderInlineNull.recordNull(
+                    context.documentParserContext.doc(),
+                    keyedFieldFullPath,
+                    new BytesRef(key + SEPARATOR)
+                );
             } else if (preserveLeafArrays == FlattenedFieldMapper.PreserveLeafArrays.EXACT) {
                 context.arrayContext.recordNull(key);
             }
@@ -176,16 +190,24 @@ class FlattenedFieldParser {
         BytesRef bytesKeyedValue = new BytesRef(keyedValue);
 
         if (value.length() > ignoreAbove) {
-            if (context.documentParserContext().mappingLookup().isSourceSynthetic()) {
-                if (preserveLeafArrays == FlattenedFieldMapper.PreserveLeafArrays.EXACT) {
+            var lookup = context.documentParserContext().mappingLookup();
+            if (lookup.isSourceSynthetic() || lookup.isSourceColumnarStored()) {
+                // In document-order mode there is no _offsets sidecar; ignored values are tail-appended during read.
+                if (preserveLeafArrays == FlattenedFieldMapper.PreserveLeafArrays.EXACT && usesArrayOrderBinaryDocValues == false) {
                     context.arrayContext.recordOffset(key, new BytesRef(value));
                 }
                 if (storeIgnoredFieldsInBinaryDocValues) {
+                    // Array-order mode must preserve duplicates; SORTED_UNIQUE would lose them via TreeSet deduplication.
+                    // SORTED (not UNSORTED) because ignored values lose their document position by definition —
+                    // they are tail-appended per key — so we sort them for deterministic reconstruction.
+                    var ordering = usesArrayOrderBinaryDocValues
+                        ? MultiValuedBinaryDocValuesField.ValueOrdering.SORTED
+                        : MultiValuedBinaryDocValuesField.ValueOrdering.SORTED_UNIQUE;
                     MultiValuedBinaryDocValuesField.addToBinaryFieldInDoc(
                         context.documentParserContext.doc(),
                         keyedIgnoredValuesFieldFullPath,
                         BytesRef.deepCopyOf(bytesKeyedValue),
-                        MultiValuedBinaryDocValuesField.ValueOrdering.SORTED_UNIQUE,
+                        ordering,
                         indexVersion
                     );
                 } else {
@@ -228,12 +250,21 @@ class FlattenedFieldParser {
                         MultiValuedBinaryDocValuesField.ValueOrdering.SORTED_UNIQUE
                     );
                 }
-                MultiValuedBinaryDocValuesField.addToBinaryFieldInDoc(
-                    context.documentParserContext.doc(),
-                    keyedFieldFullPath,
-                    bytesKeyedValue,
-                    MultiValuedBinaryDocValuesField.ValueOrdering.SORTED_UNIQUE
-                );
+                if (usesArrayOrderBinaryDocValues) {
+                    // Document-order mode: store key\0value inline, preserving document order and duplicates.
+                    MultiValuedBinaryDocValuesField.KeyedArrayOrderInlineNull.recordValue(
+                        context.documentParserContext.doc(),
+                        keyedFieldFullPath,
+                        bytesKeyedValue
+                    );
+                } else {
+                    MultiValuedBinaryDocValuesField.addToBinaryFieldInDoc(
+                        context.documentParserContext.doc(),
+                        keyedFieldFullPath,
+                        bytesKeyedValue,
+                        MultiValuedBinaryDocValuesField.ValueOrdering.SORTED_UNIQUE
+                    );
+                }
             } else {
                 if (hasRootDocValues) {
                     context.documentParserContext.doc().add(new SortedSetDocValuesField(rootFieldFullPath, bytesValue));
@@ -241,16 +272,17 @@ class FlattenedFieldParser {
                 context.documentParserContext.doc().add(new SortedSetDocValuesField(keyedFieldFullPath, bytesKeyedValue));
             }
 
-            if (preserveLeafArrays == FlattenedFieldMapper.PreserveLeafArrays.EXACT) {
+            // In document-order mode there is no _offsets sidecar.
+            if (preserveLeafArrays == FlattenedFieldMapper.PreserveLeafArrays.EXACT && usesArrayOrderBinaryDocValues == false) {
                 context.arrayContext.recordOffset(key, bytesValue);
             }
 
-            if (fieldType.isDimension() == false || context.documentParserContext().getRoutingFields().isNoop()) {
+            if (writeDimensionRouting == false) {
                 return;
             }
 
             final String keyedFieldName = FlattenedFieldParser.extractKey(bytesKeyedValue).utf8ToString();
-            if (fieldType.isDimension() && fieldType.dimensions().contains(keyedFieldName)) {
+            if (fieldType.dimensions().contains(keyedFieldName)) {
                 final BytesRef keyedFieldValue = FlattenedFieldParser.extractValue(bytesKeyedValue);
                 context.documentParserContext().getRoutingFields().addString(rootFieldFullPath + "." + keyedFieldName, keyedFieldValue);
             }
