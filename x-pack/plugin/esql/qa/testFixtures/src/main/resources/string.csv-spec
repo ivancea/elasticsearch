@@ -458,6 +458,42 @@ has_a:boolean | has_z:boolean
 true | false
 ;
 
+// Valid haystack, truncated needle (0xF0). 🐱 is F0 9F 90 B1 so the lead byte matches.
+containsTruncatedNeedleUtf8
+required_capability: fn_contains_fix_truncated_utf8
+ROW a = "🐱", b = FROM_BASE64("8A=="), c = "abc"
+| EVAL in_cat = CONTAINS(a, b), in_abc = CONTAINS(c, b)
+| KEEP in_cat, in_abc
+;
+
+in_cat:boolean | in_abc:boolean
+true           | false
+;
+
+// Both sides truncated UTF-8 (0xF0 alone as substr). Byte-level contains still matches.
+containsBothTruncatedUtf8
+required_capability: fn_contains_fix_truncated_utf8
+ROW a = FROM_BASE64("YfA="), b = FROM_BASE64("8A==")
+| EVAL both_broken = CONTAINS(a, b)
+| KEEP both_broken
+;
+
+both_broken:boolean
+true
+;
+
+// Both sides truncated and equal.
+containsBothTruncatedEqualUtf8
+required_capability: fn_contains_fix_truncated_utf8
+ROW a = FROM_BASE64("YfA=")
+| EVAL equal_broken = CONTAINS(a, a)
+| KEEP equal_broken
+;
+
+equal_broken:boolean
+true
+;
+
 containsLongerSubstr
 required_capability: fn_contains
 row a = "hello" | eval a_ll = contains(a, "farewell");

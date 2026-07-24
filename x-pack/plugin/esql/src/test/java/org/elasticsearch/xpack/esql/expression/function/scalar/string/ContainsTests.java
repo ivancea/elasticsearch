@@ -105,8 +105,18 @@ public class ContainsTests extends AbstractScalarFunctionTestCase {
         suppliers.add(supplier("🐱Meow!🐶Woof!", "eow!🐶Woof!", true));
 
         // Truncated UTF-8 lead byte 0xF0; must not throw via utf8ToString()
+        // Truncated haystack, valid needle
         suppliers.add(supplier(new byte[] { (byte) 'a', (byte) 0xF0 }, "a", true));
         suppliers.add(supplier(new byte[] { (byte) 'a', (byte) 0xF0 }, "z", false));
+        // Valid haystack, truncated needle (🐱 is F0 9F 90 B1; lone 0xF0 matches that lead byte)
+        suppliers.add(supplier("abc", new byte[] { (byte) 0xF0 }, false));
+        suppliers.add(supplier("🐱", new byte[] { (byte) 0xF0 }, true));
+        // Both sides truncated; byte-level contains still matches
+        suppliers.add(supplier(new byte[] { (byte) 'a', (byte) 0xF0 }, new byte[] { (byte) 0xF0 }, true));
+        suppliers.add(supplier(new byte[] { (byte) 'x', (byte) 'a', (byte) 0xF0 }, new byte[] { (byte) 'a', (byte) 0xF0 }, true));
+        suppliers.add(supplier(new byte[] { (byte) 'a', (byte) 0xF0 }, new byte[] { (byte) 0xF0, (byte) 0x9F }, false));
+        // Both truncated and equal
+        suppliers.add(supplier(new byte[] { (byte) 'a', (byte) 0xF0 }, new byte[] { (byte) 'a', (byte) 0xF0 }, true));
 
         return parameterSuppliersFromTypedDataWithDefaultChecks(true, suppliers);
     }
@@ -131,6 +141,22 @@ public class ContainsTests extends AbstractScalarFunctionTestCase {
             name,
             types(DataType.KEYWORD, DataType.KEYWORD),
             () -> testCase(DataType.KEYWORD, DataType.KEYWORD, new BytesRef(str), substr, expectedValue)
+        );
+    }
+
+    private static TestCaseSupplier supplier(String str, byte[] substr, @Nullable Boolean expectedValue) {
+        return new TestCaseSupplier(
+            "truncated utf8 in \"" + str + "\"",
+            types(DataType.KEYWORD, DataType.KEYWORD),
+            () -> testCase(DataType.KEYWORD, DataType.KEYWORD, new BytesRef(str), new BytesRef(substr), expectedValue)
+        );
+    }
+
+    private static TestCaseSupplier supplier(byte[] str, byte[] substr, @Nullable Boolean expectedValue) {
+        return new TestCaseSupplier(
+            "truncated utf8 in truncated utf8",
+            types(DataType.KEYWORD, DataType.KEYWORD),
+            () -> testCase(DataType.KEYWORD, DataType.KEYWORD, new BytesRef(str), new BytesRef(substr), expectedValue)
         );
     }
 
@@ -182,9 +208,19 @@ public class ContainsTests extends AbstractScalarFunctionTestCase {
         String substr,
         Boolean expectedValue
     ) {
+        return testCase(strType, substrType, str, substr == null ? null : new BytesRef(substr), expectedValue);
+    }
+
+    private static TestCaseSupplier.TestCase testCase(
+        DataType strType,
+        DataType substrType,
+        BytesRef str,
+        BytesRef substr,
+        Boolean expectedValue
+    ) {
         List<TestCaseSupplier.TypedData> values = new ArrayList<>();
         values.add(new TestCaseSupplier.TypedData(str, strType, "str"));
-        values.add(new TestCaseSupplier.TypedData(substr == null ? null : new BytesRef(substr), substrType, "substr"));
+        values.add(new TestCaseSupplier.TypedData(substr, substrType, "substr"));
         return new TestCaseSupplier.TestCase(values, expectedToString(), DataType.BOOLEAN, equalTo(expectedValue));
     }
 }
