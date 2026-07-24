@@ -36,39 +36,51 @@ public class FromBase64Tests extends AbstractScalarFunctionTestCase {
     @ParametersFactory
     public static Iterable<Object[]> parameters() {
         List<TestCaseSupplier> suppliers = new ArrayList<>();
-        UnaryTestCaseHelper valid = unary().expectedOutputType(DataType.KEYWORD)
-            .evaluatorToString("FromBase64Evaluator[field=%0]")
-            .expectedFromString(s -> new BytesRef(Base64.getDecoder().decode(s.getBytes(StandardCharsets.UTF_8))));
-        valid.strings("empty", () -> "").build(suppliers);
-        valid.strings("ascii", () -> Base64.getEncoder().encodeToString(randomAlphaOfLengthBetween(1, 54).getBytes(StandardCharsets.UTF_8)))
+
+        // Valid base64 → well-formed UTF-8 keyword
+        helper().expectedFromString(encoded -> new BytesRef(decode(encoded)))
+            .strings("empty", () -> "")
+            .strings("ascii", () -> encode(randomAlphaOfLengthBetween(1, 54)))
+            .strings("unicode", () -> encode(randomRealisticUnicodeOfCodepointLengthBetween(1, 20)))
             .build(suppliers);
-        valid.strings(
-            "unicode",
-            () -> Base64.getEncoder().encodeToString(randomRealisticUnicodeOfCodepointLengthBetween(1, 20).getBytes(StandardCharsets.UTF_8))
-        ).build(suppliers);
 
-        UnaryTestCaseHelper invalidUtf8 = unary().expectedOutputType(DataType.KEYWORD)
-            .evaluatorToString("FromBase64Evaluator[field=%0]")
-            .expectNullAndWarningsFromString(
-                s -> List.of("Line 1:1: java.lang.IllegalArgumentException: decoded value is not valid UTF-8")
-            );
-        // 'a' + truncated 4-byte lead 0xF0
-        invalidUtf8.strings("truncated lead", () -> "YfA=").build(suppliers);
-        // lone 0xF0
-        invalidUtf8.strings("lone lead", () -> "8A==").build(suppliers);
+        // Valid base64, but decoded bytes are not well-formed UTF-8 → null + warning
+        helper().expectNullAndWarningsFromString(
+            encoded -> List.of("Line 1:1: java.lang.IllegalArgumentException: decoded value is not valid UTF-8")
+        )
+            .strings("truncated lead byte", () -> encode(new byte[] { 'a', (byte) 0xF0 }))
+            .strings("lone lead byte", () -> encode(new byte[] { (byte) 0xF0 }))
+            .build(suppliers);
 
-        UnaryTestCaseHelper invalidBase64 = unary().expectedOutputType(DataType.KEYWORD)
-            .evaluatorToString("FromBase64Evaluator[field=%0]")
-            .expectNullAndWarningsFromString(s -> List.of("Line 1:1: java.lang.IllegalArgumentException: " + base64ErrorMessage(s)));
-        invalidBase64.strings("not base64", () -> "not!!base64").build(suppliers);
+        // Not valid base64 at all → null + warning (decode throws before UTF-8 check)
+        helper().expectNullAndWarningsFromString(
+            encoded -> List.of("Line 1:1: java.lang.IllegalArgumentException: " + decodeErrorMessage(encoded))
+        ).strings("invalid alphabet", () -> "not!!base64").build(suppliers);
 
         return parameterSuppliersFromTypedDataWithDefaultChecks(true, suppliers);
     }
 
-    private static String base64ErrorMessage(String bad) {
+    private static UnaryTestCaseHelper helper() {
+        return unary().expectedOutputType(DataType.KEYWORD).evaluatorToString("FromBase64Evaluator[field=%0]");
+    }
+
+    private static String encode(String plain) {
+        return encode(plain.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String encode(byte[] bytes) {
+        return Base64.getEncoder().encodeToString(bytes);
+    }
+
+    private static byte[] decode(String encoded) {
+        return Base64.getDecoder().decode(encoded.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** Message from {@link Base64.Decoder} for an input that must not decode successfully. */
+    private static String decodeErrorMessage(String invalidBase64) {
         try {
-            Base64.getDecoder().decode(bad.getBytes(StandardCharsets.UTF_8));
-            throw new AssertionError("expected invalid base64: " + bad);
+            decode(invalidBase64);
+            throw new AssertionError("expected invalid base64: " + invalidBase64);
         } catch (IllegalArgumentException e) {
             return e.getMessage();
         }
