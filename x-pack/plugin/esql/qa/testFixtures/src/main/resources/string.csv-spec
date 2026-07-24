@@ -446,6 +446,18 @@ a:keyword | a_ll:boolean
 hello | false
 ;
 
+// Truncated UTF-8: 'a' + 0xF0. FROM_BASE64 needed; string literals cannot express invalid UTF-8.
+containsTruncatedUtf8
+required_capability: fn_contains_fix_truncated_utf8
+ROW a = FROM_BASE64("YfA=")
+| EVAL has_a = CONTAINS(a, "a"), has_z = CONTAINS(a, "z")
+| KEEP has_a, has_z
+;
+
+has_a:boolean | has_z:boolean
+true | false
+;
+
 containsLongerSubstr
 required_capability: fn_contains
 row a = "hello" | eval a_ll = contains(a, "farewell");

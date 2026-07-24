@@ -104,6 +104,10 @@ public class ContainsTests extends AbstractScalarFunctionTestCase {
         suppliers.add(supplier("🐱Meow!🐶Woof!", "Meow!🐶Woof!", true));
         suppliers.add(supplier("🐱Meow!🐶Woof!", "eow!🐶Woof!", true));
 
+        // Truncated UTF-8 lead byte 0xF0; must not throw via utf8ToString()
+        suppliers.add(supplier(new byte[] { (byte) 'a', (byte) 0xF0 }, "a", true));
+        suppliers.add(supplier(new byte[] { (byte) 'a', (byte) 0xF0 }, "z", false));
+
         return parameterSuppliersFromTypedDataWithDefaultChecks(true, suppliers);
     }
 
@@ -118,6 +122,15 @@ public class ContainsTests extends AbstractScalarFunctionTestCase {
             name,
             types(DataType.KEYWORD, DataType.KEYWORD),
             () -> testCase(DataType.KEYWORD, DataType.KEYWORD, str, substr, expectedValue)
+        );
+    }
+
+    private static TestCaseSupplier supplier(byte[] str, String substr, @Nullable Boolean expectedValue) {
+        String name = String.format(Locale.ROOT, "\"%s\" in truncated utf8", substr);
+        return new TestCaseSupplier(
+            name,
+            types(DataType.KEYWORD, DataType.KEYWORD),
+            () -> testCase(DataType.KEYWORD, DataType.KEYWORD, new BytesRef(str), substr, expectedValue)
         );
     }
 
@@ -159,8 +172,18 @@ public class ContainsTests extends AbstractScalarFunctionTestCase {
         String substr,
         Boolean expectedValue
     ) {
+        return testCase(strType, substrType, str == null ? null : new BytesRef(str), substr, expectedValue);
+    }
+
+    private static TestCaseSupplier.TestCase testCase(
+        DataType strType,
+        DataType substrType,
+        BytesRef str,
+        String substr,
+        Boolean expectedValue
+    ) {
         List<TestCaseSupplier.TypedData> values = new ArrayList<>();
-        values.add(new TestCaseSupplier.TypedData(str == null ? null : new BytesRef(str), strType, "str"));
+        values.add(new TestCaseSupplier.TypedData(str, strType, "str"));
         values.add(new TestCaseSupplier.TypedData(substr == null ? null : new BytesRef(substr), substrType, "substr"));
         return new TestCaseSupplier.TestCase(values, expectedToString(), DataType.BOOLEAN, equalTo(expectedValue));
     }

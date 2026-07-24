@@ -50,7 +50,11 @@ import static org.elasticsearch.xpack.esql.core.expression.TypeResolutions.isStr
  */
 public class Contains extends EsqlScalarFunction implements OptionalArgument, TranslationAware.SingleValueTranslationAware {
     public static final NamedWriteableRegistry.Entry ENTRY = new NamedWriteableRegistry.Entry(Expression.class, "Contains", Contains::new);
-    public static final FunctionDefinition DEFINITION = FunctionDefinition.def(Contains.class).binary(Contains::new).name("contains");
+    public static final FunctionDefinition DEFINITION = FunctionDefinition.def(Contains.class)
+        .binary(Contains::new)
+        // Avoid utf8ToString()/UTF8toUTF16 AIOOBE on truncated multi-byte UTF-8 sequences.
+        .capabilities("fix_truncated_utf8")
+        .name("contains");
 
     /**
      * Gate for rewriting {@code LIKE "*literal*"} into {@link Contains} (see {@code ReplaceRegexMatch}). Only safe when every node
@@ -139,7 +143,25 @@ public class Contains extends EsqlScalarFunction implements OptionalArgument, Tr
         if (str.length < substr.length) {
             return false;
         }
-        return str.utf8ToString().contains(substr.utf8ToString());
+        // Byte-level search: UTF-8 is self-synchronizing, so a valid UTF-8 substring matches
+        // iff its bytes appear contiguously. Avoid BytesRef#utf8ToString() — Lucene's UTF8toUTF16
+        // assumes well-formed UTF-8 and can throw ArrayIndexOutOfBoundsException on truncated
+        // multi-byte sequences (or when continuation bytes sit past BytesRef.length).
+        if (substr.length == 0) {
+            return true;
+        }
+        final byte[] strBytes = str.bytes;
+        final byte[] substrBytes = substr.bytes;
+        final int strFrom = str.offset;
+        final int strLimit = str.offset + str.length - substr.length;
+        final int substrFrom = substr.offset;
+        final int substrTo = substr.offset + substr.length;
+        for (int i = strFrom; i <= strLimit; i++) {
+            if (Arrays.equals(strBytes, i, i + substr.length, substrBytes, substrFrom, substrTo)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
