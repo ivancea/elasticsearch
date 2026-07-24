@@ -13,6 +13,7 @@ import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.compute.ann.Evaluator;
 import org.elasticsearch.compute.ann.Fixed;
+import org.elasticsearch.compute.data.Utf8Sanitizer;
 import org.elasticsearch.compute.expression.ConstantEvaluators;
 import org.elasticsearch.compute.expression.ExpressionEvaluator;
 import org.elasticsearch.xpack.esql.EsqlIllegalArgumentException;
@@ -44,13 +45,19 @@ public class FromBase64 extends UnaryScalarFunction {
         "FromBase64",
         FromBase64::new
     );
-    public static final FunctionDefinition DEFINITION = FunctionDefinition.def(FromBase64.class).unary(FromBase64::new).name("from_base64");
+    public static final FunctionDefinition DEFINITION = FunctionDefinition.def(FromBase64.class)
+        .unary(FromBase64::new)
+        // Reject decoded bytes that are not well-formed UTF-8 (null + warning instead of a broken keyword).
+        .capabilities("validate_utf8")
+        .name("from_base64");
 
     @FunctionInfo(
         appliesTo = { @FunctionAppliesTo(lifeCycle = FunctionAppliesToLifecycle.GA) },
         returnType = "keyword",
         briefSummary = "Decodes a base64 string.",
-        description = "Decode a base64 string.",
+        description = """
+            Decode a base64 string. Returns `null` and adds a warning header to the response if the
+            input is not valid base64 or the decoded bytes are not well-formed UTF-8.""",
         examples = @Example(file = "string", tag = "from_base64")
     )
     public FromBase64(
@@ -92,13 +99,16 @@ public class FromBase64 extends UnaryScalarFunction {
         return NodeInfo.create(this, FromBase64::new, field());
     }
 
-    @Evaluator()
+    @Evaluator(warnExceptions = { IllegalArgumentException.class })
     static BytesRef process(BytesRef field, @Fixed(includeInToString = false, scope = THREAD_LOCAL) BytesRefBuilder oScratch) {
         byte[] bytes = new byte[field.length];
         System.arraycopy(field.bytes, field.offset, bytes, 0, field.length);
         oScratch.grow(field.length);
         oScratch.clear();
         int decodedSize = Base64.getDecoder().decode(bytes, oScratch.bytes());
+        if (Utf8Sanitizer.isWellFormed(oScratch.bytes(), 0, decodedSize) == false) {
+            throw new IllegalArgumentException("decoded value is not valid UTF-8");
+        }
         return new BytesRef(oScratch.bytes(), 0, decodedSize);
     }
 

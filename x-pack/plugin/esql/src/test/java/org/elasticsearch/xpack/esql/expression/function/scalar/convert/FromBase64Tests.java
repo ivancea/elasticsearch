@@ -17,6 +17,7 @@ import org.elasticsearch.xpack.esql.core.type.DataType;
 import org.elasticsearch.xpack.esql.expression.function.AbstractScalarFunctionTestCase;
 import org.elasticsearch.xpack.esql.expression.function.FunctionName;
 import org.elasticsearch.xpack.esql.expression.function.TestCaseSupplier;
+import org.elasticsearch.xpack.esql.expression.function.UnaryTestCaseHelper;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -35,13 +36,42 @@ public class FromBase64Tests extends AbstractScalarFunctionTestCase {
     @ParametersFactory
     public static Iterable<Object[]> parameters() {
         List<TestCaseSupplier> suppliers = new ArrayList<>();
-        unary().expectedOutputType(DataType.KEYWORD)
-            .expectedFromString(s -> new BytesRef(Base64.getDecoder().decode(s.getBytes(StandardCharsets.UTF_8))))
+        UnaryTestCaseHelper valid = unary().expectedOutputType(DataType.KEYWORD)
             .evaluatorToString("FromBase64Evaluator[field=%0]")
-            .strings("empty", () -> "")
-            .strings("54 ascii characters", () -> randomAlphaOfLength(54))
+            .expectedFromString(s -> new BytesRef(Base64.getDecoder().decode(s.getBytes(StandardCharsets.UTF_8))));
+        valid.strings("empty", () -> "").build(suppliers);
+        valid.strings("ascii", () -> Base64.getEncoder().encodeToString(randomAlphaOfLengthBetween(1, 54).getBytes(StandardCharsets.UTF_8)))
             .build(suppliers);
+        valid.strings(
+            "unicode",
+            () -> Base64.getEncoder().encodeToString(randomRealisticUnicodeOfCodepointLengthBetween(1, 20).getBytes(StandardCharsets.UTF_8))
+        ).build(suppliers);
+
+        UnaryTestCaseHelper invalidUtf8 = unary().expectedOutputType(DataType.KEYWORD)
+            .evaluatorToString("FromBase64Evaluator[field=%0]")
+            .expectNullAndWarningsFromString(
+                s -> List.of("Line 1:1: java.lang.IllegalArgumentException: decoded value is not valid UTF-8")
+            );
+        // 'a' + truncated 4-byte lead 0xF0
+        invalidUtf8.strings("truncated lead", () -> "YfA=").build(suppliers);
+        // lone 0xF0
+        invalidUtf8.strings("lone lead", () -> "8A==").build(suppliers);
+
+        UnaryTestCaseHelper invalidBase64 = unary().expectedOutputType(DataType.KEYWORD)
+            .evaluatorToString("FromBase64Evaluator[field=%0]")
+            .expectNullAndWarningsFromString(s -> List.of("Line 1:1: java.lang.IllegalArgumentException: " + base64ErrorMessage(s)));
+        invalidBase64.strings("not base64", () -> "not!!base64").build(suppliers);
+
         return parameterSuppliersFromTypedDataWithDefaultChecks(true, suppliers);
+    }
+
+    private static String base64ErrorMessage(String bad) {
+        try {
+            Base64.getDecoder().decode(bad.getBytes(StandardCharsets.UTF_8));
+            throw new AssertionError("expected invalid base64: " + bad);
+        } catch (IllegalArgumentException e) {
+            return e.getMessage();
+        }
     }
 
     @Override

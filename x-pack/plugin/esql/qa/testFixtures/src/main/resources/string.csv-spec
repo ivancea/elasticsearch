@@ -446,54 +446,6 @@ a:keyword | a_ll:boolean
 hello | false
 ;
 
-// Truncated UTF-8: 'a' + 0xF0. FROM_BASE64 needed; string literals cannot express invalid UTF-8.
-containsTruncatedUtf8
-required_capability: fn_contains_fix_truncated_utf8
-ROW a = FROM_BASE64("YfA=")
-| EVAL has_a = CONTAINS(a, "a"), has_z = CONTAINS(a, "z")
-| KEEP has_a, has_z
-;
-
-has_a:boolean | has_z:boolean
-true | false
-;
-
-// Valid haystack, truncated needle (0xF0). 🐱 is F0 9F 90 B1 so the lead byte matches.
-containsTruncatedNeedleUtf8
-required_capability: fn_contains_fix_truncated_utf8
-ROW a = "🐱", b = FROM_BASE64("8A=="), c = "abc"
-| EVAL in_cat = CONTAINS(a, b), in_abc = CONTAINS(c, b)
-| KEEP in_cat, in_abc
-;
-
-in_cat:boolean | in_abc:boolean
-true           | false
-;
-
-// Both sides truncated UTF-8 (0xF0 alone as substr). Byte-level contains still matches.
-containsBothTruncatedUtf8
-required_capability: fn_contains_fix_truncated_utf8
-ROW a = FROM_BASE64("YfA="), b = FROM_BASE64("8A==")
-| EVAL both_broken = CONTAINS(a, b)
-| KEEP both_broken
-;
-
-both_broken:boolean
-true
-;
-
-// Both sides truncated and equal.
-containsBothTruncatedEqualUtf8
-required_capability: fn_contains_fix_truncated_utf8
-ROW a = FROM_BASE64("YfA=")
-| EVAL equal_broken = CONTAINS(a, a)
-| KEEP equal_broken
-;
-
-equal_broken:boolean
-true
-;
-
 containsLongerSubstr
 required_capability: fn_contains
 row a = "hello" | eval a_ll = contains(a, "farewell");
@@ -2886,6 +2838,20 @@ ROW a = "ZWxhc3RpYw=="
 a:keyword    | d:keyword
 ZWxhc3RpYw== | elastic
 // end::from_base64-result[]
+;
+
+base64DecodeInvalidUtf8
+required_capability: fn_from_base64_validate_utf8
+// Truncated UTF-8 lead byte 0xF0 ('a' + 0xF0).
+ROW a = FROM_BASE64("YfA=")
+| KEEP a
+;
+
+warning:Line 1:9: evaluation of [FROM_BASE64(\"YfA=\")] failed, treating result as null. Only first 20 failures recorded.
+warning:Line 1:9: java.lang.IllegalArgumentException: decoded value is not valid UTF-8
+
+a:keyword
+null
 ;
 
 base64EncodeDecodeEmp
