@@ -1,0 +1,10 @@
+. "$PSScriptRoot\es.ps1"
+t 'integer field, int param' "FROM kibana_any_test | WHERE MV_INTERSECTS(?n, n) | SORT id | KEEP id, n" '[{"n": [1]}]'
+t 'long field, int param' "FROM kibana_any_test | WHERE MV_INTERSECTS(?l, l) | SORT id | KEEP id, l" '[{"l": [1]}]'
+t 'long field, TO_LONG(param)' "FROM kibana_any_test | WHERE MV_INTERSECTS(TO_LONG(?l), l) | SORT id | KEEP id, l" '[{"l": [1]}]'
+t 'long field, ==' "FROM kibana_any_test | WHERE l == ?l | SORT id | KEEP id, l" '[{"l": 1}]'
+t 'long field, MV_CONTAINS int param' "FROM kibana_any_test | WHERE MV_CONTAINS(?l, l) | SORT id | KEEP id, l" '[{"l": [1]}]'
+t 'ip field, string param' "FROM kibana_any_test | WHERE MV_INTERSECTS(?ip, ip) | SORT id | KEEP id, ip" '[{"ip": ["10.0.0.1"]}]'
+t 'ip field, TO_IP(param)' "FROM kibana_any_test | WHERE MV_INTERSECTS(TO_IP(?ip), ip) | SORT id | KEEP id, ip" '[{"ip": ["10.0.0.1"]}]'
+t 'ip field, ==' "FROM kibana_any_test | WHERE ip == ?ip | SORT id | KEEP id, ip" '[{"ip": "10.0.0.1"}]'
+t 'boolean field' "FROM kibana_any_test | WHERE MV_INTERSECTS(?f, flag) | SORT id | KEEP id, flag" '[{"f": [true]}]'

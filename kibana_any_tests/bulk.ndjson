@@ -1,0 +1,14 @@
+{"index":{"_id":"1"}}
+{"id":1,"host":"a","flag":true,"n":1,"l":1,"ip":"10.0.0.1"}
+{"index":{"_id":"2"}}
+{"id":2,"host":"b","flag":false,"n":2,"ip":"10.0.0.2"}
+{"index":{"_id":"3"}}
+{"id":3,"host":"c","flag":true,"n":3,"ip":"10.0.0.3"}
+{"index":{"_id":"4"}}
+{"id":4}
+{"index":{"_id":"5"}}
+{"id":5,"host":null,"flag":null,"n":null,"ip":null}
+{"index":{"_id":"6"}}
+{"id":6,"host":["a","b"],"flag":[true,false],"n":[1,2],"ip":["10.0.0.1","10.0.0.2"]}
+{"index":{"_id":"7"}}
+{"id":7,"host":"__blank__","n":7}

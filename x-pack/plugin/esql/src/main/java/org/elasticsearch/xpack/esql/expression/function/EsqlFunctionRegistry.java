@@ -73,7 +73,10 @@ import org.elasticsearch.xpack.esql.expression.function.scalar.Clamp;
 import org.elasticsearch.xpack.esql.expression.function.scalar.conditional.Case;
 import org.elasticsearch.xpack.esql.expression.function.scalar.conditional.ClampMax;
 import org.elasticsearch.xpack.esql.expression.function.scalar.conditional.ClampMin;
+import org.elasticsearch.xpack.esql.expression.function.scalar.conditional.FieldOr;
 import org.elasticsearch.xpack.esql.expression.function.scalar.conditional.Greatest;
+import org.elasticsearch.xpack.esql.expression.function.scalar.conditional.InRangeSelection;
+import org.elasticsearch.xpack.esql.expression.function.scalar.conditional.InSelection;
 import org.elasticsearch.xpack.esql.expression.function.scalar.conditional.Least;
 import org.elasticsearch.xpack.esql.expression.function.scalar.convert.FromBase64;
 import org.elasticsearch.xpack.esql.expression.function.scalar.convert.ToAggregateMetricDouble;
@@ -566,7 +569,7 @@ public class EsqlFunctionRegistry {
                 StX.DEFINITION,
                 StY.DEFINITION },
             // conditional
-            new FunctionDefinition[] { Case.DEFINITION },
+            new FunctionDefinition[] { Case.DEFINITION, FieldOr.DEFINITION, InRangeSelection.DEFINITION, InSelection.DEFINITION },
             // null
             new FunctionDefinition[] { Coalesce.DEFINITION, },
             // IP

@@ -81,6 +81,7 @@ import java.time.temporal.TemporalAmount;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
@@ -723,9 +724,14 @@ public abstract class ExpressionBuilder extends IdentifierBuilder {
     @Override
     public Expression visitFunctionExpression(EsqlBaseParser.FunctionExpressionContext ctx) {
         String name = visitFunctionName(ctx.functionName());
+        boolean nullableIdentifier = NULLABLE_IDENTIFIER_FUNCTIONS.contains(EsqlFunctionRegistry.normalizeName(name));
         List<Expression> args = new ArrayList<>();
         for (ParseTree child : ctx.children) {
             if (child instanceof EsqlBaseParser.BooleanExpressionContext boolCtx) {
+                if (nullableIdentifier && args.isEmpty() && isNullDoubleParam(boolCtx)) {
+                    args.add(new Literal(source(boolCtx), null, DataType.NULL));
+                    continue;
+                }
                 // Use typedParsing (not expression()) so that function arguments don't count as a
                 // user-visible nesting level, preserving depth-counting semantics.
                 args.add(typedParsing(this, boolCtx, Expression.class));
@@ -750,6 +756,28 @@ public abstract class ExpressionBuilder extends IdentifierBuilder {
             }
         }
         return new UnresolvedFunction(source(ctx), name, args);
+    }
+
+    /**
+     * Functions whose first argument may be a {@code null} {@code ??param} ("unset"), which elsewhere is a parsing error.
+     */
+    static final String FIELD_OR = "field_or";
+    static final String OPTIONAL = "optional";
+    private static final Set<String> NULLABLE_IDENTIFIER_FUNCTIONS = Set.of(FIELD_OR, OPTIONAL);
+
+    private boolean isNullDoubleParam(ParseTree ctx) {
+        String text = ctx.getText();
+        if (text.startsWith("??") == false) {
+            return false;
+        }
+        String nameOrPosition = text.substring(2);
+        QueryParam param;
+        if (isInteger(nameOrPosition)) {
+            param = context.params().get(Integer.parseInt(nameOrPosition));
+        } else {
+            param = context.params().contains(nameOrPosition) ? context.params().get(nameOrPosition) : null;
+        }
+        return param != null && param.value() == null;
     }
 
     @Override
@@ -1296,6 +1324,16 @@ public abstract class ExpressionBuilder extends IdentifierBuilder {
                 NamedExpression ne = null;
                 UnresolvedAttribute id = visitQualifiedName(field.qualifiedName());
                 Expression value = expression(field.booleanExpression());
+                // BY OPTIONAL(??param): an unset param drops the grouping key, otherwise it's just the field
+                if (value instanceof UnresolvedFunction f && OPTIONAL.equals(EsqlFunctionRegistry.normalizeName(f.name()))) {
+                    if (f.children().size() != 1) {
+                        throw new ParsingException(source(field), "OPTIONAL expects exactly one argument");
+                    }
+                    value = f.children().get(0);
+                    if (value instanceof Literal literal && literal.value() == null) {
+                        continue;
+                    }
+                }
                 String name = null;
                 if (id == null) {
                     // when no alias has been specified, see if the underling one can be reused

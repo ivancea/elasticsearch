@@ -1,0 +1,358 @@
+﻿diff --git a/src/platform/packages/shared/controls/controls-schemas/src/options_list_schema.ts b/src/platform/packages/shared/controls/controls-schemas/src/options_list_schema.ts
+index 6ff2eea5617..dc576b55d90 100644
+--- a/src/platform/packages/shared/controls/controls-schemas/src/options_list_schema.ts
++++ b/src/platform/packages/shared/controls/controls-schemas/src/options_list_schema.ts
+@@ -150,6 +150,10 @@ const baseEsqlControlSchema = z
+         description:
+           'The ES|QL variable type that determines how the selected value is substituted into the query. Accepts `fields`, `values`, `functions`, `time_literal`, or `multi_values`.',
+       }),
++    include_no_value_option: z.boolean().optional().meta({
++      description:
++        'When `true`, the control offers a "(No value)" option. Whether it is selected is sent as the companion parameter `?<variable_name>__nulls`.',
++    }),
+   })
+   .strip();
+ 
+diff --git a/src/platform/packages/shared/esql/kbn-esql-types/src/variables_types.ts b/src/platform/packages/shared/esql/kbn-esql-types/src/variables_types.ts
+index 48dce4ee55b..0d9241e0755 100644
+--- a/src/platform/packages/shared/esql/kbn-esql-types/src/variables_types.ts
++++ b/src/platform/packages/shared/esql/kbn-esql-types/src/variables_types.ts
+@@ -71,7 +71,7 @@ export const isQueryESQLControl = (control?: object): control is QueryESQLContro
+ 
+ export interface ESQLControlVariable extends SerializableRecord {
+   key: string;
+-  value: string | number | (string | number)[];
++  value: string | number | (string | number)[] | null;
+   type: ESQLVariableType;
+   meta?: SerializableRecord & {
+     // `controlledBy` is the ID of the control that publishes the variable
+diff --git a/src/platform/packages/shared/esql/kbn-esql-utils/src/utils/run_query.ts b/src/platform/packages/shared/esql/kbn-esql-utils/src/utils/run_query.ts
+index dad3b7237dc..b0f325ff3f6 100644
+--- a/src/platform/packages/shared/esql/kbn-esql-utils/src/utils/run_query.ts
++++ b/src/platform/packages/shared/esql/kbn-esql-utils/src/utils/run_query.ts
+@@ -55,10 +55,20 @@ export const getNamedParams = (
+       .forEach(({ key, value }) => {
+         namedParams.push({ [key]: value });
+       });
++    // `?<name>__nulls` is derived from control `<name>`: whether its "(No value)" option is selected
++    usedVariables.forEach((name) => {
++      if (!name.endsWith(NULLS_PARAM_SUFFIX)) return;
++      const base = variables.find(({ key }) => key === name.slice(0, -NULLS_PARAM_SUFFIX.length));
++      if (base && !variables.some(({ key }) => key === name)) {
++        namedParams.push({ [name]: Boolean(base.meta?.nulls) });
++      }
++    });
+   }
+   return namedParams;
+ };
+ 
++const NULLS_PARAM_SUFFIX = '__nulls';
++
+ export function formatESQLColumns(columns: ESQLColumn[]): DatatableColumn[] {
+   return columns.map(({ name, type, _meta }) => {
+     const kibanaType = esFieldTypeToKibanaFieldType(type);
+diff --git a/src/platform/plugins/shared/controls/public/controls/data_controls/options_list_control/components/options_list_control.tsx b/src/platform/plugins/shared/controls/public/controls/data_controls/options_list_control/components/options_list_control.tsx
+index f81bc99e548..4c83fb6adb8 100644
+--- a/src/platform/plugins/shared/controls/public/controls/data_controls/options_list_control/components/options_list_control.tsx
++++ b/src/platform/plugins/shared/controls/public/controls/data_controls/options_list_control/components/options_list_control.tsx
+@@ -36,6 +36,7 @@ import { OptionsListStrings } from '../options_list_strings';
+ import type { DSLOptionsListComponentApi } from '../types';
+ import { OptionsListPopover } from './options_list_popover';
+ import type { ESQLOptionsListComponentApi } from '../../../esql_control/types';
++import { formatESQLControlValue } from '../../../esql_control/constants';
+ 
+ const optionListControlStyles = {
+   selectionWrapper: css({ overflow: 'hidden !important' }),
+@@ -110,7 +111,9 @@ export const OptionsListControl = ({
+       isDSLControl ? componentApi.exclude$ : new BehaviorSubject<boolean | undefined>(false),
+       isDSLControl ? componentApi.existsSelected$ : new BehaviorSubject<boolean | undefined>(false),
+       isDSLControl ? componentApi.field$ : new BehaviorSubject(undefined),
+-      isDSLControl ? componentApi.fieldFormatter : new BehaviorSubject(undefined),
++      isDSLControl
++        ? componentApi.fieldFormatter
++        : (new BehaviorSubject(formatESQLControlValue) as DSLOptionsListComponentApi['fieldFormatter']),
+       !isDSLControl ? componentApi.tooltipLabel$ : new BehaviorSubject(undefined),
+     ];
+   }, [componentApi]);
+diff --git a/src/platform/plugins/shared/controls/public/controls/data_controls/options_list_control/components/options_list_popover_suggestions.tsx b/src/platform/plugins/shared/controls/public/controls/data_controls/options_list_control/components/options_list_popover_suggestions.tsx
+index d95b0f86057..c98af7326c8 100644
+--- a/src/platform/plugins/shared/controls/public/controls/data_controls/options_list_control/components/options_list_popover_suggestions.tsx
++++ b/src/platform/plugins/shared/controls/public/controls/data_controls/options_list_control/components/options_list_popover_suggestions.tsx
+@@ -26,6 +26,7 @@ import { OptionsListStrings } from '../options_list_strings';
+ import type { DSLOptionsListComponentApi } from '../types';
+ import { OptionsListPopoverEmptyMessage } from './options_list_popover_empty_message';
+ import { OptionsListPopoverSuggestionBadge } from './options_list_popover_suggestion_badge';
++import { formatESQLControlValue } from '../../../esql_control/constants';
+ 
+ interface OptionsListPopoverSuggestionsProps {
+   showOnlySelected: boolean;
+@@ -51,7 +52,9 @@ export const OptionsListPopoverSuggestions = ({
+     return [
+       isDSLControl ? componentApi.existsSelected$ : new BehaviorSubject<boolean | undefined>(false),
+       isDSLControl ? componentApi.sort$ : new BehaviorSubject(undefined),
+-      isDSLControl ? componentApi.fieldFormatter : new BehaviorSubject(undefined),
++      isDSLControl
++        ? componentApi.fieldFormatter
++        : (new BehaviorSubject(formatESQLControlValue) as DSLOptionsListComponentApi['fieldFormatter']),
+     ];
+   }, [componentApi]);
+ 
+diff --git a/src/platform/plugins/shared/controls/public/controls/esql_control/constants.ts b/src/platform/plugins/shared/controls/public/controls/esql_control/constants.ts
+index d0ece9e0987..273d8693da4 100644
+--- a/src/platform/plugins/shared/controls/public/controls/esql_control/constants.ts
++++ b/src/platform/plugins/shared/controls/public/controls/esql_control/constants.ts
+@@ -15,9 +15,12 @@ export const VariableControlsStrings = {
+   emptySelectionPlaceholder: i18n.translate(
+     'controls.optionsList.popover.emptySelectionPlaceholder',
+     {
+-      defaultMessage: 'Select a value',
++      defaultMessage: 'Any',
+     }
+   ),
++  nullValueLabel: i18n.translate('controls.esqlValuesControl.nullValueLabel', {
++    defaultMessage: '(No value)',
++  }),
+   getIncompatibleSelectionsLabel(incompatibleSelectionCount: number) {
+     return i18n.translate('controls.optionsList.popover.incompatibleSelectionsSectionTitle', {
+       defaultMessage:
+@@ -28,3 +31,23 @@ export const VariableControlsStrings = {
+     });
+   },
+ };
++
++/**
++ * Sentinel a values query can return (e.g. `EVAL f = COALESCE(f, "__NULL__")`) to offer "documents without a
++ * value" as an option. Queries match it with `field IS NULL AND MV_CONTAINS(?var, "__NULL__")`.
++ */
++export const ESQL_CONTROL_NULL_VALUE = '__NULL__';
++
++/**
++ * UI-only option offered when `include_no_value_option` is set. It is never sent as a value: selecting it sets the
++ * companion parameter `?<variable_name>__nulls` to `true`, so the values keep their field type.
++ */
++export const ESQL_CONTROL_NO_VALUE_OPTION = '__esql_control_no_value__';
++
++/** Suffix of the companion parameter that tells queries whether "(No value)" is selected. */
++export const ESQL_CONTROL_NULLS_PARAM_SUFFIX = '__nulls';
++
++export const formatESQLControlValue = (value: unknown): string =>
++  value === ESQL_CONTROL_NULL_VALUE || value === ESQL_CONTROL_NO_VALUE_OPTION
++    ? VariableControlsStrings.nullValueLabel
++    : String(value);
+diff --git a/src/platform/plugins/shared/controls/public/controls/esql_control/esql_control_manager.ts b/src/platform/plugins/shared/controls/public/controls/esql_control/esql_control_manager.ts
+index e1e0d2d00fc..0699fdf8ac1 100644
+--- a/src/platform/plugins/shared/controls/public/controls/esql_control/esql_control_manager.ts
++++ b/src/platform/plugins/shared/controls/public/controls/esql_control/esql_control_manager.ts
+@@ -50,6 +50,7 @@ import { dataService } from '../../services/kibana_services';
+ import { initializeTemporayStateManager } from '../data_controls/options_list_control/temporay_state_manager';
+ import type { ESQLOptionsListRuntimeState } from './types';
+ import { castESQLValue } from './utils/esql_type_utils';
++import { ESQL_CONTROL_NO_VALUE_OPTION } from './constants';
+ import { getControlsTimezone } from '../utils';
+ 
+ function selectedOptionsComparatorFunction(a?: OptionsListSelection[], b?: OptionsListSelection[]) {
+@@ -83,6 +84,7 @@ export const getSelectionComparators = <Type = ESQLOptionsListRuntimeState['cont
+     title: 'referenceEquality',
+     single_select: 'referenceEquality',
+     control_type: 'skip', // static
++    include_no_value_option: 'referenceEquality',
+     available_options: 'deepEquality',
+     ...(controlType === EsqlControlType.VALUES_FROM_QUERY
+       ? { esql_query: 'referenceEquality' }
+@@ -101,11 +103,22 @@ export function initializeESQLControlManager(
+   const isStaticControl = isStaticESQLControl(initialState);
+   const isEsqlQueryControl = !isStaticControl;
+ 
++  const includeNoValueOption$ = new BehaviorSubject<boolean>(
++    Boolean(initialState.include_no_value_option)
++  );
++  const withNoValueOption = (options: string[]) =>
++    includeNoValueOption$.value ? [ESQL_CONTROL_NO_VALUE_OPTION, ...options] : options;
++
+   const availableOptions$ = new BehaviorSubject<string[]>(
+-    isStaticControl ? initialState.available_options ?? [] : []
++    isStaticControl ? withNoValueOption(initialState.available_options ?? []) : []
+   );
+   const selectedOptions$ = new BehaviorSubject<string[]>(initialState.selected_options);
+-  const hasSelections$ = new BehaviorSubject<boolean>(false); // hardcoded to false to prevent clear action from appearing.
++  const hasSelections$ = new BehaviorSubject<boolean>(
++    (initialState.selected_options ?? []).length > 0
++  );
++  const hasSelectionsSubscription = selectedOptions$.subscribe((selected) =>
++    hasSelections$.next((selected ?? []).length > 0)
++  );
+   const singleSelect$ = new BehaviorSubject<boolean>(initialState.single_select);
+   const variableName$ = new BehaviorSubject<string>(initialState.variable_name);
+   const variableType$ = new BehaviorSubject<ESQLVariableType>(
+@@ -221,9 +234,11 @@ export function initializeESQLControlManager(
+           setDataLoading(false);
+           if (getESQLSingleColumnValues.isSuccess(result)) {
+             valuesColumnType = result.column.type;
+-            const newAvailableOptions = result.values.map(
+-              // Coerce numeric columns into strings
+-              (value) => String(value)
++            const newAvailableOptions = withNoValueOption(
++              result.values.map(
++                // Coerce numeric columns into strings
++                (value) => String(value)
++              )
+             );
+             availableOptions$.next(newAvailableOptions);
+ 
+@@ -259,20 +274,19 @@ export function initializeESQLControlManager(
+   // derive ESQL control variable from state.
+   const getEsqlVariable = (sectionId?: string) => {
+     const isSingleSelect = singleSelect$.value;
+-    const selectedValues = selectedOptions$.value;
++    // "(No value)" is never sent as a value; it is published as `meta.nulls` for the `__nulls` companion param
++    const nulls = selectedOptions$.value.includes(ESQL_CONTROL_NO_VALUE_OPTION);
++    const selectedValues = selectedOptions$.value.filter((v) => v !== ESQL_CONTROL_NO_VALUE_OPTION);
+     const columnType = isEsqlQueryControl ? valuesColumnType : undefined;
+ 
+     // For single select, return the first value; for multi-select, return the array
+     let value: ESQLControlVariable['value'];
+ 
+-    if (isSingleSelect) {
+-      // Single select: return the first value or empty string if none selected
+-      const firstValue = selectedValues[0];
+-      if (firstValue !== undefined) {
+-        value = castESQLValue(firstValue, columnType);
+-      } else {
+-        value = '';
+-      }
++    if (selectedValues.length === 0) {
++      // No selection means "Any": queries opt in with `?var IS NULL OR <filter>`
++      value = null;
++    } else if (isSingleSelect) {
++      value = castESQLValue(selectedValues[0], columnType);
+     } else {
+       // Multi select: return array with numbers converted from strings when possible
+       value = selectedValues.map((val) => castESQLValue(val, columnType));
+@@ -285,6 +299,7 @@ export function initializeESQLControlManager(
+       meta: {
+         controlledBy: uuid,
+         ...(sectionId && { group: sectionId }),
++        ...(includeNoValueOption$.value && { nulls }),
+       },
+     };
+   };
+@@ -320,9 +335,11 @@ export function initializeESQLControlManager(
+       fetchSubscription?.unsubscribe();
+       availableOptionsSearchSubscription.unsubscribe();
+       publishQuerySubscription.unsubscribe();
++      hasSelectionsSubscription.unsubscribe();
+     },
+     api: {
+       hasSelections$: hasSelections$ as PublishingSubject<boolean | undefined>,
++      clearSelections: () => setSelectedOptions([]),
+       esqlVariable$: esqlVariable$ as PublishingSubject<ESQLControlVariable>,
+       singleSelect$: singleSelect$ as PublishingSubject<boolean>,
+       query$,
+@@ -367,7 +384,8 @@ export function initializeESQLControlManager(
+       previousESQLVariables = [];
+       previousTimeRange = undefined;
+       hasInitialFetch = false;
+-      availableOptions$.next(lastSaved?.available_options ?? []);
++      includeNoValueOption$.next(Boolean(lastSaved?.include_no_value_option));
++      availableOptions$.next(withNoValueOption(lastSaved?.available_options ?? []));
+       esqlQuery$.next(isQueryESQLControl(lastSaved) ? lastSaved.esql_query : '');
+     },
+     getLatestState: (): OptionsListESQLControlState => {
+@@ -376,11 +394,14 @@ export function initializeESQLControlManager(
+         variable_name: variableName$.getValue(),
+         single_select: singleSelect$.getValue(),
+         variable_type: variableType$.getValue(),
++        ...(includeNoValueOption$.value && { include_no_value_option: true }),
+         /** The control_type is static from creation */
+         ...(isStaticControl
+           ? {
+               control_type: EsqlControlType.STATIC_VALUES,
+-              available_options: availableOptions$.getValue(),
++              available_options: availableOptions$
++                .getValue()
++                .filter((option) => option !== ESQL_CONTROL_NO_VALUE_OPTION),
+             }
+           : { control_type: EsqlControlType.VALUES_FROM_QUERY, esql_query: esqlQuery$.getValue() }),
+       };
+diff --git a/src/platform/plugins/shared/controls/public/controls/esql_control/get_esql_control_factory.tsx b/src/platform/plugins/shared/controls/public/controls/esql_control/get_esql_control_factory.tsx
+index c56ae5f2f2a..b632adac8c8 100644
+--- a/src/platform/plugins/shared/controls/public/controls/esql_control/get_esql_control_factory.tsx
++++ b/src/platform/plugins/shared/controls/public/controls/esql_control/get_esql_control_factory.tsx
+@@ -190,16 +190,13 @@ export const getESQLControlFactory = <
+         makeSelection(key?: string) {
+           if (!key) return;
+           const singleSelect = selections.api.singleSelect$.value;
++          // Get current selection state, not initial state
++          const current = componentApi.selectedOptions$.value || [];
++          const isSelected = current.includes(key);
+           if (singleSelect) {
+-            selections.internalApi.setSelectedOptions([key]);
++            // Clicking the selected value again clears it, which means "Any"
++            selections.internalApi.setSelectedOptions(isSelected ? [] : [key]);
+           } else {
+-            // Get current selection state, not initial state
+-            const current = componentApi.selectedOptions$.value || [];
+-            const isSelected = current.includes(key);
+-            // Don't allow empty selections until "ANY" value is supported: https://github.com/elastic/elasticsearch/issues/136735
+-            if (isSelected && current.length === 1) {
+-              return;
+-            }
+             const newSelection = isSelected ? current.filter((k) => k !== key) : [...current, key];
+             selections.internalApi.setSelectedOptions(newSelection);
+           }
+@@ -226,7 +223,7 @@ export const getESQLControlFactory = <
+           selections.internalApi.setSelectedOptions(keys);
+         },
+         deselectAll: () => {
+-          // Don't allow empty selections until "ANY" value is supported: https://github.com/elastic/elasticsearch/issues/136735
++          selections.internalApi.setSelectedOptions([]);
+         },
+       };
+ 
+@@ -261,11 +258,7 @@ export const getESQLControlFactory = <
+                 },
+               }}
+             >
+-              <OptionsListControl
+-                // Don't allow empty selections until "ANY" value is supported: https://github.com/elastic/elasticsearch/issues/136735
+-                disableMultiValueEmptySelection={true}
+-                isPinned={isPinned}
+-              />
++              <OptionsListControl isPinned={isPinned} />
+             </OptionsListControlContext.Provider>
+           );
+         },
+diff --git a/src/platform/plugins/shared/controls/public/controls/esql_control/types.ts b/src/platform/plugins/shared/controls/public/controls/esql_control/types.ts
+index 13fda0ee841..79b2e0cfbe7 100644
+--- a/src/platform/plugins/shared/controls/public/controls/esql_control/types.ts
++++ b/src/platform/plugins/shared/controls/public/controls/esql_control/types.ts
+@@ -27,6 +27,7 @@ import type {
+   SupportsJsonExport,
+ } from '@kbn/presentation-publishing';
+ import type { SettersOf, SubjectsOf } from '@kbn/presentation-publishing/state_manager/types';
++import type { CanClearSelections } from '../../types';
+ import type { initializeLabelManager } from '../control_labels';
+ import type { TemporaryState } from '../data_controls/options_list_control/temporay_state_manager';
+ import type { OptionsListPublishesOptions, OptionsListSelectionsApi } from '../types';
+@@ -35,6 +36,7 @@ export type ESQLControlApi<State> = DefaultEmbeddableApi<
+   State extends { control_type: 'STATIC_VALUES' } ? StaticESQLControl : QueryESQLControl
+ > &
+   CanCancelRequests &
++  CanClearSelections &
+   PublishesESQLVariable &
+   PublishesUnsavedChanges &
+   PublishesRelatedPanels &
+diff --git a/src/platform/plugins/shared/controls/server/transforms/esql_control_transforms.ts b/src/platform/plugins/shared/controls/server/transforms/esql_control_transforms.ts
+index 34c767bb063..9754e1ceda5 100644
+--- a/src/platform/plugins/shared/controls/server/transforms/esql_control_transforms.ts
++++ b/src/platform/plugins/shared/controls/server/transforms/esql_control_transforms.ts
+@@ -46,7 +46,9 @@ export const registerESQLControlTransforms = (embeddable: EmbeddableSetup) => {
+           state as LegacyStoredESQLControlExplicitInput
+         );
+ 
++        const { include_no_value_option } = state as Partial<OptionsListESQLControlState>;
+         const shared = {
++          ...(typeof include_no_value_option === 'boolean' && { include_no_value_option }),
+           control_type: control_type as OptionsListESQLControlState['control_type'],
+           display_settings,
+           selected_options: selected_options ?? DEFAULT_ESQL_OPTIONS_LIST_STATE.selected_options,

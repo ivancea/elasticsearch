@@ -1,0 +1,101 @@
+﻿=== D single, Any  params=[{"host": null}]
+      id       |     host      
+---------------+---------------
+1              |a              
+2              |b              
+3              |c              
+4              |null           
+5              |null           
+6              |[a, b]         
+7              |__blank__      
+
+=== D single, a  params=[{"host": "a"}]
+      id       |     host      
+---------------+---------------
+1              |a              
+
+=== D multi, Any  params=[{"host": null}]
+      id       |     host      
+---------------+---------------
+1              |a              
+2              |b              
+3              |c              
+4              |null           
+5              |null           
+6              |[a, b]         
+7              |__blank__      
+
+=== D multi, [a]  params=[{"host": ["a"]}]
+      id       |     host      
+---------------+---------------
+1              |a              
+
+=== D multi, [a,b]  params=[{"host": ["a", "b"]}]
+      id       |     host      
+---------------+---------------
+1              |a              
+2              |b              
+6              |[a, b]         
+
+=== MV_CONTAINS(?host, host) no guard, [a]  params=[{"host": ["a"]}]
+      id       |     host      |       m       
+---------------+---------------+---------------
+1              |a              |true           
+2              |b              |false          
+3              |c              |false          
+4              |null           |true           
+5              |null           |true           
+6              |[a, b]         |false          
+7              |__blank__      |false          
+
+=== MV_CONTAINS(null, host)  params=[{"host": null}]
+      id       |     host      |       m       
+---------------+---------------+---------------
+1              |a              |false          
+2              |b              |false          
+3              |c              |false          
+4              |null           |true           
+5              |null           |true           
+6              |[a, b]         |false          
+7              |__blank__      |false          
+
+=== MV_INTERSECTS exists?  params=[{"host": ["a"]}]
+      id       |     host      |       m       
+---------------+---------------+---------------
+1              |a              |true           
+2              |b              |false          
+3              |c              |false          
+4              |null           |false          
+5              |null           |false          
+6              |[a, b]         |true           
+7              |__blank__      |false          
+
+=== IN list param  params=[{"host": ["a", "b"]}]
+      id       |     host      
+---------------+---------------
+
+=== empty list param  params=[{"host": []}]
+      id       |     host      
+---------------+---------------
+4              |null           
+5              |null           
+
+=== null entry in list  params=[{"host": ["a", null]}]
+HTTP 400: {"error":{"root_cause":[{"type":"x_content_parse_exception","reason":"Failed to parse params: [1:102] Parameter [host] contains a null entry: [a, null]. Null values are not allowed in multivalued params"}],"type":"x_content_parse_exception","reason":"[1:123] [esql/query] failed to parse field [params]","caused_by":{"type":"x_content_parse_exception","reason":"Failed to parse params: [1:102] Parameter [host] contains a null entry: [a, null]. Null values are not allowed in multivalued params"}},"status":400}
+=== mixed types in list  params=[{"n": [1, "__blank__"]}]
+HTTP 400: {"error":{"root_cause":[{"type":"x_content_parse_exception","reason":"Failed to parse params: [1:96] Parameter [n] contains mixed data types: [1, __blank__]. Mixed data types are not allowed in multivalued params."}],"type":"x_content_parse_exception","reason":"[1:119] [esql/query] failed to parse field [params]","caused_by":{"type":"x_content_parse_exception","reason":"Failed to parse params: [1:96] Parameter [n] contains mixed data types: [1, __blank__]. Mixed data types are not allowed in multivalued params."}},"status":400}
+=== absent param  params=[]
+HTTP 400: {"error":{"root_cause":[{"type":"parsing_exception","reason":"line 1:30: Unknown query parameter [host]"}],"type":"parsing_exception","reason":"line 1:30: Unknown query parameter [host]"},"status":400}
+=== structured param (for H)  params=[{"f": {"values": ["a"], "blank": true}}]
+HTTP 400: {"error":{"root_cause":[{"type":"x_content_parse_exception","reason":"Failed to parse params: [1:88] [f] has multiple param attributes [blank, values], only one of VALUE, IDENTIFIER, PATTERN can be defined in a param; [1:88] [blank] is not a valid param attribute, a valid attribute is any of VALUE, IDENTIFIER, PATTERN; [1:88] [values] is not a valid param attribute, a valid attribute is any of VALUE, IDENTIFIER, PATTERN"}],"type":"x_content_parse_exception","reason":"[1:127] [esql/query] failed to parse field [params]","caused_by":{"type":"x_content_parse_exception","reason":"Failed to parse params: [1:88] [f] has multiple param attributes [blank, values], only one of VALUE, IDENTIFIER, PATTERN can be defined in a param; [1:88] [blank] is not a valid param attribute, a valid attribute is any of VALUE, IDENTIFIER, PATTERN; [1:88] [values] is not a valid param attribute, a valid attribute is any of VALUE, IDENTIFIER, PATTERN"}},"status":400}
+=== inlined null text  params=
+      id       |     host      
+---------------+---------------
+1              |a              
+2              |b              
+3              |c              
+4              |null           
+5              |null           
+6              |[a, b]         
+7              |__blank__      
+

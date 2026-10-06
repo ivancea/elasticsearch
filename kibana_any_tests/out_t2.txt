@@ -1,0 +1,137 @@
+﻿=== D with MV_INTERSECTS, []  params=[{"host": []}]
+      id       |     host      
+---------------+---------------
+1              |a              
+2              |b              
+3              |c              
+4              |null           
+5              |null           
+6              |[a, b]         
+7              |__blank__      
+
+=== D with MV_INTERSECTS, [a]  params=[{"host": ["a"]}]
+      id       |     host      
+---------------+---------------
+1              |a              
+6              |[a, b]         
+
+=== D single-select empty string (current Kibana)  params=[{"host": ""}]
+      id       |     host      
+---------------+---------------
+
+=== D+ Any  params=[{"host": null}, {"host_blank": false}]
+      id       |     host      
+---------------+---------------
+1              |a              
+2              |b              
+3              |c              
+4              |null           
+5              |null           
+6              |[a, b]         
+7              |__blank__      
+
+=== D+ [a] + blank  params=[{"host": ["a"]}, {"host_blank": true}]
+      id       |     host      
+---------------+---------------
+1              |a              
+4              |null           
+5              |null           
+6              |[a, b]         
+
+=== D+ blank only  params=[{"host": null}, {"host_blank": true}]
+      id       |     host      
+---------------+---------------
+4              |null           
+5              |null           
+
+=== D+ [a] only  params=[{"host": ["a"]}, {"host_blank": false}]
+      id       |     host      
+---------------+---------------
+1              |a              
+6              |[a, b]         
+
+=== Sentinel [a, __blank__]  params=[{"host": ["a", "__blank__"]}]
+      id       |     host      
+---------------+---------------
+1              |a              
+4              |null           
+5              |null           
+6              |[a, b]         
+7              |__blank__      
+
+=== Exclude [a]  params=[{"host": ["a"]}]
+      id       |     host      
+---------------+---------------
+2              |b              
+3              |c              
+4              |null           
+5              |null           
+7              |__blank__      
+
+=== Exists  params=
+      id       |     host      
+---------------+---------------
+1              |a              
+2              |b              
+3              |c              
+6              |[a, b]         
+7              |__blank__      
+
+=== MV_INTERSECTS integer [1]  params=[{"n": [1]}]
+      id       |       n       
+---------------+---------------
+1              |1              
+6              |[1, 2]         
+
+=== MV_INTERSECTS boolean [true]  params=[{"f": [true]}]
+      id       |     flag      
+---------------+---------------
+1              |true           
+3              |true           
+6              |[false, true]  
+
+=== MV_INTERSECTS ip, string param  params=[{"ip": ["10.0.0.1"]}]
+HTTP 400: {"error":{"root_cause":[{"type":"verification_exception","reason":"Found 1 problem\nline 1:30: second argument of [MV_INTERSECTS(?ip, ip)] must be [keyword], found value [ip] type [ip]"}],"type":"verification_exception","reason":"Found 1 problem\nline 1:30: second argument of [MV_INTERSECTS(?ip, ip)] must be [keyword], found value [ip] type [ip]"},"status":400}
+=== MV_INTERSECTS ip, TO_IP(param)  params=[{"ip": ["10.0.0.1"]}]
+      id       |         ip         
+---------------+--------------------
+1              |10.0.0.1            
+6              |[10.0.0.1, 10.0.0.2]
+
+=== STATS BY g = null  params=
+       c       |       g       
+---------------+---------------
+7              |null           
+
+=== STATS BY g = "all"  params=
+       c       |       g       
+---------------+---------------
+7              |all            
+
+=== STATS BY g = null, host  params=
+       c       |       g       |     host      
+---------------+---------------+---------------
+1              |null           |__blank__      
+2              |null           |a              
+2              |null           |b              
+1              |null           |c              
+2              |null           |null           
+
+=== STATS BY g = CASE(?f IS NULL, null, host)  params=[{"f": null}]
+       c       |       g       
+---------------+---------------
+7              |null           
+
+=== ??field null  params=[{"f": null}]
+HTTP 400: {"error":{"root_cause":[{"type":"parsing_exception","reason":"line 1:46: Query parameter [??f] is null"}],"type":"parsing_exception","reason":"line 1:46: Query parameter [??f] is null"},"status":400}
+=== ?field identifier null  params=[{"f": {"identifier": null}}]
+HTTP 400: {"error":{"root_cause":[{"type":"x_content_parse_exception","reason":"Failed to parse params: [1:70] [null] is not a valid value for IDENTIFIER parameter, a valid value for IDENTIFIER parameter is a string"}],"type":"x_content_parse_exception","reason":"[1:97] [esql/query] failed to parse field [params]","caused_by":{"type":"x_content_parse_exception","reason":"Failed to parse params: [1:70] [null] is not a valid value for IDENTIFIER parameter, a valid value for IDENTIFIER parameter is a string"}},"status":400}
+=== ??field value  params=[{"f": "host"}]
+       c       |     host      
+---------------+---------------
+1              |__blank__      
+2              |a              
+2              |b              
+1              |c              
+2              |null           
+
