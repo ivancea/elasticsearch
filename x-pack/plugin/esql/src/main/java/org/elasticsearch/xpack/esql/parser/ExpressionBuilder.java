@@ -40,6 +40,7 @@ import org.elasticsearch.xpack.esql.core.tree.Source;
 import org.elasticsearch.xpack.esql.core.type.DataType;
 import org.elasticsearch.xpack.esql.core.util.DateUtils;
 import org.elasticsearch.xpack.esql.core.util.StringUtils;
+import org.elasticsearch.xpack.esql.expression.AnyParameter;
 import org.elasticsearch.xpack.esql.expression.Order;
 import org.elasticsearch.xpack.esql.expression.UnresolvedNamePattern;
 import org.elasticsearch.xpack.esql.expression.function.EsqlFunctionRegistry;
@@ -717,8 +718,20 @@ public abstract class ExpressionBuilder extends IdentifierBuilder {
     }
 
     @Override
-    public UnresolvedAttribute visitDereference(EsqlBaseParser.DereferenceContext ctx) {
-        return visitQualifiedName(ctx.qualifiedName());
+    public Expression visitDereference(EsqlBaseParser.DereferenceContext ctx) {
+        EsqlBaseParser.QualifiedNameContext qualifiedName = ctx.qualifiedName();
+        var parts = qualifiedName.fieldName().identifierOrParameter();
+        if (qualifiedName.qualifier == null && parts.size() == 1 && parts.get(0).identifier() == null) {
+            // a lone ?param / ??param: "Any" stays a marker for the analyzer instead of becoming a field name
+            var part = parts.get(0);
+            ParseTree paramCtx = part.parameter() != null ? part.parameter() : part.doubleParameter();
+            Expression exp = expression(paramCtx);
+            if (exp instanceof AnyParameter) {
+                return exp;
+            }
+            return new UnresolvedAttribute(source(qualifiedName), null, unresolvedAttributeNameInParam(paramCtx, exp), null);
+        }
+        return visitQualifiedName(qualifiedName);
     }
 
     @Override
@@ -1223,6 +1236,9 @@ public abstract class ExpressionBuilder extends IdentifierBuilder {
         ParseTree paramCtx = ctx.parameter();
         ParseTree doubleParamsCtx = ctx.doubleParameter();
         Expression exp = expression(paramCtx != null ? paramCtx : doubleParamsCtx);
+        if (exp instanceof AnyParameter any) {
+            throw anyNotAllowed(src, any);
+        }
         if (exp instanceof Literal lit) {
             if (lit.value() != null) {
                 throw new ParsingException(
@@ -1334,6 +1350,10 @@ public abstract class ExpressionBuilder extends IdentifierBuilder {
                         continue;
                     }
                 }
+                // BY ??param with "Any" drops the grouping key
+                if (value instanceof AnyParameter) {
+                    continue;
+                }
                 String name = null;
                 if (id == null) {
                     // when no alias has been specified, see if the underling one can be reused
@@ -1379,6 +1399,9 @@ public abstract class ExpressionBuilder extends IdentifierBuilder {
         DataType type = param.type();
         var value = param.value();
         ParserUtils.ParamClassification classification = param.classification();
+        if (classification != PATTERN && AnyParameter.isAny(value)) {
+            return new AnyParameter(parameterSource, parameterSource.text());
+        }
         // RequestXContent does not allow null value for identifier or pattern
         if (value != null && classification != VALUE) {
             if (classification == PATTERN) {
@@ -1447,9 +1470,19 @@ public abstract class ExpressionBuilder extends IdentifierBuilder {
         }
     }
 
-    String unresolvedAttributeNameInParam(ParserRuleContext ctx, Expression param) {
+    static ParsingException anyNotAllowed(Source source, AnyParameter any) {
+        return new ParsingException(
+            source,
+            "Query parameter [{}] is [{}], which is only allowed inside a boolean condition or as a BY key",
+            any.param(),
+            AnyParameter.VALUE
+        );
+    }
+
+    String unresolvedAttributeNameInParam(ParseTree ctx, Expression param) {
         String invalidParam = "Query parameter [{}]{}, cannot be used as an identifier";
         switch (param) {
+            case AnyParameter any -> throw anyNotAllowed(source(ctx), any);
             case Literal lit -> throw new ParsingException(
                 source(ctx),
                 invalidParam,
@@ -1496,6 +1529,9 @@ public abstract class ExpressionBuilder extends IdentifierBuilder {
      * is returned regardless how the param is specified in the request.
      */
     private Expression visitDoubleParam(EsqlBaseParser.DoubleParameterContext ctx, QueryParam param) {
+        if (param.classification() != PATTERN && AnyParameter.isAny(param.value())) {
+            return new AnyParameter(source(ctx), ctx.getText());
+        }
         if (param.classification() == PATTERN) {
             context.params.addParsingError(
                 new ParsingException(

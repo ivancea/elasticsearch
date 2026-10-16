@@ -118,9 +118,11 @@ $nullLabel = section '4. "(No value)" option via the __NULL__ sentinel: single v
 
 $nvFilter = marked 'Filter' (lines (nullsFilter 'nv_os' 'os'), (nullsFilter 'nv_priority' 'priority'), (nullsFilter 'nv_secure' 'secure' 'TO_BOOLEAN'))
 function nvControl([int]$x, [string]$title, [string]$field, [string]$variable) {
-  control $x 16 ([ordered]@{ title = $title; control_type = 'VALUES_FROM_QUERY'; esql_query = "FROM any_demo | STATS BY $field"
-      variable_name = $variable; variable_type = 'multi_values'; single_select = $false; selected_options = @()
-      include_no_value_option = $true })
+  # include_no_value_option is the local Kibana patch. Stock Kibana (cloud 9.5.1) rejects the field.
+  $cfg = [ordered]@{ title = $title; control_type = 'VALUES_FROM_QUERY'; esql_query = "FROM any_demo | STATS BY $field"
+      variable_name = $variable; variable_type = 'multi_values'; single_select = $false; selected_options = @() }
+  if ($Kibana -match 'localhost|127\.0\.0\.1') { $cfg.include_no_value_option = $true }
+  control $x 16 $cfg
 }
 function nvTable([int]$x, [string]$field) {
   table $x 2 12 10 "Documents by $field" (lines $from, $nvFilter, "| EVAL $field = COALESCE(TO_STRING($field), `"(no $field)`")",
@@ -137,25 +139,73 @@ $companion = section '5. "(No value)" option via the ?x__nulls companion param: 
   (nvTable 36 'secure')
 )
 
+# "Greater than" with MV_GREATER: true if any value is above the bound, so it works whether the field is multivalue or
+# not. Static numeric options arrive as integer params, and MV_GREATER needs the bound's exact type: TO_LONG for bytes.
+$gtFilter = marked 'Filter' (@'
+| WHERE ?gt_bytes IS NULL OR MV_GREATER(bytes, TO_LONG(?gt_bytes))
+| WHERE ?gt_latency IS NULL OR MV_GREATER(latency_ms, ?gt_latency)
+'@.Trim())
+function latencyRanges([string]$fn) {
+  "| EVAL latency = CASE(latency_ms IS NULL, `"(no latency)`", $fn(latency_ms) < 100, `"0-99`", $fn(latency_ms) < 500, `"100-499`", $fn(latency_ms) < 900, `"500-899`", `"900+`")"
+}
+$greater = section '6. Greater than: MV_GREATER on single value (bytes) and multivalue (latency_ms) fields' 68 @(
+  (control 0 16 ([ordered]@{ title = 'Greater than · Bytes above'; control_type = 'STATIC_VALUES'; available_options = @('1000', '5000', '10000', '15000')
+      variable_name = 'gt_bytes'; variable_type = 'values'; single_select = $true; selected_options = @() })),
+  (control 16 16 ([ordered]@{ title = 'Greater than · Any latency above (ms)'; control_type = 'STATIC_VALUES'; available_options = @('100', '500', '900')
+      variable_name = 'gt_latency'; variable_type = 'values'; single_select = $true; selected_options = @() })),
+  (metric 0 2 12 'Matching documents' (lines $from, $gtFilter, '| STATS docs = COUNT(*), no_latency = COUNT(*) WHERE latency_ms IS NULL') 'docs' 'no_latency'),
+  (table 12 2 12 10 'Documents by bytes' (lines $from, $gtFilter,
+      '| EVAL bytes_range = CASE(bytes < 1000, "0-999", bytes < 5000, "1000-4999", bytes < 10000, "5000-9999", bytes < 15000, "10000-14999", "15000+")',
+      '| STATS docs = COUNT(*), lowest = MIN(bytes) BY bytes_range', '| SORT lowest', '| KEEP bytes_range, docs') @('bytes_range') 'docs'),
+  (table 24 2 12 10 'Documents by highest latency' (lines $from, $gtFilter, (latencyRanges 'MV_MAX'), '| STATS docs = COUNT(*) BY latency', '| SORT latency') @('latency') 'docs'),
+  (table 36 2 12 10 'Documents by lowest latency' (lines $from, $gtFilter, (latencyRanges 'MV_MIN'), '| STATS docs = COUNT(*) BY latency', '| SORT latency') @('latency') 'docs')
+)
+
+# CIDR_MATCH with a multi-select control. The direct form fails: multivalue blocks aren't supported (and break the
+# Lucene pushdown, giving a partial result), and multivalue IPs are dropped. The workaround uses existing functions,
+# with one MV_CONTAINS + MV_IN_RANGE clause per static option.
+$cidrBlocks = [ordered]@{
+  '192.168.0.0/16' = @('192.168.0.0', '192.168.255.255')
+  '10.0.0.0/8'     = @('10.0.0.0', '10.255.255.255')
+  '172.16.0.0/12'  = @('172.16.0.0', '172.31.255.255')
+  '203.0.113.0/24' = @('203.0.113.0', '203.0.113.255')
+  'fd00::/8'       = @('fd00::', 'fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff')
+}
+$cidrDirect = marked 'Filter' '| WHERE ?net_cidr IS NULL OR CIDR_MATCH(client_ip, ?net_cidr)'
+$cidrWorkaround = marked 'Filter' ("| WHERE ?net_cidr IS NULL`n" + (($cidrBlocks.Keys | ForEach-Object {
+        "     OR (MV_CONTAINS(?net_cidr, `"$_`") AND MV_IN_RANGE(client_ip, TO_IP(`"$($cidrBlocks[$_][0])`"), TO_IP(`"$($cidrBlocks[$_][1])`")))" }) -join "`n"))
+$byNetwork = lines '| MV_EXPAND client_ip', ('| EVAL network = CASE(client_ip IS NULL, "(no ip)", ' + (($cidrBlocks.Keys | ForEach-Object { "CIDR_MATCH(client_ip, `"$_`"), `"$_`"" }) -join ', ') + ', "(other)")'),
+  '| STATS ip_values = COUNT(*) BY network', '| SORT ip_values DESC'
+$cidr = section '7. CIDR_MATCH: multi-select CIDR blocks on a multivalue IP field (client_ip)' 82 @(
+  (control 0 24 ([ordered]@{ title = 'CIDR · Client network'; control_type = 'STATIC_VALUES'; available_options = @($cidrBlocks.Keys)
+      variable_name = 'net_cidr'; variable_type = 'multi_values'; single_select = $false; selected_options = @() })),
+  (metric 0 2 12 'Direct CIDR_MATCH (fails on selection)' (lines $from, $cidrDirect, '| STATS docs = COUNT(*), multi_ip = COUNT(*) WHERE MV_COUNT(client_ip) > 1') 'docs' 'multi_ip'),
+  (metric 12 2 12 'Workaround: MV_CONTAINS + MV_IN_RANGE' (lines $from, $cidrWorkaround, '| STATS docs = COUNT(*), multi_ip = COUNT(*) WHERE MV_COUNT(client_ip) > 1') 'docs' 'multi_ip'),
+  (table 24 2 24 10 'IP values by network (workaround)' (lines $from, $cidrWorkaround, $byNetwork) @('network') 'ip_values')
+)
+
 $dashboard = [ordered]@{
   title       = '1. ES|QL controls: Any - scenarios'
   description = 'One section per scenario (elasticsearch#136735). Each section has its own controls; panels only use their own section''s variables.'
   time_range  = [ordered]@{ from = 'now-7d'; to = 'now' }
-  panels      = @($single, $multi, $breakdown, $nullLabel, $companion)
+  panels      = @($single, $multi, $breakdown, $nullLabel, $companion, $greater, $cidr)
 }
 
 $body = $dashboard | ConvertTo-Json -Depth 40
 $headers = @{ 'kbn-xsrf' = 'true'; 'elastic-api-version' = '2023-10-31' }
+if ($env:ES_CLOUD_API_KEY -and $Kibana -notmatch 'localhost|127\.0\.0\.1') {
+  $headers['Authorization'] = "ApiKey $($env:ES_CLOUD_API_KEY)"
+}
 try {
   if ($Id) {
     Invoke-WebRequest -Method PUT -Uri "$Kibana/api/dashboards/$Id" -Headers $headers -ContentType 'application/json' `
       -Body ([Text.Encoding]::UTF8.GetBytes($body)) -UseBasicParsing | Out-Null
-    "Updated dashboard: $Kibana/app/dashboards#/view/$Id"
+    "Updated dashboard id=$Id"
   } else {
     $r = Invoke-WebRequest -Method POST -Uri "$Kibana/api/dashboards" -Headers $headers -ContentType 'application/json' `
       -Body ([Text.Encoding]::UTF8.GetBytes($body)) -UseBasicParsing
     $newId = ($r.Content | ConvertFrom-Json).id
-    "Created dashboard: $Kibana/app/dashboards#/view/$newId"
+    "Created dashboard id=$newId"
   }
 } catch {
   "HTTP error: " + $(if ($_.ErrorDetails) { $_.ErrorDetails.Message } else { $_.Exception.Message })

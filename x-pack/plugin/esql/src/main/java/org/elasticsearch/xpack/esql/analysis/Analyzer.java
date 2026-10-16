@@ -31,6 +31,7 @@ import org.elasticsearch.xpack.esql.Column;
 import org.elasticsearch.xpack.esql.EsqlIllegalArgumentException;
 import org.elasticsearch.xpack.esql.VerificationException;
 import org.elasticsearch.xpack.esql.analysis.AnalyzerRules.ParameterizedAnalyzerRule;
+import org.elasticsearch.xpack.esql.analysis.rules.AnyParameterRules;
 import org.elasticsearch.xpack.esql.analysis.rules.DetermineUnmappedFieldsToKeep;
 import org.elasticsearch.xpack.esql.analysis.rules.ResolveFunctions;
 import org.elasticsearch.xpack.esql.analysis.rules.ResolveHighlight;
@@ -329,6 +330,8 @@ public class Analyzer extends ParameterizedRuleExecutor<LogicalPlan, AnalyzerCon
                 new InjectOuterMetadataForSubqueries(),
                 // Must be after ResolveRefs: derivation reads the resolved child output and the resolved upstream WHERE predicates.
                 new ResolveHighlight(),
+                // Must run before ImplicitCasting: "Any" markers are replaced with true before argument types are read.
+                new AnyParameterRules.ReplaceWithTrue(),
                 new ImplicitCasting(),
                 new ResolveUnionTypes(),  // Must be after ResolveRefs, so union types can be found
                 new ResolveUnionTypesInUnionAll(),
@@ -340,6 +343,7 @@ public class Analyzer extends ParameterizedRuleExecutor<LogicalPlan, AnalyzerCon
             new Batch<>(
                 "Finish Analysis",
                 Limiter.ONCE,
+                new AnyParameterRules.FailOnRemaining(),
                 new DetermineUnmappedFieldsToKeep(ordering -> unmappedFieldsOrdering = ordering),
                 new ResolveImplicitTimeSeriesIdentityGrouping(),
                 new ResolvedProjects(),

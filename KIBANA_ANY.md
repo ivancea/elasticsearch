@@ -170,6 +170,17 @@ them work unchanged would be a bonus, not a must.
 "create control from query" flow, to recognise it. That flow currently looks for `MV_CONTAINS` to default to
 multi-select.
 
+**R14. Non-equality filters.** The same "Any" pattern applies beyond equality. Two cases were validated (section
+7.1):
+
+- **Greater / less than** ("Bytes above X"): the operator is fixed by the dashboard author, and the control only
+  picks the bound. A control that picks the operator was discarded: other tools don't offer it, ad-hoc operators
+  belong to the filter bar, and min/max bound controls cover `>`, `<` and "between".
+- **Network (CIDR) filters** with a multi-select of blocks, on `ip` fields that are often multivalued (a host
+  with several addresses).
+
+Kibana has no free numeric input or range slider for ES|QL controls, so bounds come from static options.
+
 **Special positions:**
 
 - **PromQL label matchers** (`{host=?host}`) can take a value control. "Any" there means dropping the matcher
@@ -492,6 +503,8 @@ is a placeholder name (alternatives: `MATCHES_CONTROL`, `PARAM_FILTER`); it's a 
 | Include / exclude | `?os` + `?os_mode` | `?os IS NULL OR (COALESCE(?os_mode, "include") == "include") == (MV_INTERSECTS(?os, os) OR ...)` | `IN_SELECTION(os, ?os, {"nulls": ?os__nulls, "exclude": ?os_mode == "exclude"})` |
 | Text pattern | `?t`: pattern or `null` | `?t IS NULL OR host LIKE COALESCE(?t, "*")` | `IN_SELECTION(host, ?t, {"match": "like"})` |
 | Range | `?lo`, `?hi`: bound or `null` | `?lo IS NULL OR MV_IN_RANGE(status, TO_LONG(?lo), TO_LONG(?hi))` | `IN_RANGE_SELECTION(status, ?lo, ?hi)` (`null` bound = unbounded) |
+| Greater than (any value) | `?min`: bound or `null` | `?min IS NULL OR MV_GREATER(bytes, TO_LONG(?min))` | None needed if `MV_GREATER` widens types; `IN_RANGE_SELECTION(bytes, ?min, null)` is `>=` |
+| CIDR blocks, multi-select | `?net`: list of CIDR strings or `null` | No usable template (section 7.1); workaround: one `MV_CONTAINS(?net, "<block>") AND MV_IN_RANGE(ip, <start>, <end>)` per option | `?net IS NULL OR MV_CIDR_MATCH(client_ip, ?net)` (new function, see notes) |
 | Breakdown, one group (G) | `?bd`: field name as a value | `EVAL group = CASE(?bd == "os", os, ?bd == "region", region, "all documents")`, then `BY group` | `BY group = FIELD_OR(??bd, "all documents")` |
 | Breakdown, no key (F2) | `??bd`: identifier or unset | Not possible today | `BY OPTIONAL(??bd)` |
 
@@ -511,6 +524,19 @@ Notes:
   - Whether `null` means "Any" inside the function, or only an explicit "unset" marker.
   - `FIELD_OR` and `OPTIONAL` need an unset or `null` `??` parameter to be accepted in that one position (a parse
     error today).
+- **Greater than:** `MV_GREATER`/`MV_LESS` already have the right semantics (any value, `false` for a missing
+  field), so the template is the plain D shape. The only wart is their exact-type rule: Kibana sends `5000` as an
+  integer, which a `long` field rejects. Widening numeric bounds, like `>` does, removes the cast and the need for
+  sugar.
+- **CIDR:** `MV_CIDR_MATCH(ip, blocks)`, true if any value of `ip` is in any block, fits the `MV_` family
+  (`MV_INTERSECTS`, `MV_GREATER`, `MV_IN_RANGE`). Its pushdown is cheap: a CIDR term on an `ip` field is already a
+  range query in Lucene, and it can lower to one `MV_IN_RANGE` per block. Alternatively, it can wait for the
+  lambdas work, which would cover multivalue variants of any function generically.
+  - Making `CIDR_MATCH` itself multivalue-aware was proposed and discarded in
+    [esql-planning#1657](https://github.com/elastic/esql-planning/issues/1657). It changes results for existing
+    queries (multivalued IPs are `null` today) and breaks backwards compatibility, since `CIDR_MATCH` is already
+    pushed down with single-value semantics. The conclusion there was "if we need a multivalue version, make a new
+    function". Dashboard network filters are a concrete case for it.
 
 ## 3. Coverage
 
@@ -554,6 +580,12 @@ Notes on some cells:
    - Ship `MV_INTERSECTS` pushdown (on `main`).
    - Widen types in `MV_INTERSECTS`/`MV_CONTAINS`, or document the casts.
    - Make `field IN (?list)` work or fail loudly; it silently returns nothing today.
+   - Widen numeric bounds in `MV_GREATER`/`MV_LESS`/`MV_IN_RANGE` (an integer param on a `long` field is a 400).
+   - Fix one-element list literals ([#161157](https://github.com/elastic/elasticsearch/issues/161157), section
+     7.1): `CIDR_MATCH` pushdown fails the shard with a one-element list
+     param, which is what a multi-select with one option sends, and `STARTS_WITH` treats it as the text `"[x]"`.
+     Normalising one-element lists to a single value where literals are built would fix every such function at
+     once.
 3. Next: blank / Exists / Exclude, either with D+ (no ES change, naming convention needed; verified) or with H
    (one structured parameter per control; new function and param format). Within D+, the companion param
    `?x__nulls` is the best fit for a "(No value)" option: type-agnostic, no collisions, and "blanks only" is
@@ -561,6 +593,9 @@ Notes on some cells:
 4. Later, breakdown "None": F2 (optional grouping key) for "no breakdown", or G (constant group) as the cheaper
    alternative. Which one depends on how Lens handles a missing breakdown column, still to be checked in a
    running Kibana. Budget the Kibana-side work: editor support, and Composer or rule params for alerting.
+5. Later, network filters: `MV_CIDR_MATCH` (new function), or wait for lambdas over multivalues (see the notes
+   under "Templates and syntactic sugar per case", and
+   [esql-planning#1657](https://github.com/elastic/esql-planning/issues/1657)).
 
 Other tools (section 6) back this order. The in-language pattern of D is Microsoft's documented approach for
 Azure Data Explorer. Text-level preprocessors (Metabase, Superset) are popular but produce invalid queries and
@@ -580,6 +615,11 @@ catching up.
 - Should "unset" be "parameter absent from the request", an explicit marker, or `null`? This decides whether a
   real `null` value can still be passed.
 - Blank / Exists / Exclude: D+ flags or H (filter-parameter function)?
+- Network filters on multivalued `ip` fields: add `MV_CIDR_MATCH` now, or wait for lambdas over multivalues?
+- **TODO:** "Any" sentinel for auto-removal (section 8.2). The prototype uses `"__ANY__"` as a placeholder.
+  Investigate which value to use so it can't collide with real user data (a reserved string, a typed marker in
+  the request such as `{"x": {"any": true}}`, or a dedicated param kind), and what other databases and BI tools
+  use for the same purpose.
 
 ## 6. How other tools do it
 
@@ -838,6 +878,70 @@ Not verified yet:
 - Lens charts (`xy` with `breakdown_by`) when the bound breakdown column is missing; data tables were checked
   (section 8.1).
 
+### 7.1 Non-equality filters: greater than and CIDR
+
+On the 9.6 snapshot, with two multivalue fields added to `any_demo` (`demo_data_compare.ps1`, derived from
+`bytes`): `latency_ms` (integer, 1–3 values, 136 documents without it) and `client_ip` (IPv4 and IPv6, 472
+documents with 2 values, 208 without). Checks in `t12`–`t14`; params as Kibana sends them (static numeric options
+become JSON numbers, multi-selects are arrays even with one option).
+
+Greater than (`t12_compare.ps1`):
+
+| Check | Result |
+|---|---|
+| `?v IS NULL OR MV_GREATER(latency_ms, ?v)`, `500` | 1,319 (= `MV_MAX(latency_ms) > 500`); 781 of them also have a value ≤ 500 |
+| `latency_ms > ?v`, `500` | 292, with "single-value function encountered multi-value" warnings |
+| Same filter, `null` | 2,000; folds away |
+| `MV_GREATER(latency_ms, null)` without the guard | 0: `MV_GREATER` is `false` for a `null` bound |
+| `MV_GREATER(bytes, ?v)` (`long` field), `5000` | 400 "must be [long], found [integer]"; works with `TO_LONG(?v)` (1,526) |
+| `MV_GREATER(latency_ms, ?v)`, `500.5` | 400 "must be [integer], found [double]" |
+| `IN_RANGE_SELECTION(bytes, ?v, null)` (prototype) | `>=`, with the cast added automatically |
+| Profiles | Single value and multivalue both pushed down entirely (`LuceneCountOperator`) |
+
+CIDR with a multi-select (`t12_compare.ps1`, `t12b_cidr_probe.ps1`, `t12c_cidr_workaround.ps1`):
+
+| Check | Result |
+|---|---|
+| `?c IS NULL OR CIDR_MATCH(client_ip, ?c)`, `["192.168.0.0/16"]` | 0 documents, `is_partial: true`: the shard fails with "'[[...]]' is not an IP string literal" |
+| Same, scalar `"192.168.0.0/16"` | 152 instead of 299: multivalued IPs are dropped (single-value semantics, with warnings) |
+| `CIDR_MATCH(ip, ?c)` evaluated (`ROW`/`EVAL`), two blocks | `null`, "single-value function encountered multi-value" |
+| Workaround: one `MV_CONTAINS(?c, "<block>") AND MV_IN_RANGE(client_ip, TO_IP("<start>"), TO_IP("<end>"))` per static option | Exact (299; 769 for `192.168/16` + `10/8`; 290 for `fd00::/8`, same as an `MV_EXPAND` reference); pushed down entirely; unreadable |
+
+Converting a CIDR to start and end IPs in ES|QL (`t13_cidr_bounds.ps1`), to use `MV_IN_RANGE` without hard-coded
+ranges:
+
+- **Start IP:** `IP_PREFIX(TO_IP(<address>), <length>, <length>)`, with the parts from `SPLIT(c, "/")`. IPv4 and IPv6.
+- **End IP:** there's no IP arithmetic or bitwise function. IPv4 only, by rebuilding the address from its octets
+  as a `long` (`1.1.1.0/8` gives `1.0.0.0 .. 1.255.255.255`). It can't be done for IPv6.
+- **Single select:** exact and pushed down, but ~3,000 characters.
+- **Multi-select:** still one clause per position (`MV_SLICE(?c, i, i)`), because `MV_IN_RANGE` takes single-valued
+  bounds. Each position needs a `MV_COUNT(?c) > i AND ...` guard, otherwise unused positions block pushdown.
+  That's ~16,000 characters for five options with the bounds computed in `EVAL`s, ~19,000 inline.
+- **Range types:** Elasticsearch has an `ip_range` field type, but ES|QL only supports `date_range` and
+  `double_range` (preview). An `ip_range` with a multivalue-aware `RANGE_CONTAINS` would also solve it, but is a
+  much larger change than `MV_CIDR_MATCH`.
+
+One-element lists (`t14_one_element_list.ps1`): a one-element array param and a one-element list literal `["x"]`
+both become a `Literal` holding a Java `List`. They should behave as a single value, and most predicates do:
+
+| Predicate | Scalar | `?p = [x]` / literal `[x]` | `MV_SLICE([x, y], 0, 0)` |
+|---|---|---|---|
+| `==`, `IN`, `>`, `MV_GREATER`, `MV_IN_RANGE` | Correct | Same, pushed down and evaluated | Same |
+| `CIDR_MATCH` | Correct | Pushed down: 0 documents, partial (shard failure); evaluated: correct | Correct |
+| `STARTS_WITH` | Correct | 0 documents, pushed down and evaluated | Correct |
+
+`MV_SLICE` folds to a real single value, so it's unaffected. `CIDRMatch.asQuery` (`Foldables.literalValueOf`)
+and `StartsWith` (`BytesRefs.toBytesRef(fold(...))`) assume a folded value is a scalar, so the `List` reaches
+the Lucene query or the evaluator as the text `"[x]"`. For two or more blocks, the evaluated `CIDR_MATCH` returns
+`null` with a warning (multivalued arguments aren't supported) while the pushed-down query fails the shard. Both
+paths should give the same result.
+
+Reported as [#161157](https://github.com/elastic/elasticsearch/issues/161157) (reproduced on 9.5.1). The closest
+precedent is
+[#157956](https://github.com/elastic/elasticsearch/pull/157956) (merged October 5, backported to 9.5, 9.4 and
+8.19). It fixed the same class of bug only in `CASE`, stating the rule: "a list with one value in it is just that
+value — `[true]` means the same as `true`".
+
 ## 8. Kibana demo
 
 A working demo of D on Kibana `main` (9.6.0, commit `ec5a1110af7`) against the 9.6 snapshot above.
@@ -861,7 +965,8 @@ A working demo of D on Kibana `main` (9.6.0, commit `ec5a1110af7`) against the 9
   `// Breakdown end` for the `CASE` grouping). ES|QL accepts `//` comments between pipes, and the Dashboards API and
   Lens keep comments and line breaks in the stored query (verified).
 - **Current dashboards:** "1. ES|QL controls: Any - scenarios" (main demo), "2. ES|QL controls: Any - functions"
-  (section 8.1) and "3. ES|QL controls: Any + include/exclude".
+  (section 8.1), "3. ES|QL controls: Any + include/exclude" and "6. ES|QL controls: Any - auto-removal"
+  (section 8.2).
 - **Removed dashboards:** "ES|QL controls: Any" and "ES|QL controls: Any + (No value)" were superseded by the
   scenarios dashboard (sections 1–2 and 4) and deleted. Their scripts (`create_dashboard.ps1`,
   `create_dashboard_null.ps1`) still recreate them. A finding from them, also covered by scenarios section 4:
@@ -888,6 +993,14 @@ A working demo of D on Kibana `main` (9.6.0, commit `ec5a1110af7`) against the 9
      because controls send non-numeric values as strings). `priority` and `secure` were added to `any_demo` with
      ~18% and ~14% missing values (`demo_data_nulls.ps1`, derived from `bytes`, so earlier counts are unchanged).
      Shows what the sentinel can't: "(No value)" on numeric and boolean fields, e.g. Secure `true` + "(No value)".
+  6. **Greater than:** "Bytes above" (`long`, single value) and "Any latency above" (`integer`, multivalue), static
+     options, filtered with `?x IS NULL OR MV_GREATER(field, ?x)` (`TO_LONG` for `bytes`). The "highest" and
+     "lowest latency" tables show the any-value semantics: with "above 500", documents whose lowest latency is
+     below 500 still match.
+  7. **CIDR:** a multi-select of five blocks (`192.168.0.0/16`, `10.0.0.0/8`, `172.16.0.0/12`, `203.0.113.0/24`,
+     `fd00::/8`) on the multivalue `client_ip`. One panel uses `CIDR_MATCH(client_ip, ?net_cidr)` and shows 0 as
+     soon as anything is selected (section 7.1). Next to it, the `MV_CONTAINS` + `MV_IN_RANGE` workaround gives the
+     right count, and a table counts IP values per network.
   - The Dashboards API accepts `esql_control` panels inside sections (verified), not only as pinned controls.
 - **Dashboard "3. ES|QL controls: Any + include/exclude"** (`create_dashboard_exclude.ps1`): include/exclude is
   not part of the issue, but classic controls have an Exclude toggle, so it lives in its own dashboard. The other
@@ -954,6 +1067,43 @@ Two side findings:
 - Kibana found `?x__nulls` inside the map literal and sent it.
 - A Lens data table bound to `??fn_bd`, with the column dropped by `OPTIONAL`, renders just `docs` (one row), with
   no error. With `os` selected, it shows the `os` column again.
+
+### 8.2 Prototype of auto-removal with a sentinel (ES and Kibana change, working tree only)
+
+A variant of auto-removal where "Any" is a sentinel value instead of `null`, so existing `null` semantics don't
+change. The value `"__ANY__"` is a placeholder (see the TODO in section 5).
+
+- **Kibana:** a new ES|QL control setting `send_any_value` (schema in `options_list_schema.ts`, kept by the server
+  transform). With it, an empty selection sends `"__ANY__"` instead of `null`, for single-select, multi-select
+  (scalar, not a list) and field (`??`) controls. Controls without the setting still send `null`, so the other
+  dashboards are unchanged.
+- **Parser** (`ExpressionBuilder`): a `?x` or `??x` whose value is `"__ANY__"` (or `["__ANY__"]`) becomes an
+  `AnyParameter` marker, typed `NULL`. Only parameters trigger it, not a `"__ANY__"` literal in the query.
+  - `BY ??x` (or `BY g = ??x`) drops the key; with no other key, `STATS` becomes a global aggregation.
+  - Identifier positions (`KEEP ??x`, `EVAL ??x = ...`, function names) fail: "Query parameter [??x] is
+    [\_\_ANY\_\_], which is only allowed inside a boolean condition or as a BY key".
+- **Analyzer** (`AnyParameterRules`): bottom-up, the nearest expression of type `boolean` containing a marker is
+  replaced with `true`. It runs right after `ResolveRefs` and before `ImplicitCasting`, so `bytes > ?min` doesn't
+  try to cast `"__ANY__"` to `long`. A marker with no boolean ancestor (`EVAL x = ?v`) fails at the end of
+  analysis with the same message.
+- **`NOT`:** the nearest boolean is replaced, so `NOT MV_INTERSECTS(?x, f)` becomes `NOT true` (no rows): "Any" is
+  a value that matches everything, not a removed filter.
+
+Verified on the 9.6 snapshot (`t18_auto_removal.ps1`): "Any" returns all 2,000 documents for `MV_INTERSECTS`
+(single and multi), `==`, `>` (no cast), `MV_GREATER`, `CIDR_MATCH`, `??f == ?v` (either side), and an aggregation
+filter. `AND` keeps the other conditions (`os` "Any" and `region == "eu-west"`: 525). `STATS BY ??g` becomes a
+global count, and `BY b = BUCKET(...), ??g` keeps only the buckets. Old `?x IS NULL OR ...` guards still work with
+`"__ANY__"` (the `IS NULL` is the nearest boolean) and with `null`. `FIELD_OR` and `IN_SELECTION` are unaffected.
+
+**Dashboard "6. ES|QL controls: Any - auto-removal"** (`create_dashboard_auto_removal.ps1`): every control has
+`send_any_value`, and no filter has a guard:
+
+| Section | Query part |
+|---|---|
+| 1 | `WHERE MV_INTERSECTS(?ar_os, os)` and `WHERE os == ?ar_os` |
+| 2 | `WHERE MV_INTERSECTS(?ar_tags, tags)` |
+| 3 | `BY ??ar_group` and `BY bucket = BUCKET(...), ??ar_group` |
+| 4 | `WHERE ??ar_field == ?ar_value` |
 
 ## 9. Coverage of the issue conversation and related discussions
 

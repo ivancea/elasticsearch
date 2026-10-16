@@ -66,16 +66,19 @@ $dashboard = [ordered]@{
 
 $body = $dashboard | ConvertTo-Json -Depth 30
 $headers = @{ 'kbn-xsrf' = 'true'; 'elastic-api-version' = '2023-10-31' }
+if ($env:ES_CLOUD_API_KEY -and $Kibana -notmatch 'localhost|127\.0\.0\.1') {
+  $headers['Authorization'] = "ApiKey $($env:ES_CLOUD_API_KEY)"
+}
 try {
   if ($Id) {
     Invoke-WebRequest -Method PUT -Uri "$Kibana/api/dashboards/$Id" -Headers $headers -ContentType 'application/json' `
       -Body ([Text.Encoding]::UTF8.GetBytes($body)) -UseBasicParsing | Out-Null
-    "Updated dashboard: $Kibana/app/dashboards#/view/$Id"
+    "Updated dashboard id=$Id"
   } else {
     $r = Invoke-WebRequest -Method POST -Uri "$Kibana/api/dashboards" -Headers $headers -ContentType 'application/json' `
       -Body ([Text.Encoding]::UTF8.GetBytes($body)) -UseBasicParsing
     $newId = ($r.Content | ConvertFrom-Json).id
-    "Created dashboard: $Kibana/app/dashboards#/view/$newId"
+    "Created dashboard id=$newId"
   }
 } catch {
   "HTTP error: " + $(if ($_.ErrorDetails) { $_.ErrorDetails.Message } else { $_.Exception.Message })
