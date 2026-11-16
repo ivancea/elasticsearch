@@ -20,7 +20,8 @@ import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.logging.HeaderWarning;
-import org.elasticsearch.common.logging.activity.ActivityLogger;
+import org.elasticsearch.common.logging.activity.QueryInterceptor;
+import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.common.xcontent.ChunkedToXContent;
@@ -35,6 +36,7 @@ import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.RemoteClusterService;
 import org.elasticsearch.transport.TransportService;
+import org.elasticsearch.xcontent.ToXContent;
 import org.elasticsearch.xpack.esql.action.ColumnInfoImpl;
 import org.elasticsearch.xpack.esql.action.EsqlExecutionInfo;
 import org.elasticsearch.xpack.esql.action.EsqlQueryResponse;
@@ -44,7 +46,6 @@ import org.elasticsearch.xpack.esql.analysis.AnalyzerSettings;
 import org.elasticsearch.xpack.esql.core.expression.Alias;
 import org.elasticsearch.xpack.esql.core.expression.Attribute;
 import org.elasticsearch.xpack.esql.core.expression.AttributeMap;
-import org.elasticsearch.xpack.esql.core.expression.Expressions;
 import org.elasticsearch.xpack.esql.core.expression.FieldAttribute;
 import org.elasticsearch.xpack.esql.core.expression.FoldContext;
 import org.elasticsearch.xpack.esql.core.expression.NameId;
@@ -56,12 +57,11 @@ import org.elasticsearch.xpack.esql.enrich.EnrichPolicyResolver;
 import org.elasticsearch.xpack.esql.execution.PlanExecutor;
 import org.elasticsearch.xpack.esql.plan.QuerySettings;
 import org.elasticsearch.xpack.esql.plan.logical.EsRelation;
-import org.elasticsearch.xpack.esql.plan.logical.UnmappedFieldsAttribute;
 import org.elasticsearch.xpack.esql.plan.physical.FragmentExec;
 import org.elasticsearch.xpack.esql.plan.physical.PhysicalPlan;
 import org.elasticsearch.xpack.esql.plan.physical.StreamingOutputExec;
-import org.elasticsearch.xpack.esql.querylog.EsqlLogContext;
-import org.elasticsearch.xpack.esql.querylog.EsqlStreamLogContextBuilder;
+import org.elasticsearch.xpack.esql.querylog.EsqlCaptureContext;
+import org.elasticsearch.xpack.esql.querylog.EsqlStreamCaptureContextBuilder;
 import org.elasticsearch.xpack.esql.session.Configuration;
 import org.elasticsearch.xpack.esql.session.EsqlSession.PlanRunner;
 import org.elasticsearch.xpack.esql.session.IndexResolver;
@@ -142,7 +142,7 @@ public class TransportEsqlStreamQueryAction extends TransportAction<EsqlStreamQu
     private final ClusterService clusterService;
     private final Executor requestExecutor;
     private final Client client;
-    private final ActivityLogger<EsqlLogContext> activityLogger;
+    private final QueryInterceptor<EsqlCaptureContext> queryInterceptor;
     private final TransportEsqlQueryAction transportEsqlQueryAction;
     private volatile boolean defaultAllowPartialResults;
     private volatile int resultTruncationMaxSize;
@@ -172,7 +172,7 @@ public class TransportEsqlStreamQueryAction extends TransportAction<EsqlStreamQu
         this.computeService = transportEsqlQueryAction.computeService();
         this.enrichPolicyResolver = transportEsqlQueryAction.enrichPolicyResolver();
         this.datasetResolver = transportEsqlQueryAction.datasetResolver();
-        this.activityLogger = transportEsqlQueryAction.activityLogger();
+        this.queryInterceptor = transportEsqlQueryAction.activityInterceptor();
         this.transportEsqlQueryAction = transportEsqlQueryAction;
         this.clusterService = clusterService;
         this.viewResolver = viewResolver;
@@ -213,15 +213,12 @@ public class TransportEsqlStreamQueryAction extends TransportAction<EsqlStreamQu
         if (request.allowPartialResults() == null) {
             request.allowPartialResults(defaultAllowPartialResults);
         }
-        EsqlExecutionInfo executionInfo = new EsqlExecutionInfo(
-            clusterAlias -> remoteClusterService.shouldSkipOnFailure(clusterAlias, request.allowPartialResults()),
-            EsqlExecutionInfo.IncludeExecutionMetadata.NEVER
-        );
-        PageStreamPublisher publisher = new PageStreamPublisher(request.batchSize());
+        EsqlExecutionInfo executionInfo = transportEsqlQueryAction.createEsqlExecutionInfo(request);
+        PageStreamPublisher publisher = new PageStreamPublisher();
         AtomicReference<Result> resultRef = new AtomicReference<>();
-        activityLogger.wrapAndRun(
+        queryInterceptor.wrapAndRun(
             listener,
-            new EsqlStreamLogContextBuilder(task, request, executionInfo, publisher, resultRef::get),
+            new EsqlStreamCaptureContextBuilder(task, request, executionInfo, publisher, resultRef::get),
             l -> innerExecute(task, request, executionInfo, publisher, resultRef, l)
         );
     }
@@ -239,6 +236,7 @@ public class TransportEsqlStreamQueryAction extends TransportAction<EsqlStreamQu
         AtomicBoolean streamStarted = new AtomicBoolean(false);
         AtomicBoolean outputRunSeen = new AtomicBoolean(false);
         AtomicReference<Map<NameId, Map<String, Object>>> columnMetadataRef = new AtomicReference<>();
+        DriverCompletionInfo.AtomicAccumulator completedWork = new DriverCompletionInfo.AtomicAccumulator();
 
         PlanRunner planRunner = new PlanRunner() {
             @Override
@@ -253,6 +251,7 @@ public class TransportEsqlStreamQueryAction extends TransportAction<EsqlStreamQu
                 Configuration configuration,
                 FoldContext foldCtx,
                 PlanTimeProfile planTimeProfile,
+                ByteSizeValue maxResultSize,
                 ActionListener<Result> resultListener
             ) {
                 if (QuerySettings.UNMAPPED_FIELDS.get(configuration.resolvedSettings()).loadsAllUnmappedFields()) {
@@ -268,7 +267,11 @@ public class TransportEsqlStreamQueryAction extends TransportAction<EsqlStreamQu
                         foldCtx,
                         executionInfo,
                         planTimeProfile,
-                        resultListener
+                        maxResultSize,
+                        resultListener.map(r -> {
+                            completedWork.accumulate(r.completionInfo());
+                            return r;
+                        })
                     );
                     return;
                 }
@@ -304,6 +307,7 @@ public class TransportEsqlStreamQueryAction extends TransportAction<EsqlStreamQu
                             foldCtx,
                             executionInfo,
                             planTimeProfile,
+                            maxResultSize,
                             resultListener
                         );
                     } catch (Exception e) {
@@ -368,8 +372,9 @@ public class TransportEsqlStreamQueryAction extends TransportAction<EsqlStreamQu
             externalSourceConcurrency(),
             ((CancellableTask) task)::isCancelled,
             ActionListener.wrap(versionedResult -> {
-                transportEsqlQueryAction.recordCCSTelemetry(task, executionInfo, request, null);
                 Result result = versionedResult.inner();
+                TransportEsqlQueryAction.failIfCancelled(task, result);
+                transportEsqlQueryAction.recordCCSTelemetry(task, executionInfo, request, null);
                 markPartialFromCompletionInfo(result);
                 resultRef.set(result);
                 if (streamStarted.get() == false) {
@@ -390,7 +395,7 @@ public class TransportEsqlStreamQueryAction extends TransportAction<EsqlStreamQu
                     publisher.registerProducer().finish();
                 }
                 assert streamStarted.get() : "the footer must not be delivered before the stream is started";
-                long tookMillis = executionInfo.overallTook() != null ? executionInfo.overallTook().millis() : 0L;
+                long tookMillis = tookMillis(executionInfo);
                 List<String> warnings = footerWarnings(threadPool.getThreadContext(), result.completionInfo());
                 ChunkedToXContent profile = request.profile()
                     ? EsqlQueryResponse.profileXContent(
@@ -409,6 +414,7 @@ public class TransportEsqlStreamQueryAction extends TransportAction<EsqlStreamQu
                         executionInfo.isPartial(),
                         warnings,
                         result.completionInfo(),
+                        footerClusters(executionInfo),
                         null,
                         profile
                     )
@@ -418,24 +424,27 @@ public class TransportEsqlStreamQueryAction extends TransportAction<EsqlStreamQu
                 listener.onResponse(ActionResponse.Empty.INSTANCE);
             }, ex -> {
                 transportEsqlQueryAction.recordCCSTelemetry(task, executionInfo, request, ex);
+                PageStreamPublisher.StreamFooter footer = failureFooter(
+                    ex,
+                    executionInfo,
+                    completedWork.finish(),
+                    threadPool.getThreadContext()
+                );
                 if (streamStarted.get()) {
-                    long tookMillis = executionInfo.overallTook() != null ? executionInfo.overallTook().millis() : 0L;
-                    publisher.failStream(
-                        ex,
-                        new PageStreamPublisher.StreamFooter(
-                            ExceptionsHelper.status(ex).getStatus(),
-                            tookMillis,
-                            executionInfo.isPartial(),
-                            footerWarnings(threadPool.getThreadContext(), DriverCompletionInfo.EMPTY),
-                            null,
-                            ex,
-                            null
-                        )
-                    );
+                    publisher.failStream(ex, footer);
+                } else {
+                    request.preHeaderFailureFooterConsumer().accept(footer);
                 }
                 listener.onFailure(ex);
             })
         );
+    }
+
+    static ToXContent footerClusters(EsqlExecutionInfo executionInfo) {
+        if (executionInfo.hasMetadataToReport() == false) {
+            return null;
+        }
+        return ChunkedToXContent.wrapAsToXContent(executionInfo);
     }
 
     private static Exception startStream(
@@ -456,8 +465,6 @@ public class TransportEsqlStreamQueryAction extends TransportAction<EsqlStreamQu
     }
 
     static List<ColumnInfoImpl> buildColumns(List<Attribute> output, Map<NameId, Map<String, Object>> columnMetadata) {
-        assert output.stream().noneMatch(a -> a instanceof UnmappedFieldsAttribute)
-            : UnmappedFieldsAttribute.ATTRIBUTE_NAME + " reached the stream header unexpanded: " + Expressions.names(output);
         return output.stream().map(c -> {
             List<String> originalTypes = null;
             if (c instanceof UnsupportedAttribute ua) {
@@ -487,8 +494,9 @@ public class TransportEsqlStreamQueryAction extends TransportAction<EsqlStreamQu
         String[] fieldNames = new String[output.size()];
         for (int i = 0; i < output.size(); i++) {
             Attribute terminal = aliasSources.resolve(output.get(i), output.get(i));
-            if (terminal instanceof FieldAttribute fa
-                && (terminal instanceof UnsupportedAttribute) == false
+            if (terminal instanceof FieldAttribute fa && (terminal instanceof UnsupportedAttribute) == false
+            // field_caps only sees mappings, so it cannot vouch that a field loaded from _source is empty
+                && fa.isPotentiallyUnmapped() == false
                 && fa.field().isAggregatable()
                 && FIELD_CAPS_EMPTINESS_IS_TRUSTWORTHY.contains(fa.dataType())) {
                 fieldNames[i] = fa.fieldName().string();
@@ -556,12 +564,37 @@ public class TransportEsqlStreamQueryAction extends TransportAction<EsqlStreamQu
         }
     }
 
-    static List<String> footerWarnings(ThreadContext threadContext, DriverCompletionInfo completionInfo) {
+    public static List<String> footerWarnings(ThreadContext threadContext, DriverCompletionInfo completionInfo) {
         LinkedHashSet<String> warnings = new LinkedHashSet<>(completionInfo.warnings());
         for (String header : threadContext.getResponseHeaders().getOrDefault("Warning", List.of())) {
             warnings.add(HeaderWarning.decodeAndUnescape(HeaderWarning.extractWarningValueFromWarningHeader(header, false)));
         }
         return List.copyOf(warnings);
+    }
+
+    static long tookMillis(EsqlExecutionInfo executionInfo) {
+        if (executionInfo.overallTook() != null) {
+            return executionInfo.overallTook().millis();
+        }
+        return executionInfo.queryProfile().total().timeSinceStarted().millis();
+    }
+
+    static PageStreamPublisher.StreamFooter failureFooter(
+        Exception ex,
+        EsqlExecutionInfo executionInfo,
+        DriverCompletionInfo completedWork,
+        ThreadContext threadContext
+    ) {
+        return new PageStreamPublisher.StreamFooter(
+            ExceptionsHelper.status(ex).getStatus(),
+            tookMillis(executionInfo),
+            executionInfo.isPartial() || completedWork.partial(),
+            footerWarnings(threadContext, completedWork),
+            null,
+            null,
+            ex,
+            null
+        );
     }
 
     protected Executor externalBlobStoreExecutor() {

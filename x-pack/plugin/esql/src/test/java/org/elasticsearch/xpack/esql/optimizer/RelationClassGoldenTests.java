@@ -27,6 +27,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 
+import static org.elasticsearch.xpack.esql.EsqlTestUtils.externalResolutionFor;
 import static org.elasticsearch.xpack.esql.EsqlTestUtils.referenceAttribute;
 
 /**
@@ -84,9 +85,49 @@ public class RelationClassGoldenTests extends GoldenTestCase {
         runGoldenTest("FROM class_a, class_b METADATA _class | STATS d = COUNT_DISTINCT(emp_no) BY _class");
     }
 
+    /**
+     * A single subquery in FROM answers "subquery" for _class and null for _name as literals;
+     * the Subquery boundary node carries no relation-column attrs after materialisation.
+     */
+    public void testBothColumnsOnASingleSubquery() {
+        runSubqueryGoldenTest("FROM (FROM employees | KEEP emp_no) METADATA _class, _name | KEEP emp_no, _class, _name");
+    }
+
+    /**
+     * A subquery beside an index contributes different _class literals per branch.
+     */
+    public void testBothColumnsOnSubqueryBesideIndex() {
+        runSubqueryGoldenTest("FROM employees, (FROM employees | KEEP emp_no) METADATA _class | KEEP _class");
+    }
+
+    /**
+     * A single view answers "view" and the view name.
+     */
+    public void testBothColumnsOnASingleView() {
+        runViewGoldenTest("FROM v_employees METADATA _class, _name | KEEP emp_no, _class, _name", Map.of("v_employees", "FROM employees"));
+    }
+
+    /**
+     * A view beside an index contributes different _class and _name literals per branch.
+     */
+    public void testBothColumnsOnViewBesideIndex() {
+        runViewGoldenTest(
+            "FROM employees, v_emp_no METADATA _class, _name | KEEP emp_no, _class, _name",
+            Map.of("v_emp_no", "FROM employees | KEEP emp_no")
+        );
+    }
+
     private void runGoldenTest(String query) {
         assumeTrue("Requires external data source FROM support", EsqlCapabilities.Cap.DATASET_IN_FROM_COMMAND.isEnabled());
         builder(query).stages(STAGES).datasetMetadata(datasetMetadata()).externalSourceResolution(externalSourceResolution()).run();
+    }
+
+    private void runSubqueryGoldenTest(String query) {
+        builder(query).stages(EnumSet.of(Stage.LOGICAL_OPTIMIZATION)).run();
+    }
+
+    private void runViewGoldenTest(String query, Map<String, String> views) {
+        builder(query).stages(EnumSet.of(Stage.LOGICAL_OPTIMIZATION)).views(views).run();
     }
 
     private static ProjectMetadata datasetMetadata() {
@@ -101,7 +142,8 @@ public class RelationClassGoldenTests extends GoldenTestCase {
 
     /** Identical schemas on both branches, so the UnionAll is leaf-shaped until this rule touches it. */
     private static ExternalSourceResolution externalSourceResolution() {
-        return new ExternalSourceResolution(
+        return externalResolutionFor(
+            datasetMetadata(),
             Map.of(
                 RESOURCE_A,
                 new ExternalSourceResolution.ResolvedSource(schemaFor(RESOURCE_A), FileList.UNRESOLVED, Map.of()),

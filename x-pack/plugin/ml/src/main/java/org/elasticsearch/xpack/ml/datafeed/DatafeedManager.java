@@ -9,6 +9,7 @@ package org.elasticsearch.xpack.ml.datafeed;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.search.TransportSearchAction;
 import org.elasticsearch.action.support.master.AcknowledgedResponse;
@@ -63,7 +64,9 @@ import org.elasticsearch.xpack.core.security.cloud.CloudCredentialsExtension;
 import org.elasticsearch.xpack.core.security.support.Exceptions;
 import org.elasticsearch.xpack.ml.MachineLearning;
 import org.elasticsearch.xpack.ml.MachineLearningExtension;
+import org.elasticsearch.xpack.ml.action.datafeed.DatafeedEsqlGates;
 import org.elasticsearch.xpack.ml.annotations.AnnotationPersister;
+import org.elasticsearch.xpack.ml.datafeed.extractor.esql.EsqlDatafeedQueryValidator;
 import org.elasticsearch.xpack.ml.datafeed.persistence.DatafeedConfigProvider;
 import org.elasticsearch.xpack.ml.job.persistence.JobConfigProvider;
 import org.elasticsearch.xpack.ml.job.persistence.JobDataDeleter;
@@ -85,6 +88,7 @@ import java.util.stream.Collectors;
 import static java.util.function.Predicate.not;
 import static org.elasticsearch.xpack.core.ClientHelper.ML_ORIGIN;
 import static org.elasticsearch.xpack.core.ClientHelper.executeAsyncWithOrigin;
+import static org.elasticsearch.xpack.core.ClientHelper.filterSecurityHeaders;
 import static org.elasticsearch.xpack.ml.utils.SecondaryAuthorizationUtils.useSecondaryAuthIfAvailable;
 
 /**
@@ -206,6 +210,12 @@ public class DatafeedManager {
         ThreadPool threadPool,
         ActionListener<PutDatafeedAction.Response> listener
     ) {
+        try {
+            EsqlDatafeedQueryValidator.rejectRemoteClusterSources(request.getDatafeed().getEsqlQuery(), crossProjectMlEnabled());
+        } catch (Exception e) {
+            listener.onFailure(e);
+            return;
+        }
         if (XPackSettings.SECURITY_ENABLED.get(settings)) {
             useSecondaryAuthIfAvailable(securityContext, () -> {
                 // TODO: Remove this filter once https://github.com/elastic/elasticsearch/issues/67798 is fixed.
@@ -249,7 +259,10 @@ public class DatafeedManager {
                         listener.onFailure(e);
                     }
                 });
-                if (RemoteClusterLicenseChecker.containsRemoteIndex(request.getDatafeed().getIndices())) {
+                if (request.getDatafeed().getEsqlQuery() != null) {
+                    // Rollup caps are keyed off the DSL indices list; ES|QL sources are validated in #160858.
+                    getRollupIndexCapsActionHandler.onResponse(new GetRollupIndexCapsAction.Response());
+                } else if (RemoteClusterLicenseChecker.containsRemoteIndex(request.getDatafeed().getIndices())) {
                     getRollupIndexCapsActionHandler.onResponse(new GetRollupIndexCapsAction.Response());
                 } else {
                     executeAsyncWithOrigin(
@@ -320,11 +333,6 @@ public class DatafeedManager {
             final Map<String, String> headers = threadPool.getThreadContext().getHeaders();
             final boolean hasCpsCredential = hasCallerCloudCredential(credentialTransitions, threadPool, request.getCloudCredential());
 
-            BiConsumer<DatafeedConfig, ActionListener<Boolean>> wrappedValidator = (updatedConfig, validatorListener) -> {
-                warnIfProjectRoutingIsInert(request.getUpdate().getProjectRouting());
-                jobConfigProvider.validateDatafeedJob(updatedConfig, validatorListener);
-            };
-
             final String datafeedId = request.getUpdate().getId();
             final DatafeedUpdate update = request.getUpdate();
             if (Boolean.TRUE.equals(update.getForceRekeying()) && (crossProjectMlEnabled() == false || hasCpsCredential == false)) {
@@ -334,6 +342,14 @@ public class DatafeedManager {
             datafeedConfigProvider.getDatafeedConfig(datafeedId, null, listener.delegateFailureAndWrap((l, configBuilder) -> {
                 try {
                     final DatafeedConfig current = configBuilder.build();
+                    try {
+                        DatafeedEsqlGates.validateDatafeedUpdate(current, update, state);
+                    } catch (ElasticsearchStatusException e) {
+                        l.onFailure(e);
+                        return;
+                    }
+                    // Reject an unapplyable update before minting a credential or retaining rollback state.
+                    update.apply(current, Map.of(), state);
                     CredentialTransitions.TransitionContext ctx = new CredentialTransitions.TransitionContext(
                         crossProjectMlEnabled(),
                         hasCpsCredential,
@@ -358,6 +374,14 @@ public class DatafeedManager {
                     // over the minted key's Authentication stored at mint time.
                     final Map<String, String> headersForUpdate = intent == CredentialTransitions.Intent.KEEP
                         && current.getCloudInternalCredential() != null ? Map.of() : headers;
+                    BiConsumer<DatafeedConfig, ActionListener<Boolean>> wrappedValidator = (updatedConfig, validatorListener) -> {
+                        warnIfProjectRoutingIsInert(request.getUpdate().getProjectRouting());
+                        if (current.getEsqlQuery() == null) {
+                            jobConfigProvider.validateDatafeedJob(updatedConfig, validatorListener);
+                        } else {
+                            jobConfigProvider.validateDatafeedUpdate(current, updatedConfig, updatedConfig.getHeaders(), validatorListener);
+                        }
+                    };
                     final Consumer<Boolean> executeUpdate = rollbackSnapshotRetained -> {
                         ActionListener<PutDatafeedAction.Response> updateListener;
                         if (defaultedProjectRoutingForMigration) {
@@ -714,10 +738,15 @@ public class DatafeedManager {
             );
         };
 
-        CheckedConsumer<Boolean, Exception> jobOk = ok -> jobConfigProvider.validateDatafeedJob(
-            request.getDatafeed(),
-            ActionListener.wrap(validationOk, listener::onFailure)
-        );
+        CheckedConsumer<Boolean, Exception> jobOk = ok -> {
+            DatafeedConfig datafeed = request.getDatafeed();
+            ActionListener<Boolean> validationListener = ActionListener.wrap(validationOk, listener::onFailure);
+            if (datafeed.getEsqlQuery() != null) {
+                jobConfigProvider.validateDatafeedJobAndEsqlQuery(datafeed, filterSecurityHeaders(headers), validationListener);
+            } else {
+                jobConfigProvider.validateDatafeedJob(datafeed, validationListener);
+            }
+        };
 
         checkJobDoesNotHaveADatafeed(request.getDatafeed().getJobId(), ActionListener.wrap(jobOk, listener::onFailure));
     }

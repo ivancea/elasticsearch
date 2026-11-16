@@ -8,7 +8,6 @@
 package org.elasticsearch.xpack.esql.action;
 
 import org.elasticsearch.action.search.ShardSearchFailure;
-import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.common.breaker.NoopCircuitBreaker;
 import org.elasticsearch.common.io.stream.BytesStreamOutput;
 import org.elasticsearch.core.Predicates;
@@ -54,10 +53,10 @@ public class EsqlExecutionInfoTests extends ESTestCase {
     public void testHasMetadataPartial() {
         EsqlExecutionInfo info = createEsqlExecutionInfo(false);
         String key = randomFrom(RemoteClusterService.LOCAL_CLUSTER_GROUP_KEY, "remote");
-        info.swapCluster(key, (k, v) -> createEsqlExecutionInfoCluster(k, "test", false, EsqlExecutionInfo.Cluster.Status.SUCCESSFUL));
+        info.swapCluster(key, (k, v) -> createEsqlExecutionInfoCluster(k, "test", EsqlExecutionInfo.Cluster.Status.SUCCESSFUL));
         assertFalse(info.isPartial());
         assertFalse(info.hasMetadataToReport());
-        info.swapCluster(key, (k, v) -> createEsqlExecutionInfoCluster(k, "test", false, EsqlExecutionInfo.Cluster.Status.PARTIAL));
+        info.swapCluster(key, (k, v) -> createEsqlExecutionInfoCluster(k, "test", EsqlExecutionInfo.Cluster.Status.PARTIAL));
         assertTrue(info.isPartial());
         assertFalse(info.hasMetadataToReport());
         info.swapCluster(key, (k, v) -> {
@@ -70,7 +69,7 @@ public class EsqlExecutionInfoTests extends ESTestCase {
 
     public void testPlanningBytesAreNotSerialized() throws IOException {
         EsqlExecutionInfo info = createEsqlExecutionInfo(false);
-        info.externalPlanning(new ExternalPlanningReservation(new NoopCircuitBreaker(CircuitBreaker.REQUEST)));
+        info.externalPlanning(new ExternalPlanningReservation(NoopCircuitBreaker.INSTANCE));
         try (BytesStreamOutput out = new BytesStreamOutput()) {
             info.writeTo(out);
             EsqlExecutionInfo copy = new EsqlExecutionInfo(out.bytes().streamInput());
@@ -91,7 +90,6 @@ public class EsqlExecutionInfoTests extends ESTestCase {
             clusterAlias,
             clusterAlias,
             indexExpression,
-            true,
             EsqlExecutionInfo.Cluster.Status.RUNNING,
             null,
             null,
@@ -105,21 +103,8 @@ public class EsqlExecutionInfoTests extends ESTestCase {
     public static EsqlExecutionInfo.Cluster createEsqlExecutionInfoCluster(
         String clusterAlias,
         String indexExpression,
-        boolean skipUnavailable,
         EsqlExecutionInfo.Cluster.Status status
     ) {
-        return new EsqlExecutionInfo.Cluster(
-            clusterAlias,
-            clusterAlias,
-            indexExpression,
-            skipUnavailable,
-            status,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null
-        );
+        return new EsqlExecutionInfo.Cluster(clusterAlias, clusterAlias, indexExpression, status, null, null, null, null, null, null);
     }
 }

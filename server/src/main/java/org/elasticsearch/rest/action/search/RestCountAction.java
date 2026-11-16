@@ -51,7 +51,9 @@ public class RestCountAction extends BaseRestHandler {
             new Route(GET, "/_count"),
             new Route(POST, "/_count"),
             new Route(GET, "/{index}/_count"),
-            new Route(POST, "/{index}/_count")
+            new Route(POST, "/{index}/_count"),
+            new Route(GET, "/{index}/{_slice}/_count"),
+            new Route(POST, "/{index}/{_slice}/_count")
         );
     }
 
@@ -114,7 +116,7 @@ public class RestCountAction extends BaseRestHandler {
                     response.getSuccessfulShards(),
                     0,
                     response.getFailedShards(),
-                    response.getShardFailures()
+                    response.shardFailuresList()
                 );
 
                 builder.endObject();

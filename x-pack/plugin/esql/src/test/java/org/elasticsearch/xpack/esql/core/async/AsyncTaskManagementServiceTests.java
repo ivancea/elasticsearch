@@ -19,11 +19,16 @@ import org.elasticsearch.common.breaker.CircuitBreakingException;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.util.BigArrays;
+import org.elasticsearch.core.CheckedRunnable;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.rest.RestStatus;
+import org.elasticsearch.tasks.CancellableTask;
 import org.elasticsearch.tasks.Task;
+import org.elasticsearch.tasks.TaskAwareRequest;
+import org.elasticsearch.tasks.TaskCancelledException;
 import org.elasticsearch.tasks.TaskId;
 import org.elasticsearch.test.ESSingleNodeTestCase;
+import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 import org.elasticsearch.xpack.core.async.AsyncExecutionId;
 import org.elasticsearch.xpack.core.async.AsyncResultsService;
@@ -44,8 +49,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.elasticsearch.xpack.esql.core.async.AsyncTaskManagementService.addCompletionListener;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 
@@ -200,7 +207,7 @@ public class AsyncTaskManagementServiceTests extends ESSingleNodeTestCase {
      */
     @After
     public void shutdownExec() {
-        executorService.shutdown();
+        assertTrue(terminate(executorService));
     }
 
     private AsyncTaskManagementService<TestRequest, TestResponse, TestTask> createManagementService(
@@ -329,6 +336,78 @@ public class AsyncTaskManagementServiceTests extends ESSingleNodeTestCase {
         }
     }
 
+    /**
+     * GET wait_for_completion must return when SEARCH is fully occupied. Timeout used to run on SEARCH
+     * and would sit behind those workers.
+     */
+    public void testGetWaitForCompletionWhenSearchPoolBusy() throws Exception {
+        CountDownLatch executionLatch = new CountDownLatch(1);
+        AsyncTaskManagementService<TestRequest, TestResponse, TestTask> service = createManagementService(new TestOperation() {
+            @Override
+            public void execute(TestRequest request, TestTask task, ActionListener<TestResponse> listener) {
+                executorService.submit(() -> {
+                    try {
+                        assertThat(executionLatch.await(10, TimeUnit.SECONDS), equalTo(true));
+                    } catch (InterruptedException ex) {
+                        fail("Shouldn't be here");
+                    }
+                    super.execute(request, task, listener);
+                });
+            }
+        });
+        TestRequest request = new TestRequest(randomAlphaOfLength(10), TimeValue.timeValueDays(1));
+        PlainActionFuture<TestResponse> submit = new PlainActionFuture<>();
+        service.asyncExecute(request, TimeValue.timeValueMillis(1), request.keepAlive, true, submit);
+        TestResponse initial = submit.get(10, TimeUnit.SECONDS);
+        assertThat(initial.id, notNullValue());
+        assertThat(initial.string, nullValue());
+
+        try {
+            withSearchPoolOccupied(() -> {
+                StoredAsyncResponse<TestResponse> response = getResponse(initial.id, TimeValue.timeValueMillis(100));
+                assertThat(response.getException(), nullValue());
+                assertThat(response.getResponse(), notNullValue());
+                assertThat(response.getResponse().id, equalTo(initial.id));
+                assertThat(response.getResponse().string, nullValue());
+            });
+        } finally {
+            executionLatch.countDown();
+        }
+    }
+
+    /**
+     * Submit wait_for_completion must return an id when SEARCH is fully occupied. Timeout used to run
+     * on SEARCH and would sit behind those workers.
+     */
+    public void testSubmitWaitForCompletionWhenSearchPoolBusy() throws Exception {
+        CountDownLatch executionLatch = new CountDownLatch(1);
+        AsyncTaskManagementService<TestRequest, TestResponse, TestTask> service = createManagementService(new TestOperation() {
+            @Override
+            public void execute(TestRequest request, TestTask task, ActionListener<TestResponse> listener) {
+                executorService.submit(() -> {
+                    try {
+                        assertThat(executionLatch.await(10, TimeUnit.SECONDS), equalTo(true));
+                    } catch (InterruptedException ex) {
+                        fail("Shouldn't be here");
+                    }
+                    super.execute(request, task, listener);
+                });
+            }
+        });
+        TestRequest request = new TestRequest(randomAlphaOfLength(10), TimeValue.timeValueDays(1));
+        try {
+            withSearchPoolOccupied(() -> {
+                PlainActionFuture<TestResponse> submit = new PlainActionFuture<>();
+                service.asyncExecute(request, TimeValue.timeValueMillis(100), request.keepAlive, true, submit);
+                TestResponse initial = submit.get(10, TimeUnit.SECONDS);
+                assertThat(initial.id, notNullValue());
+                assertThat(initial.string, nullValue());
+            });
+        } finally {
+            executionLatch.countDown();
+        }
+    }
+
     public void testUpdateKeepAliveToTask() throws Exception {
         long now = System.currentTimeMillis();
         CountDownLatch executionLatch = new CountDownLatch(1);
@@ -435,6 +514,85 @@ public class AsyncTaskManagementServiceTests extends ESSingleNodeTestCase {
         assertThat(callbackLatch.await(10, TimeUnit.SECONDS), equalTo(true));
     }
 
+    public void testSubmitCancelBeforeIdCancelsAsyncTask() throws Exception {
+        BlockingOperation operation = new BlockingOperation();
+        AsyncTaskManagementService<TestRequest, TestResponse, TestTask> service = createManagementService(operation);
+        CancellableTask submitTask = registerSubmitTask();
+        PlainActionFuture<TestResponse> submit = new PlainActionFuture<>();
+        TestRequest request = new TestRequest(randomAlphaOfLength(8), TimeValue.timeValueDays(1));
+        try {
+            service.asyncExecute(request, TimeValue.timeValueMinutes(1), request.keepAlive, false, submit, submitTask);
+            assertThat(operation.started.await(10, TimeUnit.SECONDS), equalTo(true));
+            TestTask inner = operation.running.get();
+            assertThat(inner, notNullValue());
+            transportService.getTaskManager().cancel(submitTask, "http channel closed", () -> {});
+            TaskCancelledException e = expectThrows(TaskCancelledException.class, () -> submit.actionGet(10, TimeUnit.SECONDS));
+            assertThat(e.getMessage(), containsString("http channel closed"));
+            assertThat(inner.isCancelled(), equalTo(true));
+            assertBusy(() -> assertThat(transportService.getTaskManager().getTask(inner.getId()), nullValue()));
+        } finally {
+            operation.release.countDown();
+            transportService.getTaskManager().unregister(submitTask);
+        }
+    }
+
+    public void testSubmitCancelAfterIdLeavesAsyncTaskRunning() throws Exception {
+        BlockingOperation operation = new BlockingOperation();
+        AsyncTaskManagementService<TestRequest, TestResponse, TestTask> service = createManagementService(operation);
+        CancellableTask submitTask = registerSubmitTask();
+        PlainActionFuture<TestResponse> submit = new PlainActionFuture<>();
+        TestRequest request = new TestRequest(randomAlphaOfLength(8), TimeValue.timeValueDays(1));
+        try {
+            service.asyncExecute(request, TimeValue.timeValueMillis(1), request.keepAlive, true, submit, submitTask);
+            TestResponse initial = submit.get(10, TimeUnit.SECONDS);
+            assertThat(initial.string, nullValue());
+            assertThat(initial.id, notNullValue());
+            TestTask inner = operation.running.get();
+            assertThat(inner, notNullValue());
+            transportService.getTaskManager().cancel(submitTask, "http channel closed", () -> {});
+            assertThat(inner.isCancelled(), equalTo(false));
+            operation.release.countDown();
+            assertBusy(() -> assertThat(transportService.getTaskManager().getTask(inner.getId()), nullValue()));
+            StoredAsyncResponse<TestResponse> stored = getResponse(initial.id, TimeValue.ZERO);
+            assertThat(stored.getException(), nullValue());
+            assertThat(stored.getResponse(), notNullValue());
+            assertThat(stored.getResponse().string, equalTo("response for [" + request.string + "]"));
+        } finally {
+            operation.release.countDown();
+            transportService.getTaskManager().unregister(submitTask);
+        }
+    }
+
+    public void testAlreadyCancelledSubmitDoesNotReturnId() throws Exception {
+        AtomicReference<TestTask> inner = new AtomicReference<>();
+        AsyncTaskManagementService<TestRequest, TestResponse, TestTask> service = createManagementService(new TestOperation() {
+            @Override
+            public void execute(TestRequest request, TestTask task, ActionListener<TestResponse> listener) {
+                inner.set(task);
+                super.execute(request, task, listener);
+            }
+        });
+        CancellableTask submitTask = registerSubmitTask();
+        transportService.getTaskManager().cancel(submitTask, "http channel closed", () -> {});
+        PlainActionFuture<TestResponse> submit = new PlainActionFuture<>();
+        TestRequest request = new TestRequest(randomAlphaOfLength(8), TimeValue.timeValueDays(1));
+        try {
+            // ZERO timeout: already-cancelled submit must beat the scheduled wait handler
+            // and must not start execute().
+            service.asyncExecute(request, TimeValue.ZERO, request.keepAlive, false, submit, submitTask);
+            TaskCancelledException e = expectThrows(TaskCancelledException.class, () -> submit.actionGet(10, TimeUnit.SECONDS));
+            assertThat(e.getMessage(), containsString("http channel closed"));
+            assertThat(inner.get(), nullValue());
+            assertBusy(() -> {
+                for (CancellableTask task : transportService.getTaskManager().getCancellableTasks().values()) {
+                    assertThat(task.getAction(), not(containsString("test_action")));
+                }
+            });
+        } finally {
+            transportService.getTaskManager().unregister(submitTask);
+        }
+    }
+
     public void testStoreResultFailureStatusClassification() {
         assertThat(
             AsyncTaskManagementService.storeResultFailureStatus(new IllegalStateException("boom")),
@@ -456,6 +614,97 @@ public class AsyncTaskManagementServiceTests extends ESSingleNodeTestCase {
             ),
             equalTo(RestStatus.TOO_MANY_REQUESTS)
         );
+    }
+
+    private CancellableTask registerSubmitTask() {
+        return (CancellableTask) transportService.getTaskManager().register("transport", "test_submit", new TaskAwareRequest() {
+            private TaskId parentTaskId = TaskId.EMPTY_TASK_ID;
+            private long requestId = -1;
+
+            @Override
+            public void setParentTask(TaskId taskId) {
+                parentTaskId = taskId;
+            }
+
+            @Override
+            public TaskId getParentTask() {
+                return parentTaskId;
+            }
+
+            @Override
+            public void setRequestId(long requestId) {
+                this.requestId = requestId;
+            }
+
+            @Override
+            public long getRequestId() {
+                return requestId;
+            }
+
+            @Override
+            public Task createTask(long id, String type, String action, TaskId parent, Map<String, String> headers) {
+                return new CancellableTask(id, type, action, "test submit", parent, headers);
+            }
+        });
+    }
+
+    private class BlockingOperation extends TestOperation {
+        final CountDownLatch started = new CountDownLatch(1);
+        final CountDownLatch release = new CountDownLatch(1);
+        final AtomicReference<TestTask> running = new AtomicReference<>();
+
+        @Override
+        public void execute(TestRequest request, TestTask task, ActionListener<TestResponse> listener) {
+            ActionListener<TestResponse> once = ActionListener.notifyOnce(listener);
+            running.set(task);
+            if (task.notifyIfCancelled(once)) {
+                started.countDown();
+                return;
+            }
+            // Execute must complete on inner cancel so the async task unregisters without waiting for release.
+            task.addListener(() -> task.notifyIfCancelled(once));
+            started.countDown();
+            executorService.submit(() -> {
+                try {
+                    if (release.await(10, TimeUnit.SECONDS) == false) {
+                        once.onFailure(new IllegalStateException("BlockingOperation release not signalled"));
+                        return;
+                    }
+                    if (task.notifyIfCancelled(once) == false) {
+                        super.execute(request, task, once);
+                    }
+                } catch (Exception e) {
+                    once.onFailure(e);
+                }
+            });
+        }
+    }
+
+    /**
+     * Runs {@code action} while every SEARCH worker is parked. Always releases the pool — this suite
+     * shares the node.
+     */
+    private void withSearchPoolOccupied(CheckedRunnable<Exception> action) throws Exception {
+        var threadPool = transportService.getThreadPool();
+        int threads = threadPool.info(ThreadPool.Names.SEARCH).getMax();
+        CountDownLatch releaseSearch = new CountDownLatch(1);
+        CountDownLatch occupied = new CountDownLatch(threads);
+        for (int i = 0; i < threads; i++) {
+            threadPool.executor(ThreadPool.Names.SEARCH).execute(() -> {
+                occupied.countDown();
+                try {
+                    releaseSearch.await(30, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+        }
+        try {
+            assertThat(occupied.await(10, TimeUnit.SECONDS), equalTo(true));
+            action.run();
+        } finally {
+            releaseSearch.countDown();
+        }
     }
 
     private StoredAsyncResponse<TestResponse> getResponse(String id, TimeValue timeout) throws InterruptedException {
