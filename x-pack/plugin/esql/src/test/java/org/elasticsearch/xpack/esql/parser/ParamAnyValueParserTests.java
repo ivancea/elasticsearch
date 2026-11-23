@@ -37,8 +37,8 @@ import static org.hamcrest.Matchers.nullValue;
 
 /**
  * The reserved value of the {@code param_any_value} setting is the only setting the parser needs while it builds the statement:
- * it starts from the request's value or the default, and a {@code SET} in the statement overrides it. The feature is snapshot-only,
- * so the tests require its capability.
+ * it starts from the request's value or the default, and a {@code SET} in the statement overrides it. The tests require the
+ * capability of the feature.
  */
 public class ParamAnyValueParserTests extends ESTestCase {
 

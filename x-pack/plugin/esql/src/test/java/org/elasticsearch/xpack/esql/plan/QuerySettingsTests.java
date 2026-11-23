@@ -238,27 +238,18 @@ public class QuerySettingsTests extends ESTestCase {
         assertInvalid(setting.name(), Literal.fromBoolean(Source.EMPTY, true), "Setting [param_any_value] must be of type KEYWORD");
     }
 
-    public void testParamAnyValueIsSnapshotOnly() {
+    public void testParamAnyValueIsAvailableOnReleaseBuilds() {
         var setting = QuerySettings.PARAM_ANY_VALUE;
 
-        assertThat(setting.snapshotOnly(), is(true));
+        assertThat(setting.snapshotOnly(), is(false));
         assertThat(QuerySettings.applicableIn(true, false), hasItem(setting));
-        assertThat(QuerySettings.applicableIn(false, false), not(hasItem(setting)));
-        assertThat(QuerySettings.applicableIn(false, true), not(hasItem(setting)));
+        assertThat(QuerySettings.applicableIn(false, false), hasItem(setting));
+        assertThat(QuerySettings.applicableIn(false, true), hasItem(setting));
 
-        // SET is rejected while parsing
-        assertInvalid(
-            setting.name(),
-            new SettingsValidationContext(false, false),
-            of("__ANY__"),
-            "Setting [param_any_value] is only available in snapshot builds"
-        );
-        // the request body is rejected while resolving
-        var ex = expectThrows(
-            VerificationException.class,
-            () -> QuerySettings.resolve(Map.of(QuerySettings.PARAM_ANY_VALUE, "*"), null, NON_SNAPSHOT_CTX_WITH_CPS_ENABLED)
-        );
-        assertThat(ex.getMessage(), containsString("Setting [param_any_value] is only available in snapshot builds"));
+        // SET is accepted while parsing
+        assertValid(setting, of("*"), equalTo("*"), NON_SNAPSHOT_CTX_WITH_CPS_ENABLED);
+        // the request body is accepted while resolving
+        assertThat(setting.get(QuerySettings.resolve(Map.of(setting, "*"), null, NON_SNAPSHOT_CTX_WITH_CPS_ENABLED)), equalTo("*"));
     }
 
     public void testParamAnyValueIsRequestBodyExposedWithoutAliasOrClusterDefault() {

@@ -5049,9 +5049,9 @@ public class EsqlCapabilities {
 
         /**
          * The ES|QL "Any" controls: the {@code param_any_value} query setting, and the query parameters holding its value, which stand
-         * for "no filter on this". Snapshot-only for now: remove the snapshot check when the feature is released.
+         * for "no filter on this".
          */
-        PARAM_ANY_VALUE(Build.current().isSnapshot()),
+        PARAM_ANY_VALUE,
 
         // Last capability should still have a comma for fewer merge conflicts when adding new ones :)
         // This comment prevents the semicolon from being on the previous capability when Spotless formats the file.
