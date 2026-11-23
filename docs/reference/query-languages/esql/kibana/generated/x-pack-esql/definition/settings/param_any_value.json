@@ -6,6 +6,6 @@
   ],
   "serverlessOnly" : false,
   "preview" : false,
-  "snapshotOnly" : true,
+  "snapshotOnly" : false,
   "description" : "The value of a query parameter that stands for \"Any\", meaning that the parameter matches everything. Defaults to `__ANY__`."
 }
