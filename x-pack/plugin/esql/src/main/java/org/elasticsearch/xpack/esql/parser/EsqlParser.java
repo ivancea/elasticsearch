@@ -21,7 +21,6 @@ import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.SuppressForbidden;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
-import org.elasticsearch.xpack.esql.action.EsqlCapabilities;
 import org.elasticsearch.xpack.esql.core.util.StringUtils;
 import org.elasticsearch.xpack.esql.inference.InferenceSettings;
 import org.elasticsearch.xpack.esql.plan.EsqlStatement;
@@ -261,15 +260,10 @@ public class EsqlParser {
     }
 
     /**
-     * The value of {@link QuerySettings#PARAM_ANY_VALUE} the parser starts with: the request's or the default, or {@code null}
-     * on release builds, where the setting is snapshot-only and the default must not be live. The rest of the settings are
-     * resolved after parsing, with the {@code SET}s of the statement, which the parser applies to this value as they come.
+     * The value of {@link QuerySettings#PARAM_ANY_VALUE} the parser starts with: the request's or the default. The rest of the
+     * settings are resolved after parsing, with the {@code SET}s of the statement, which the parser applies to this value as they come.
      */
-    @Nullable
     String anyParamValue(Map<QuerySettingDef<?>, Object> requestSettings) {
-        if (EsqlCapabilities.Cap.PARAM_ANY_VALUE.isEnabled() == false) {
-            return null;
-        }
         // The request value is not validated here: a SET of the statement may override it, so it is validated with the rest of the
         // settings once the final value is known. An invalid one only has to not be used meanwhile.
         if (requestSettings.get(QuerySettings.PARAM_ANY_VALUE) instanceof String value && value.isEmpty() == false) {

@@ -156,7 +156,7 @@ public abstract class ExpressionBuilder extends IdentifierBuilder {
      * @param flags the cluster-wide ES|QL settings
      * @param anyParamValue the value of the {@code param_any_value} setting resolved from the request and the defaults, which a
      *                      {@code SET} in the query can still override, or {@code null} if the parser must not recognize any
-     *                      reserved value, which is the case on release builds
+     *                      reserved value
      */
     public record ParsingContext(
         QueryParams params,
