@@ -354,6 +354,7 @@ public final class QuerySettings {
         name = "param_any_value",
         type = { "keyword" },
         description = "The value of a query parameter that stands for \"Any\", meaning that the parameter matches everything. "
+            + "It is only interpreted in the query: a parameter used as the value of a setting is always used as a plain value. "
             + "Defaults to `__ANY__`."
     )
     public static final QuerySettingDef<String> PARAM_ANY_VALUE = QuerySettingDef.string("param_any_value")

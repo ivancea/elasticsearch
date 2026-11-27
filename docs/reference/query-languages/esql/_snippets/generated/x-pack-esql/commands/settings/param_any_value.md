@@ -5,7 +5,10 @@
 serverless: ga
 stack: ga
 ```
-The value of a query parameter that stands for "Any", meaning that the parameter matches everything. Defaults to `__ANY__`.
+The value of a query parameter that stands for "Any", meaning that the parameter matches everything. It is only interpreted in the query: a parameter used as the value of a setting is always used as a plain value. Defaults to `__ANY__`.
 
 **Type**: `keyword`
+
+**Can also be set in**:
+- the request body, as `settings.param_any_value` {applies_to}`stack: ga 9.5+` {applies_to}`serverless: ga`
 

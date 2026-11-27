@@ -7,5 +7,5 @@
   "serverlessOnly" : false,
   "preview" : false,
   "snapshotOnly" : false,
-  "description" : "The value of a query parameter that stands for \"Any\", meaning that the parameter matches everything. Defaults to `__ANY__`."
+  "description" : "The value of a query parameter that stands for \"Any\", meaning that the parameter matches everything. It is only interpreted in the query: a parameter used as the value of a setting is always used as a plain value. Defaults to `__ANY__`."
 }
